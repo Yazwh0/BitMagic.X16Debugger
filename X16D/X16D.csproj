@@ -35,5 +35,11 @@
     <ProjectReference Include="..\BitMagic.X16Debugger\BitMagic.X16Debugger.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="EmulatoreCore\EmulatorCore.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 
 </Project>

@@ -1,0 +1,10 @@
+.machine CommanderX16R42
+
+    lda #01
+    tax
+    lda #02
+    tay
+
+.loop:
+    inc $01
+    jmp loop

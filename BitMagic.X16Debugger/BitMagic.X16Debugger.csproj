@@ -11,6 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\BitMagic.X16Compiler\BitMagic.Compiler\BitMagic.Compiler.csproj" />
+    <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Display\BitMagic.X16Emulator.Display.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator\BitMagic.X16Emulator.csproj" />
   </ItemGroup>
 

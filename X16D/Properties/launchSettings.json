@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "X16D": {
+      "commandName": "Project",
+      "nativeDebugging": true,
+      "commandLineArgs": "--port 2563"
+    }
+  }
+}

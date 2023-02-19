@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BitMagic.X16Debug;
+namespace BitMagic.X16Debugger;
 
 internal abstract class SampleObject<TProtocolObject, TFormat>
     where TProtocolObject : class

@@ -1,0 +1,8 @@
+{
+  "$adapter": "C:\\Documents\\Source\\BitMagic\\BitMagic.X16Debugger\\X16D\\bin\\Debug\\net6.0\\X16D.exe",
+  "$adapterArgs": "--debug",
+
+  "type": "sample",
+  "request": "launch",
+  "program": "C:\\Documents\\Source\\BitMagic\\BitMagic.X16Emulator\\testfile.txt"
+}

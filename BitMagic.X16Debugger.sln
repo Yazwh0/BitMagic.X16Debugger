@@ -37,6 +37,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DiscUtils.Vhd", "..\Externa
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.X16Debugger", "BitMagic.X16Debugger\BitMagic.X16Debugger.csproj", "{731098DC-8E99-472F-BC7E-CF08A237E833}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_SolutionItems", "_SolutionItems", "{2806CB8A-1BFC-458E-986F-8675F2048903}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		launch.json = launch.json
+		LICENSE = LICENSE
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

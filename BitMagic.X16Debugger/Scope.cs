@@ -8,7 +8,7 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 using static System.FormattableString;
 
-namespace BitMagic.X16Debug;
+namespace BitMagic.X16Debugger;
 
 internal class SampleScope : SampleObject<Scope, object>, ISampleVariableContainer
 {
