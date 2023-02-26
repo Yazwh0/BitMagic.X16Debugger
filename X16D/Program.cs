@@ -47,50 +47,59 @@ static class Program
         }
         var options = argumentsResult?.Value ?? new Options() { ServerPort = 2563 };
 
-        var emulator = new Emulator();
-
-        var rom = "rom.bin";
-
-        if (!File.Exists(rom))
+        Func<Emulator> getEmulator = () =>
         {
-            var env = Environment.GetEnvironmentVariable(RomEnvironmentVariable);
-            if (!string.IsNullOrWhiteSpace(env))
-            {
-                rom = env;
+            var emulator = new Emulator();
 
-                if (!File.Exists(rom))
+            emulator.Brk_Causes_Stop = false;
+            emulator.FrameControl = FrameControl.Synced;
+            emulator.Stepping = true;
+
+            var rom = "rom.bin";
+
+            if (!File.Exists(rom))
+            {
+                var env = Environment.GetEnvironmentVariable(RomEnvironmentVariable);
+                if (!string.IsNullOrWhiteSpace(env))
                 {
-                    rom = @$"{env}\rom.bin";
+                    rom = env;
+
+                    if (!File.Exists(rom))
+                    {
+                        rom = @$"{env}\rom.bin";
+                    }
                 }
             }
-        }
 
-        if (File.Exists(rom))
-        {
-            Console.WriteLine($"Loading '{rom}'.");
-            var romData = await File.ReadAllBytesAsync(rom);
-            for (var i = 0; i < romData.Length; i++)
+            if (File.Exists(rom))
             {
-                emulator.RomBank[i] = romData[i];
+                Console.WriteLine($"Loading '{rom}'.");
+                var romData = File.ReadAllBytes(rom);
+                for (var i = 0; i < romData.Length; i++)
+                {
+                    emulator.RomBank[i] = romData[i];
+                }
             }
-        }
-        else
-        {
-            Console.WriteLine($"ROM '{rom}' not found.");
-            return 2;
-        }
+            else
+            {
+                Console.WriteLine($"ROM '{rom}' not found.");
+                throw new Exception($"ROM '{rom}' not found.");
+            }
 
-        SdCard sdCard = new SdCard(16);
-        emulator.LoadSdCard(sdCard);
+            SdCard sdCard = new SdCard(16);
+            emulator.LoadSdCard(sdCard);
+
+            return emulator;
+        };
 
         if (options.ServerPort != 0)
-            RunAsServer(emulator, options.ServerPort);
+            RunAsServer(getEmulator, options.ServerPort);
         else
         {
             Console.WriteLine(@"Running using stdin\stdout.");
 
             
-            var debugger = new X16Debug(emulator, Console.OpenStandardInput(), Console.OpenStandardOutput());
+            var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput());
             debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
             debugger.Run();
         }
@@ -99,7 +108,7 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Emulator emulator, int port)
+    private static void RunAsServer(Func<Emulator> getEmulator, int port)
     {
         Console.WriteLine($"Listening on port {port}.");
         X16Debug? debugger;
@@ -118,7 +127,7 @@ static class Program
 
                     using (Stream stream = new NetworkStream(clientSocket))
                     {
-                        debugger = new X16Debug(emulator, stream, stream);
+                        debugger = new X16Debug(getEmulator, stream, stream);
                         //debugger.Protocol.LogMessage += (sender, e) => Console.WriteLine(e.Message);
                         debugger.Protocol.DispatcherError += (sender, e) =>
                         {

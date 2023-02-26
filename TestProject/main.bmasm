@@ -1,10 +1,16 @@
 .machine CommanderX16R42
 
-    lda #01
-    tax
-    lda #02
-    tay
+    lda #$10
+    sta ADDRx_H
+    lda #$00
+    sta ADDRx_M
+    lda #$10
+    sta ADDRx_L
+
+    lda #$ff
+    sta DATA0
 
 .loop:
+    lda #0
     inc $01
     jmp loop
