@@ -1,6 +1,13 @@
 .machine CommanderX16R42
 
-    lda #$10
+    lda #01
+    pha
+    lda #02
+    pha
+    lda #03
+    pha
+
+    lda #$00
     sta ADDRx_H
     lda #$00
     sta ADDRx_M

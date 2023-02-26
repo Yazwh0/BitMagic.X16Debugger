@@ -13,12 +13,19 @@ internal class ScopeManager
     private Dictionary<string, ScopeMap> Scopes { get; } = new Dictionary<string, ScopeMap>();
     private Dictionary<int, ScopeMap> ScopesById { get; } = new Dictionary<int, ScopeMap>();
 
+    private readonly IdManager _idManager;
+
+    public ScopeManager(IdManager idManager)
+    {
+        _idManager = idManager;
+    }
+
     public ScopeMap GetScope(string name, bool expensive)
     {
-        if (Scopes.ContainsKey(name)) 
+        if (Scopes.ContainsKey(name))
             return Scopes[name];
 
-        var toReturn = new ScopeMap(name, expensive);
+        var toReturn = new ScopeMap(name, expensive, _idManager.GetId());
         Scopes.Add(name, toReturn);
         ScopesById.Add(toReturn.Id, toReturn);
 
@@ -27,7 +34,7 @@ internal class ScopeManager
 
     public ScopeMap? GetScope(int id)
     {
-        if (ScopesById.ContainsKey(id)) 
+        if (ScopesById.ContainsKey(id))
             return ScopesById[id];
 
         return null;
@@ -38,31 +45,31 @@ internal class ScopeManager
 
 internal class ScopeMap
 {
-    private static int _scopeId = 1;
+    //private static int _scopeId = 1;
     public Scope Scope { get; }
     public int Id => Scope.VariablesReference;
 
     private List<IVariableMap> _variables { get; } = new List<IVariableMap>();
     public ReadOnlyCollection<IVariableMap> Variables => _variables.AsReadOnly();
 
-    public ScopeMap(string name, bool expensive)
+    public ScopeMap(string name, bool expensive, int id)
     {
         Scope = new Scope
         {
             Name = name,
             Expensive = expensive,
-            VariablesReference = _scopeId++,
+            VariablesReference = id,
             PresentationHint = Scope.PresentationHintValue.Locals
         };
     }
 
-    public ScopeMap(string name, bool expensive, bool registers)
+    public ScopeMap(string name, bool expensive, bool registers, int id)
     {
         Scope = new Scope
         {
             Name = name,
             Expensive = expensive,
-            VariablesReference = _scopeId++,
+            VariablesReference = id,
             PresentationHint = Scope.PresentationHintValue.Registers
         };
     }
