@@ -21,10 +21,11 @@ public class X16Debug : DebugAdapterBase
 
     // managers
     private readonly ExceptionManager _exceptionManager;
-    private readonly BreakpointManager _breakpointManager;
+    private BreakpointManager _breakpointManager;
     private readonly ScopeManager _scopeManager;
     private readonly VariableManager _variableManager;
-    private readonly StackManager _stackManager;
+    private StackManager _stackManager;
+    private SpriteManager _spriteManager;
 
     public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
@@ -43,10 +44,12 @@ public class X16Debug : DebugAdapterBase
         var idManager = new IdManager();
 
         _exceptionManager = new ExceptionManager(this);
-        _breakpointManager = new BreakpointManager(_emulator, this);
         _scopeManager = new ScopeManager(idManager);
         _variableManager = new VariableManager(idManager);
+
+        _breakpointManager = new BreakpointManager(_emulator, this);
         _stackManager = new StackManager(_emulator);
+        _spriteManager = new SpriteManager(_emulator);
 
         SetupGlobalObjects();
 
@@ -117,7 +120,7 @@ public class X16Debug : DebugAdapterBase
                 {
                     new VariableMap("Ram Bank", "Byte", () => $"0x{_emulator.Memory[0]:X2}"),
                     new VariableMap("Rom Bank", "Byte", () => $"0x{_emulator.Memory[1]:X2}"),
-                    new VariableMemory("RAM", "main", () => "Data")
+                    new VariableMemory("RAM", "main", () => "CPU Visible Ram")
                 })));
 
         scope = _scopeManager.GetScope("VERA", false);
@@ -127,7 +130,7 @@ public class X16Debug : DebugAdapterBase
                 new VariableChildren("Data 0", "Byte", () => $"0x{_emulator.Memory[0x9F23]:X2}",
                 new[] {
                     new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data0_Address:X5}"),
-                    new VariableMap("Step", "Byte", () => $"0x{_emulator.Vera.Data0_Step:X2}")
+                    new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data0_Step}")
                 }
             )));
 
@@ -136,11 +139,61 @@ public class X16Debug : DebugAdapterBase
                 new VariableChildren("Data 1", "Byte", () => $"0x{_emulator.Memory[0x9F24]:X2}",
                 new[] {
                     new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data1_Address:X5}"),
-                    new VariableMap("Step", "Byte", () => $"0x{_emulator.Vera.Data1_Step:X2}")
+                    new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data1_Step}")
                 }
             )));
 
-        scope.AddVariable(new VariableMemory("VRAM", "vram", () => "Data"));
+        scope.AddVariable(
+            _variableManager.Register(
+                new VariableChildren("Layer 0", "String", () => _emulator.Vera.Layer0Enable ?
+                    (_emulator.Vera.Layer0_BitMapMode ? $"{_emulator.Vera.Layer0_ColourDepth:0}bpp Bitmap" : $"{_emulator.Vera.Layer0_ColourDepth:0}bpp Tiles") :
+                    "Disabled",
+                new[] {
+                    new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}"),
+                    new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}"),
+                }
+            )));
+
+        scope.AddVariable(
+            _variableManager.Register(
+                new VariableChildren("Layer 1", "String", () => _emulator.Vera.Layer1Enable ?
+                    (_emulator.Vera.Layer1_BitMapMode ? $"{_emulator.Vera.Layer1_ColourDepth:0}bpp Bitmap" : $"{_emulator.Vera.Layer1_ColourDepth:0}bpp Tiles") :
+                    "Disabled",
+                new[] {
+                    new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}"),
+                    new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}"),
+                }
+            )));
+
+        scope.AddVariable(
+            _variableManager.Register(
+                new VariableChildren("Sprites", "String", () => _emulator.Vera.SpriteEnable ?
+                    "Enabled" :
+                    "Disabled",
+                new IVariableMap[] {
+                    _variableManager.Register(
+                            new VariableIndex("Sprites", _spriteManager.GetFunction)
+                        )
+                    ,
+                    _variableManager.Register(
+                        new VariableChildren("Renderer", "String", () => $"",
+                        new[] {
+                            new VariableMap("Render Mode", "uint", () => $"{_emulator.Vera.Sprite_Render_Mode}"),
+                            new VariableMap("VRAM Wait", "uint", () => $"{_emulator.Vera.Sprite_Wait}"),
+                            new VariableMap("Sprite Index", "uint", () => $"{_emulator.Vera.Position}"),
+                            new VariableMap("Snapped X", "uint", () => $"{_emulator.Vera.Sprite_X}"),
+                            new VariableMap("Snapped Y", "uint", () => $"{_emulator.Vera.Sprite_Y}"),
+                            new VariableMap("Snapped Width", "uint", () => $"{_emulator.Vera.Sprite_Width}"),
+                            new VariableMap("Depth", "uint", () => $"{_emulator.Vera.Sprite_Depth}"),
+                            new VariableMap("Colission mask", "uint", () => $"0b{Convert.ToString(_emulator.Vera.Sprite_CollisionMask, 2).PadLeft(4, '0')}"),
+                            })
+                        )
+                    }
+                )));
+
+        _spriteManager.Register(_variableManager);
+
+        scope.AddVariable(new VariableMemory("VRAM", "vram", () => "0x20000 bytes"));
 
         scope = _scopeManager.GetScope("Kernal", false);
 
@@ -163,6 +216,12 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("R13", "Word", () => $"0x{_emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8):X4}"));
         scope.AddVariable(new VariableMap("R14", "Word", () => $"0x{_emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8):X4}"));
         scope.AddVariable(new VariableMap("R15", "Word", () => $"0x{_emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8):X4}"));
+
+        scope = _scopeManager.GetScope("Display", false);
+
+        scope.AddVariable(new VariableMap("Beam X", "Word", () => $"{_emulator.Vera.Beam_X}"));
+        scope.AddVariable(new VariableMap("Beam Y", "Word", () => $"{_emulator.Vera.Beam_Y}"));
+
     }
 
     public SysThread? DebugThread => _debugThread;
@@ -265,10 +324,14 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
-        _breakpointManager.Clear();
         MemoryToSourceMap.Clear();
         EmulatorWindow.Stop();
+
         _emulator = _getNewEmulatorInstance();
+        _breakpointManager = new BreakpointManager(_emulator, this);
+        _stackManager = new StackManager(_emulator);
+        _spriteManager = new SpriteManager(_emulator);
+
         return new DisconnectResponse();
     }
 

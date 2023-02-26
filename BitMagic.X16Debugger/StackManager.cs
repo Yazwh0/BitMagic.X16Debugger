@@ -1,12 +1,9 @@
 ﻿using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.OpenGL;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Transactions;
 
 namespace BitMagic.X16Debugger
 {
@@ -32,7 +29,20 @@ namespace BitMagic.X16Debugger
 
         private void GenerateStack()
         {
-            _value = $"{0x1ff - _emulator.StackPointer:##0} entries";
+            var count = 0x1ff - _emulator.StackPointer;
+
+            if (count == 0)
+            {
+                _value = "No entries";
+                _data.Clear();
+                return;
+            }
+
+            if (count == 1)
+                _value = $"1 entry";
+            else
+                _value = $"{count:##0} entries";
+
             _data.Clear();
 
             var stack = _emulator.Memory.Slice(_emulator.StackPointer + 1, 0x1ff - _emulator.StackPointer);
