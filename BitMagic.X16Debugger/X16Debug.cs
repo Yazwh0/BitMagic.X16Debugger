@@ -27,6 +27,8 @@ public class X16Debug : DebugAdapterBase
     private StackManager _stackManager;
     private SpriteManager _spriteManager;
 
+    private readonly IdManager _idManager;
+
     public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
@@ -41,14 +43,14 @@ public class X16Debug : DebugAdapterBase
         _getNewEmulatorInstance = getNewEmulatorInstance;
         _emulator = getNewEmulatorInstance();
 
-        var idManager = new IdManager();
+        _idManager = new IdManager();
 
         _exceptionManager = new ExceptionManager(this);
-        _scopeManager = new ScopeManager(idManager);
-        _variableManager = new VariableManager(idManager);
+        _scopeManager = new ScopeManager(_idManager);
+        _variableManager = new VariableManager(_idManager);
 
         _breakpointManager = new BreakpointManager(_emulator, this);
-        _stackManager = new StackManager(_emulator);
+        _stackManager = new StackManager(_emulator, _idManager, MemoryToSourceMap);
         _spriteManager = new SpriteManager(_emulator);
 
         SetupGlobalObjects();
@@ -180,7 +182,7 @@ public class X16Debug : DebugAdapterBase
                         new[] {
                             new VariableMap("Render Mode", "uint", () => $"{_emulator.Vera.Sprite_Render_Mode}"),
                             new VariableMap("VRAM Wait", "uint", () => $"{_emulator.Vera.Sprite_Wait}"),
-                            new VariableMap("Sprite Index", "uint", () => $"{_emulator.Vera.Position}"),
+                            new VariableMap("Sprite Index", "uint", () => $"{_emulator.Vera.Sprite_Position}"),
                             new VariableMap("Snapped X", "uint", () => $"{_emulator.Vera.Sprite_X}"),
                             new VariableMap("Snapped Y", "uint", () => $"{_emulator.Vera.Sprite_Y}"),
                             new VariableMap("Snapped Width", "uint", () => $"{_emulator.Vera.Sprite_Width}"),
@@ -329,7 +331,7 @@ public class X16Debug : DebugAdapterBase
 
         _emulator = _getNewEmulatorInstance();
         _breakpointManager = new BreakpointManager(_emulator, this);
-        _stackManager = new StackManager(_emulator);
+        _stackManager = new StackManager(_emulator, _idManager, MemoryToSourceMap);
         _spriteManager = new SpriteManager(_emulator);
 
         return new DisconnectResponse();
@@ -493,14 +495,21 @@ public class X16Debug : DebugAdapterBase
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
         var toReturn = new StackTraceResponse();
+
+        _stackManager.GenerateCallStack();
+        toReturn.StackFrames.AddRange(_stackManager.GetCallStack);
+        return toReturn;
+
         var frame = new StackFrame();
 
         frame.Id = 1;
         frame.Name = "Main";
+        frame.CanRestart = true;
 
         // todo: handle ram \ rom banks
         var pc = _emulator.Pc;
-        var id = SourceMap.GetUniqueAddress(pc, 0);
+        var id = SourceMap.GetUniqueAddress(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
         if (MemoryToSourceMap.TryGetValue(id, out var instruction))
         {
             frame.Line = instruction.Line.Source.LineNumber;
@@ -645,7 +654,13 @@ public class CodeMap
 
 public class SourceMap
 {
-    public static int GetUniqueAddress(int address, int bank) => address + bank * 0x10000;
+    public static int GetUniqueAddress(int address, int ramBank, int romBank) =>
+        (address, ramBank, romBank) switch
+        {
+            (>= 0xc000, _, _) => address + romBank * 0x10000,
+            ( >= 0xa000, _, _) => address + ramBank * 0x10000,
+            _ => address
+        };
 
     public int Address { get; }
     public int Bank { get; }

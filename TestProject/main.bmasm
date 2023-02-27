@@ -1,23 +1,20 @@
 .machine CommanderX16R42
 
-    lda #01
-    pha
-    lda #02
-    pha
-    lda #03
-    pha
+    nop
+    jsr ProcA
+    nop
+    stp
 
-    lda #$00
-    sta ADDRx_H
-    lda #$00
-    sta ADDRx_M
-    lda #$10
-    sta ADDRx_L
+.proc ProcA
+    jsr ProcB
+    rts
+.endproc
 
-    lda #$ff
-    sta DATA0
+.proc ProcB
+    jsr ProcC
+    rts
+.endproc
 
-.loop:
-    lda #0
-    inc $01
-    jmp loop
+.proc ProcC
+    rts
+.endproc
