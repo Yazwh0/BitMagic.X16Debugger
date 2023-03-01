@@ -32,6 +32,8 @@ public class X16Debug : DebugAdapterBase
     public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
+    private Dictionary<int, CodeMap> _GotoTargets = new();
+
     private bool _running = true;
 
     private ManualResetEvent _runEvent = new ManualResetEvent(false);
@@ -237,16 +239,16 @@ public class X16Debug : DebugAdapterBase
         this.Protocol.WaitForReader();
     }
 
-    private void Emulate()
-    {
-        EmulatorWork.Emulator = _emulator;
-        var emulatorThread = new System.Threading.Thread(EmulatorWork.DoWork);
-        emulatorThread.Priority = ThreadPriority.Highest;
-        emulatorThread.Start();
+    //private void Emulate()
+    //{
+    //    EmulatorWork.Emulator = _emulator;
+    //    var emulatorThread = new System.Threading.Thread(EmulatorWork.DoWork);
+    //    emulatorThread.Priority = ThreadPriority.Highest;
+    //    emulatorThread.Start();
 
-        EmulatorWindow.Run(_emulator);
-        emulatorThread.Join();
-    }
+    //    EmulatorWindow.Run(_emulator);
+    //    emulatorThread.Join();
+    //}
 
     #region Initialize/Disconnect
 
@@ -262,6 +264,9 @@ public class X16Debug : DebugAdapterBase
             SupportsReadMemoryRequest = true,
             SupportsDisassembleRequest = true,
             SupportsWriteMemoryRequest = true,
+            SupportsInstructionBreakpoints = true,
+            SupportsGotoTargetsRequest = true,
+            //SupportsHitConditionalBreakpoints= true,
             //SupportsEvaluateForHovers = true,
             //SupportsExceptionOptions = true,
             //SupportsConfigurationDoneRequest = true
@@ -347,7 +352,16 @@ public class X16Debug : DebugAdapterBase
         => _breakpointManager.HandleSetBreakpointsRequest(arguments);
 
     protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
-       => _exceptionManager.HandleSetExceptionBreakpointsRequest(arguments);
+        => _exceptionManager.HandleSetExceptionBreakpointsRequest(arguments);
+
+    protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
+    {
+        var toReturn = new SetInstructionBreakpointsResponse();
+
+
+
+        return toReturn;
+    }
 
     #endregion
 
@@ -390,6 +404,50 @@ public class X16Debug : DebugAdapterBase
         }
 
         return new NextResponse();
+    }
+
+    protected override GotoResponse HandleGotoRequest(GotoArguments arguments)
+    {
+        var toReturn = new GotoResponse();
+
+        if (!_GotoTargets.ContainsKey(arguments.TargetId))
+            return toReturn;
+
+        var destination = _GotoTargets[arguments.TargetId];
+
+        // todo: set banking!!
+        _emulator.Pc = (ushort)destination.Address;
+        _emulator.Stepping = true;
+
+        _GotoTargets.Clear();
+
+        // we dont do anything
+        this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Step, "Stepping", 0, null, true));
+
+        return toReturn;
+    }
+
+    protected override GotoTargetsResponse HandleGotoTargetsRequest(GotoTargetsArguments arguments)
+    {
+        var toReturn = new GotoTargetsResponse();
+
+        var filePath = FixPath(arguments.Source.Path);
+        if (!SourceToMemoryMap.ContainsKey(filePath))
+            return toReturn;
+
+        var file = SourceToMemoryMap[filePath];
+
+        var line = file.FirstOrDefault(i => i.LineNumber == arguments.Line);
+
+        if (line == null)
+            return toReturn;
+
+        var id = _idManager.GetId();
+
+        _GotoTargets.Add(id, line);
+
+        toReturn.Targets.Add(new GotoTarget() { InstructionPointerReference = $"0x{line.Address}", Id = id, Line = line.LineNumber, Label = $"0x{line.Address}" });
+        return toReturn;
     }
 
     #endregion
@@ -645,14 +703,15 @@ public class X16Debug : DebugAdapterBase
             MemoryToSourceMap.Add(toAdd.UniqueAddress, toAdd);
 
             HashSet<CodeMap> lineMap;
-            if (!SourceToMemoryMap.ContainsKey(line.Source.Name))
+            var fileName = FixPath(line.Source.Name);
+            if (!SourceToMemoryMap.ContainsKey(fileName))
             {
                 lineMap = new HashSet<CodeMap>();
-                SourceToMemoryMap.Add(line.Source.Name, lineMap);
+                SourceToMemoryMap.Add(fileName, lineMap);
             }
             else
             {
-                lineMap = SourceToMemoryMap[line.Source.Name];
+                lineMap = SourceToMemoryMap[fileName];
             }
 
             lineMap.Add(new CodeMap(line.Source.LineNumber, line.Address, 0, line));
@@ -662,6 +721,12 @@ public class X16Debug : DebugAdapterBase
         {
             MapProc(p);
         }
+    }
+
+    private string FixPath(string path)
+    {
+        var toReturn = Path.GetFullPath(path);
+        return toReturn.ToUpper();
     }
 
     #endregion
