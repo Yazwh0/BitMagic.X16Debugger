@@ -260,6 +260,8 @@ public class X16Debug : DebugAdapterBase
         return new InitializeResponse()
         {
             SupportsReadMemoryRequest = true,
+            SupportsDisassembleRequest = true,
+            SupportsWriteMemoryRequest = true,
             //SupportsEvaluateForHovers = true,
             //SupportsExceptionOptions = true,
             //SupportsConfigurationDoneRequest = true
@@ -479,11 +481,48 @@ public class X16Debug : DebugAdapterBase
         }
 
         toReturn.Address = $"0x{arguments.Offset:X4}";
+        var requestSize = arguments.Count + arguments.Offset ?? 0;
+        var unreadCount = 0;
+        if (requestSize > data.Length)
+        {
+            requestSize = data.Length - arguments.Offset ?? 0;
+            unreadCount = arguments.Count - requestSize;
+        }
+
+        toReturn.UnreadableBytes = unreadCount;
 
         if (arguments.Offset <= data.Length)
         {
-            toReturn.Data = Convert.ToBase64String(data.Slice(arguments.Offset ?? 0, arguments.Count));
+            toReturn.Data = Convert.ToBase64String(data.Slice(arguments.Offset ?? 0, requestSize));
         }
+
+        return toReturn;
+    }
+
+    protected override WriteMemoryResponse HandleWriteMemoryRequest(WriteMemoryArguments arguments)
+    {
+        Span<byte> data;
+        switch (arguments.MemoryReference)
+        {
+            case "main":
+                data = _emulator.Memory;
+                break;
+            case "vram":
+                data = _emulator.Vera.Vram;
+                break;
+            default:
+                throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
+        }
+
+        var toWrite = Convert.FromBase64String(arguments.Data);
+        var idx = arguments.Offset ?? 0;
+        for (var i = 0; i < toWrite.Length; i++)
+            data[idx++] = toWrite[i];
+
+        var toReturn = new WriteMemoryResponse();
+
+        toReturn.BytesWritten = toWrite.Length;
+        toReturn.Offset = arguments.Offset;
 
         return toReturn;
     }
@@ -573,6 +612,11 @@ public class X16Debug : DebugAdapterBase
 
     #endregion
 
+    protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
+    {
+        return new DisassembleResponse();
+    }
+
     #region SourceMap
 
     // Construct the source map for the debugger.
@@ -657,7 +701,7 @@ public class SourceMap
     public static int GetUniqueAddress(int address, int ramBank, int romBank) =>
         (address, ramBank, romBank) switch
         {
-            (>= 0xc000, _, _) => address + romBank * 0x10000,
+            ( >= 0xc000, _, _) => address + romBank * 0x10000,
             ( >= 0xa000, _, _) => address + ramBank * 0x10000,
             _ => address
         };
