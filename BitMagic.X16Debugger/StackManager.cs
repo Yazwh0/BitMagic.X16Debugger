@@ -5,13 +5,14 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 
 namespace BitMagic.X16Debugger
 {
     internal class StackManager
     {
-        private const uint _interupt = 0xffffffff;
+        private const uint _interrupt = 0xffffffff;
         private const uint _nmi = 0xfffffffe;
 
         private readonly Emulator _emulator;
@@ -22,13 +23,14 @@ namespace BitMagic.X16Debugger
         private readonly IdManager _idManager;
         private readonly List<StackFrame> _callStack = new List<StackFrame>();
 
-        private readonly Dictionary<int, SourceMap> _memoryToSourceMap;
+        //private readonly Dictionary<int, SourceMap> _memoryToSourceMap;
+        private readonly SourceMapManager _sourceMapManager;
 
-        public StackManager(Emulator emulator, IdManager idManager, Dictionary<int, SourceMap> memoryToSourceMap)
+        public StackManager(Emulator emulator, IdManager idManager, SourceMapManager sourceMapManager)
         {
             _emulator = emulator;
             _idManager = idManager;
-            _memoryToSourceMap = memoryToSourceMap;
+            _sourceMapManager = sourceMapManager;
         }
 
         public (string Value, ICollection<Variable> Variables) GetStack()
@@ -65,7 +67,7 @@ namespace BitMagic.X16Debugger
                     Name = i.ToString(),
                     Type = "Byte",
                     PresentationHint = new VariablePresentationHint() { Kind = VariablePresentationHint.KindValue.Data },
-                    Value = $"0x{stack[i]:X2}"
+                    Value = $"0x{stack[i]:X2}",
                 });
 
             _invalid = false;
@@ -86,24 +88,33 @@ namespace BitMagic.X16Debugger
             var frame = new StackFrame();
             frame.Id = _idManager.GetId();
             var pc = _emulator.Pc;
-            var id = SourceMap.GetUniqueAddress(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
-            if (_memoryToSourceMap.TryGetValue(id, out var instruction))
+            var addressString = AddressFunctions.GetDebuggerAddressDisplayString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
+            var instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
+
+            if (instruction != null)
             {
                 var line = instruction.Line as Line;
                 if (line == null)
-                    frame.Name = $"Current 0x{pc:X4}";
+                    frame.Name = $"Current: {addressString}";
                 else
-                    frame.Name = $"{line.Procedure.Name} 0x{pc:X4}";
+                    frame.Name = $"Current: {line.Procedure.Name} {addressString}";
 
                 frame.Line = instruction.Line.Source.LineNumber;
+                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
                 frame.Source = new Source()
                 {
                     Name = Path.GetFileName(instruction.Line.Source.Name),
                     Path = instruction.Line.Source.Name,
                 };
             }
-
+            else
+            {
+                frame.Name = $"??? Current: {addressString}";
+                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+            }
 
             _callStack.Add(frame);
 
@@ -121,23 +132,37 @@ namespace BitMagic.X16Debugger
 
                 prev = stackInfo;
 
+                // todo: add code reference to what was interrupted
+                if (stackInfo == _interrupt || stackInfo == _nmi)
+                {
+                    frame = new StackFrame();
+                    frame.Id = _idManager.GetId();
+                    frame.Name = stackInfo == _interrupt ? "INTERRUPT" : "NMI";
+                    _callStack.Add(frame);
+                    continue;
+                }
+
                 var (opCode, address, ramBank, romBank) = GetOpCode(stackInfo);
 
                 if (opCode != 0x20 && opCode != 0x00)
                     continue;
 
+                addressString = AddressFunctions.GetDebuggerAddressDisplayString(address, ramBank, romBank);
+
                 frame = new StackFrame();
                 frame.Id = _idManager.GetId();
-                
-                id = SourceMap.GetUniqueAddress(address, ramBank, romBank);
+                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(address, ramBank, romBank);
 
-                if (_memoryToSourceMap.TryGetValue(id, out instruction))
+                debuggerAddress = AddressFunctions.GetDebuggerAddress(address, ramBank, romBank);
+
+                instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
+                if (instruction != null)
                 {
                     var line = instruction.Line as Line;
                     if (line == null)
-                        frame.Name = $"??? 0x{stackInfo & 0xffff:X4}";
+                        frame.Name = $"??? From: {addressString} (Data?)";
                     else
-                        frame.Name = $"{line.Procedure.Name} 0x{stackInfo & 0xffff:X4}";
+                        frame.Name = $"{line.Procedure.Name} {addressString}";
 
                     frame.Line = instruction.Line.Source.LineNumber;
                     frame.Source = new Source()
@@ -145,9 +170,29 @@ namespace BitMagic.X16Debugger
                         Name = Path.GetFileName(instruction.Line.Source.Name),
                         Path = instruction.Line.Source.Name,
                     };
-                } else
+                }
+                else
                 {
-                    frame.Name = $"??? 0x{stackInfo & 0xffff:X4}";
+                    //// hunt backward for a symbol
+                    var thisAddress = debuggerAddress;
+                    string? huntSymbol = null;
+                    for (var i = 0; i < 256; i++) // 256 is a bit arbitary...?
+                    {
+                        if ((thisAddress & 0xff0000) != ((thisAddress - 1) & 0xff0000))
+                        {
+                            break;
+                        }
+
+                        huntSymbol = _sourceMapManager.GetSymbol(debuggerAddress);
+                        if (!string.IsNullOrWhiteSpace(huntSymbol))
+                            break;
+
+                        thisAddress--;
+                    }
+
+                    huntSymbol = string.IsNullOrWhiteSpace(huntSymbol) ? "???" : $"{huntSymbol} +0x{debuggerAddress - thisAddress:X2}"; // todo adjust 
+
+                    frame.Name = $"{huntSymbol} ({addressString})";
                 }
 
                 _callStack.Add(frame);
@@ -158,14 +203,15 @@ namespace BitMagic.X16Debugger
         {
             var rawAddress = stackInfo & 0xffff;
 
-            if (rawAddress >= 0xc000) {
-                var romBank = (int)((stackInfo & 0xff000000) >> 24);
+            if (rawAddress >= 0xc000)
+            {
+                var romBank = (int)((stackInfo & 0xff0000) >> 16);
                 return (_emulator.RomBank[romBank * 0x4000 + (int)rawAddress - 0xc000], (int)rawAddress, 0, romBank);
             }
 
             if (rawAddress >= 0xa000)
             {
-                var ramBank = (int)((stackInfo & 0xff000000) >> 16);
+                var ramBank = (int)((stackInfo & 0xff000000) >> 24);
                 return (_emulator.RomBank[ramBank * 0x2000 + (int)rawAddress - 0xa000], (int)rawAddress, ramBank, 0);
 
             }

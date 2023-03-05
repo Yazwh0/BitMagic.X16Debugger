@@ -1,0 +1,47 @@
+{
+    "source": "main.bmasm",
+    "startStepping": false,
+    "symbols": [
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\kernal.sym",
+            "romBank": 0
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\keymap.sym",
+            "romBank": 1
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\dos.sym",
+            "romBank": 2
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\geos.sym",
+            "romBank": 3
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\basic.sym",
+            "romBank": 4
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\monitor.sym",
+            "romBank": 5
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\charset.sym",
+            "romBank": 6
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\codex.sym",
+            "romBank": 7
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\graph.sym",
+            "romBank": 8
+        },
+        {
+            "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\audio.sym",
+            "romBank": 10
+        }
+    ],
+    "decompileRom" : "true"
+}

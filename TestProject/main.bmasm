@@ -1,12 +1,14 @@
 .machine CommanderX16R42
-
+    jmp ($fffc)
     nop
     lda $05
     lda $05    
     nop
     jsr ProcA
     nop
-    stp
+.loop:
+    inc $03
+    jmp loop    
 
 .proc ProcA
     jsr ProcB

@@ -14,25 +14,32 @@ internal class BreakpointManager
     public Dictionary<string, List<BreakpointMap>> Breakpoints = new Dictionary<string, List<BreakpointMap>>();
     private readonly Emulator _emulator;
     private readonly X16Debug _debugger;
+    private readonly SourceMapManager _sourceMapManager;
 
-    internal BreakpointManager(Emulator emulator, X16Debug debugger)
+    internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager)
     {
         _emulator = emulator;
         _debugger = debugger;
+        _sourceMapManager = sourceMapManager;
     }
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
+        // Clear breakpoints
         if (Breakpoints.ContainsKey(arguments.Source.Path))
         {
             foreach(var breakpoint in Breakpoints[arguments.Source.Path].Where(i => i.Breakpoint.Verified))
             {
-                // todo: add bank handling
-                var (address, secondAddress) = GetBreakpointLocation(0, breakpoint.Source.Address);
+                if (breakpoint.Source == null)
+                    continue;
 
-                _emulator.Breakpoints[address] = 0;
-                if (secondAddress != 0)
-                    _emulator.Breakpoints[secondAddress] = 0;
+                // todo: add bank handling
+                var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(breakpoint.Source.Address);
+                var (offset, secondOffset) = GetBreakpointLocation(ramBank > 0 ? ramBank : romBank, address);
+
+                _emulator.Breakpoints[offset] = 0;
+                if (secondOffset != 0)
+                    _emulator.Breakpoints[secondOffset] = 0;
             }
 
             Breakpoints[arguments.Source.Path].Clear();
@@ -42,10 +49,14 @@ internal class BreakpointManager
             Breakpoints.Add(arguments.Source.Path, new List<BreakpointMap>());
         }
 
+        // Add breakpoints
         foreach (var sourceBreakpoint in arguments.Breakpoints)
         {
-            var filemap = _debugger.SourceToMemoryMap.FirstOrDefault(i => String.Equals(arguments.Source.Path, i.Key, StringComparison.InvariantCultureIgnoreCase));
-            var source = filemap.Value.FirstOrDefault(i => i.LineNumber == sourceBreakpoint.Line);
+            var filemap = _sourceMapManager.GetSourceFileMap(arguments.Source.Path);
+            if (filemap == null) // we dont recognise the file
+                continue;
+
+            var source = filemap.FirstOrDefault(i => i.LineNumber == sourceBreakpoint.Line);
 
             var breakpoint = new Breakpoint();
 
@@ -80,9 +91,13 @@ internal class BreakpointManager
         }
     }
 
-    //returns the location in the break point array for a given bank\address
-    //second value is returned if the address is currently the active bank
-    // todo: add second address handling
+    // returns the location in the break point array for a given bank\address
+    // second value is returned if the address is currently the active bank
+    // breakpoint array:
+    // Start      End (-1)     0x:-
+    //       0 =>   10,000   : active memory
+    //  10,000 =>  110,000   : ram banks
+    // 110,000 =>  310,000   : rom banks
     private (int address, int secondAddress) GetBreakpointLocation(int bank, int address)
     {
         // normal ram
@@ -94,11 +109,11 @@ internal class BreakpointManager
         // ram bank
         if (address < 0xc000)
         {
-            return (address, 0);
+            return (address, bank * 0x2000 + address - 0xa000);
         }
 
         // rom bank
-        return (address, 0);
+        return (address, bank * 0x4000 + address - 0xc000);
     }
 }
 

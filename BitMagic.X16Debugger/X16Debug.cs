@@ -23,14 +23,16 @@ public class X16Debug : DebugAdapterBase
     private readonly ExceptionManager _exceptionManager;
     private BreakpointManager _breakpointManager;
     private readonly ScopeManager _scopeManager;
+    private readonly SourceMapManager _sourceMapManager;
     private readonly VariableManager _variableManager;
     private StackManager _stackManager;
     private SpriteManager _spriteManager;
+    private readonly DissassemblerManager _dissassemblerManager;
 
     private readonly IdManager _idManager;
 
-    public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
-    public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
+    //public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
+    //public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
     private Dictionary<int, CodeMap> _GotoTargets = new();
 
@@ -47,13 +49,16 @@ public class X16Debug : DebugAdapterBase
 
         _idManager = new IdManager();
 
+        _sourceMapManager = new SourceMapManager(_idManager);
         _exceptionManager = new ExceptionManager(this);
         _scopeManager = new ScopeManager(_idManager);
         _variableManager = new VariableManager(_idManager);
 
-        _breakpointManager = new BreakpointManager(_emulator, this);
-        _stackManager = new StackManager(_emulator, _idManager, MemoryToSourceMap);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager);
         _spriteManager = new SpriteManager(_emulator);
+
+        _dissassemblerManager = new DissassemblerManager(_sourceMapManager, _emulator);
 
         SetupGlobalObjects();
 
@@ -239,24 +244,10 @@ public class X16Debug : DebugAdapterBase
         this.Protocol.WaitForReader();
     }
 
-    //private void Emulate()
-    //{
-    //    EmulatorWork.Emulator = _emulator;
-    //    var emulatorThread = new System.Threading.Thread(EmulatorWork.DoWork);
-    //    emulatorThread.Priority = ThreadPriority.Highest;
-    //    emulatorThread.Start();
-
-    //    EmulatorWindow.Run(_emulator);
-    //    emulatorThread.Join();
-    //}
-
     #region Initialize/Disconnect
 
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
-        //       if (arguments.LinesStartAt1 == true)
-        //            this.clientsFirstLine = 1;
-
         this.Protocol.SendEvent(new InitializedEvent());
 
         return new InitializeResponse()
@@ -266,10 +257,6 @@ public class X16Debug : DebugAdapterBase
             SupportsWriteMemoryRequest = true,
             SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
-            //SupportsHitConditionalBreakpoints= true,
-            //SupportsEvaluateForHovers = true,
-            //SupportsExceptionOptions = true,
-            //SupportsConfigurationDoneRequest = true
         };
     }
 
@@ -282,17 +269,68 @@ public class X16Debug : DebugAdapterBase
             throw new ProtocolException($"Launch failed because '{toCompile}' does not exist.");
         }
 
-        Console.WriteLine($"Compiling {toCompile}");
+        X16DebugProject debugProject;
+        if (string.Equals(Path.GetExtension(toCompile), ".json", StringComparison.CurrentCultureIgnoreCase))
+        {
+            if (!File.Exists(toCompile))
+                throw new ProtocolException($"File not found '{toCompile}'.");
+
+            try
+            {
+                debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(toCompile));
+                if (debugProject == null)
+                    throw new ProtocolException($"Could not deseralise {toCompile} into a X16DebugProject.");
+            }
+            catch (Exception e)
+            {
+                throw new ProtocolException(e.Message);
+            }
+        }
+        else
+        {
+            debugProject = new X16DebugProject();
+            debugProject.Source = toCompile;
+        }
+
+        if (!File.Exists(debugProject.Source))
+        {
+            var testSource = Path.Join(arguments.ConfigurationProperties.GetValueAsString("cwd"), debugProject.Source);
+            if (File.Exists(testSource))
+                debugProject.Source = testSource;
+        }
+
+        foreach (var symbols in debugProject.Symbols)
+        {
+            try
+            {
+                Console.WriteLine($"Loading Symbols {symbols.Name}");
+                _sourceMapManager.LoadSymbols(symbols.Name, symbols.RamBank, symbols.RomBank);
+
+                if (debugProject.DecompileRom && symbols.RomBank != null)
+                {
+                    Console.Write($"Decompiling ROM...");
+
+                    _sourceMapManager.DecompileRomBank(_emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray(), symbols.RomBank ?? 0);
+
+                    Console.WriteLine(" Done.");
+                }
+            }
+            catch (Exception e)
+            {
+                throw new ProtocolException(e.Message);
+            }
+        }
 
         try
         {
+            Console.WriteLine($"Compiling {debugProject.Source}");
             var project = new Project();
-            project.Code.Load(toCompile).GetAwaiter().GetResult();
+            project.Code.Load(debugProject.Source).GetAwaiter().GetResult();
             var compiler = new Compiler.Compiler(project);
 
             var compileResult = compiler.Compile().GetAwaiter().GetResult();
 
-            ConstructSourceMap(compileResult);
+            _sourceMapManager.ConstructSourceMap(compileResult);
 
             if (compileResult.Warnings.Any())
             {
@@ -333,12 +371,13 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
-        MemoryToSourceMap.Clear();
+        _idManager.Clear();
+        _sourceMapManager.Clear();
         EmulatorWindow.Stop();
 
         _emulator = _getNewEmulatorInstance();
-        _breakpointManager = new BreakpointManager(_emulator, this);
-        _stackManager = new StackManager(_emulator, _idManager, MemoryToSourceMap);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager);
         _spriteManager = new SpriteManager(_emulator);
 
         return new DisconnectResponse();
@@ -394,7 +433,6 @@ public class X16Debug : DebugAdapterBase
         return new StepOutResponse();
     }
 
-
     protected override NextResponse HandleNextRequest(NextArguments arguments)
     {
         _emulator.Stepping = true;
@@ -431,11 +469,9 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new GotoTargetsResponse();
 
-        var filePath = FixPath(arguments.Source.Path);
-        if (!SourceToMemoryMap.ContainsKey(filePath))
+        var file = _sourceMapManager.GetSourceFileMap(arguments.Source.Path);
+        if (file == null)
             return toReturn;
-
-        var file = SourceToMemoryMap[filePath];
 
         var line = file.FirstOrDefault(i => i.LineNumber == arguments.Line);
 
@@ -447,6 +483,15 @@ public class X16Debug : DebugAdapterBase
         _GotoTargets.Add(id, line);
 
         toReturn.Targets.Add(new GotoTarget() { InstructionPointerReference = $"0x{line.Address}", Id = id, Line = line.LineNumber, Label = $"0x{line.Address}" });
+        return toReturn;
+    }
+
+    protected override PauseResponse HandlePauseRequest(PauseArguments arguments)
+    {
+        var toReturn = new PauseResponse();
+
+        _emulator.Stepping = true;
+
         return toReturn;
     }
 
@@ -513,7 +558,7 @@ public class X16Debug : DebugAdapterBase
                 new Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.Thread()
                 {
                     Id = 0,
-                    Name = "CX16"
+                    Name = "CX16",
                 }
             });
 
@@ -596,30 +641,6 @@ public class X16Debug : DebugAdapterBase
         _stackManager.GenerateCallStack();
         toReturn.StackFrames.AddRange(_stackManager.GetCallStack);
         return toReturn;
-
-        var frame = new StackFrame();
-
-        frame.Id = 1;
-        frame.Name = "Main";
-        frame.CanRestart = true;
-
-        // todo: handle ram \ rom banks
-        var pc = _emulator.Pc;
-        var id = SourceMap.GetUniqueAddress(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-
-        if (MemoryToSourceMap.TryGetValue(id, out var instruction))
-        {
-            frame.Line = instruction.Line.Source.LineNumber;
-            frame.Source = new Source()
-            {
-                Name = Path.GetFileName(instruction.Line.Source.Name),
-                Path = instruction.Line.Source.Name,
-            };
-        }
-
-        toReturn.StackFrames.Add(frame);
-
-        return toReturn;
     }
 
     protected override ScopesResponse HandleScopesRequest(ScopesArguments arguments)
@@ -670,120 +691,10 @@ public class X16Debug : DebugAdapterBase
 
     #endregion
 
+    #region Disassemble
+
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
-    {
-        return new DisassembleResponse();
-    }
-
-    #region SourceMap
-
-    // Construct the source map for the debugger.
-    public void ConstructSourceMap(CompileResult result)
-    {
-        var state = result.State;
-
-        foreach (var segment in state.Segments.Values)
-        {
-            foreach (var defaultProc in segment.DefaultProcedure.Values)
-            {
-                MapProc(defaultProc);
-            }
-        }
-    }
-
-    private void MapProc(Procedure proc)
-    {
-        foreach (var line in proc.Data)
-        {
-            var toAdd = new SourceMap(line, 0);
-
-            if (MemoryToSourceMap.ContainsKey(toAdd.UniqueAddress))
-                throw new Exception("Could add line, as it was already in the hashset.");
-
-            MemoryToSourceMap.Add(toAdd.UniqueAddress, toAdd);
-
-            HashSet<CodeMap> lineMap;
-            var fileName = FixPath(line.Source.Name);
-            if (!SourceToMemoryMap.ContainsKey(fileName))
-            {
-                lineMap = new HashSet<CodeMap>();
-                SourceToMemoryMap.Add(fileName, lineMap);
-            }
-            else
-            {
-                lineMap = SourceToMemoryMap[fileName];
-            }
-
-            lineMap.Add(new CodeMap(line.Source.LineNumber, line.Address, 0, line));
-        }
-
-        foreach (var p in proc.Procedures)
-        {
-            MapProc(p);
-        }
-    }
-
-    private string FixPath(string path)
-    {
-        var toReturn = Path.GetFullPath(path);
-        return toReturn.ToUpper();
-    }
+        => _dissassemblerManager.HandleDisassembleRequest(arguments);
 
     #endregion
-}
-
-public class CodeMap
-{
-    public int LineNumber { get; }
-    public int Address { get; }
-    public int Bank { get; }
-    public IOutputData Line { get; }
-
-    public CodeMap(int lineNumber, int address, int bank, IOutputData line)
-    {
-        LineNumber = lineNumber;
-        Address = address;
-        Bank = bank;
-        Line = line;
-    }
-
-    public override int GetHashCode() => LineNumber;
-
-    public override bool Equals(object? obj)
-    {
-        if (obj == null) return false;
-
-        var o = obj as CodeMap;
-
-        if (o == null) return false;
-
-        return LineNumber == o.LineNumber;
-    }
-}
-
-public class SourceMap
-{
-    public static int GetUniqueAddress(int address, int ramBank, int romBank) =>
-        (address, ramBank, romBank) switch
-        {
-            ( >= 0xc000, _, _) => address + romBank * 0x10000,
-            ( >= 0xa000, _, _) => address + ramBank * 0x10000,
-            _ => address
-        };
-
-    public int Address { get; }
-    public int Bank { get; }
-    public IOutputData Line { get; }
-    public int UniqueAddress => Address + Bank * 0x10000;
-    public SourceMap(IOutputData line, int bank)
-    {
-        Line = line;
-        Address = line.Address;
-    }
-}
-
-public class IdManager
-{
-    private int _id = 1;
-    public int GetId() => _id++;
 }

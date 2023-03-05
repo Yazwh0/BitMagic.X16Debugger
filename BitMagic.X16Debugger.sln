@@ -48,6 +48,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Common", "Common", "{2E856C
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.Common", "..\BitMagic.Libraries\BitMagic.Common\BitMagic.Common.csproj", "{222C82B7-79D3-4D97-BF9D-E10ACE51B3C7}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Decompiler", "Decompiler", "{7E37D0E0-64BB-4D88-AAAF-E44C3E468B68}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.Decompiler", "..\BitMagic.X16Compiler\BitMagic.Decompiler\BitMagic.Decompiler.csproj", "{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -238,6 +242,18 @@ Global
 		{222C82B7-79D3-4D97-BF9D-E10ACE51B3C7}.Release|x64.Build.0 = Release|Any CPU
 		{222C82B7-79D3-4D97-BF9D-E10ACE51B3C7}.Release|x86.ActiveCfg = Release|Any CPU
 		{222C82B7-79D3-4D97-BF9D-E10ACE51B3C7}.Release|x86.Build.0 = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|x64.Build.0 = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Debug|x86.Build.0 = Debug|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|x64.ActiveCfg = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|x64.Build.0 = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|x86.ActiveCfg = Release|Any CPU
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -256,6 +272,7 @@ Global
 		{B946B422-41CB-4901-AE76-1BE8B6AC8559} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{CDC2717D-EF18-4DB3-A484-90D6793E7D80} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{222C82B7-79D3-4D97-BF9D-E10ACE51B3C7} = {2E856C46-D027-481F-BCFC-44C64225F9FF}
+		{B03F1DA7-08A7-4B51-A804-20B28C3EFE0D} = {7E37D0E0-64BB-4D88-AAAF-E44C3E468B68}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {DFCB7DF5-52B3-4B9B-9814-3EC16549A76F}
