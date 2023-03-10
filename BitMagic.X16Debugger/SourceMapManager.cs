@@ -6,6 +6,7 @@ using DiscUtils.Partitions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -17,16 +18,22 @@ internal class SourceMapManager
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
     public Dictionary<int, DecompileReturn> DecompiledRom { get; } = new();
-    public Dictionary<int, DecompileReturn> DecompiledRomById { get; } = new();
+    public Dictionary<int, int> RomToId { get; } = new();
 
     // packed debugger address
     public Dictionary<int, string> Symbols { get; } = new();
 
     private readonly IdManager _idManager;
+    private X16DebugProject? _project;
 
     public SourceMapManager(IdManager idManager)
     {
         _idManager = idManager;
+    }
+
+    public void SetProject(X16DebugProject project)
+    {
+        _project = project;
     }
 
     public SourceMap? GetSourceMap(int debuggerAddress)
@@ -40,7 +47,7 @@ internal class SourceMapManager
     public SourceMap? GetPreviousMap(int debuggerAddress, int maxStep = -3)
     {
         var step = -1;
-        while(step >= maxStep)
+        while (step >= maxStep)
         {
             if (MemoryToSourceMap.ContainsKey(debuggerAddress + step))
                 return MemoryToSourceMap[debuggerAddress + step];
@@ -70,6 +77,7 @@ internal class SourceMapManager
 
     public void Clear()
     {
+        RomToId.Clear();
         Symbols.Clear();
         MemoryToSourceMap.Clear();
         SourceToMemoryMap.Clear();
@@ -89,7 +97,7 @@ internal class SourceMapManager
             }
         }
 
-        foreach(var (name, value) in result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
+        foreach (var (name, value) in result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
         {
             if (!Symbols.ContainsKey(value))
                 Symbols.Add(value, name);
@@ -129,6 +137,14 @@ internal class SourceMapManager
         }
     }
 
+    public void AddSymbolsFromMachine(IMachine machine)
+    {
+        foreach(var i in machine.Variables.Values)
+        {
+            if (!Symbols.ContainsKey(i.Value))
+                Symbols.Add(i.Value, i.Key);
+        }
+    }
 
     /// <summary>
     /// Loads symbols from an external non-BitMagic file.
@@ -147,7 +163,7 @@ internal class SourceMapManager
 
         var contents = File.ReadAllLines(fileName);
 
-        foreach(var line in contents)
+        foreach (var line in contents)
         {
             var parts = line.Split(" ", StringSplitOptions.TrimEntries);
 
@@ -171,10 +187,22 @@ internal class SourceMapManager
     {
         var decompiler = new Decompiler.Decompiler();
 
-        var result = decompiler.Decompile(data, 0xc000, bank, Symbols);
+        var result = decompiler.Decompile(data, 0xc000, 0xffff, bank, Symbols);
 
         DecompiledRom.Add(bank, result);
-        _idManager.AddObject(result, ObjectType.DecompiledData);
+        var id = _idManager.AddObject(result, ObjectType.DecompiledData);
+        RomToId.Add(bank, id);
+
+        var name = _project?.RomBankNames.Length >= bank ? _project.RomBankNames[bank] : "";
+
+        if (string.IsNullOrWhiteSpace(name))
+            result.Name = $"RomBank_{bank}.bmasm";
+        else
+            result.Name = name + ".bmasm";
+
+        result.Path = $"Rom/{result.Name}";
+        result.Origin = "Decompiled";
+        result.ReferenceId = id;
     }
 }
 

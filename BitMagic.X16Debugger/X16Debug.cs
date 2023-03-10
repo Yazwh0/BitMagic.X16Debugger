@@ -1,5 +1,8 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.Compiler.Exceptions;
+using BitMagic.Decompiler;
+using BitMagic.Machines;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
@@ -20,14 +23,14 @@ public class X16Debug : DebugAdapterBase
     private SysThread? _windowThread;
 
     // managers
-    private readonly ExceptionManager _exceptionManager;
     private BreakpointManager _breakpointManager;
     private readonly ScopeManager _scopeManager;
     private readonly SourceMapManager _sourceMapManager;
     private readonly VariableManager _variableManager;
     private StackManager _stackManager;
     private SpriteManager _spriteManager;
-    private readonly DissassemblerManager _dissassemblerManager;
+    private PaletteManager _paletteManager;
+    private DisassemblerManager _dissassemblerManager;
 
     private readonly IdManager _idManager;
 
@@ -41,6 +44,9 @@ public class X16Debug : DebugAdapterBase
     private ManualResetEvent _runEvent = new ManualResetEvent(false);
     private object SyncObject = new object();
 
+    private X16DebugProject? _debugProject;
+    private IMachine _machine;
+
     // This will be started on a second thread, seperate to the emulator
     public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut)
     {
@@ -50,23 +56,27 @@ public class X16Debug : DebugAdapterBase
         _idManager = new IdManager();
 
         _sourceMapManager = new SourceMapManager(_idManager);
-        _exceptionManager = new ExceptionManager(this);
+        //_exceptionManager = new ExceptionManager(this);
         _scopeManager = new ScopeManager(_idManager);
         _variableManager = new VariableManager(_idManager);
 
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager);
-        _spriteManager = new SpriteManager(_emulator);
 
-        _dissassemblerManager = new DissassemblerManager(_sourceMapManager, _emulator);
+        _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
+        _spriteManager = new SpriteManager(_emulator);
+        _paletteManager = new PaletteManager(_emulator);
 
         SetupGlobalObjects();
 
         InitializeProtocolClient(stdIn, stdOut);
 
-        Protocol.RequestReceived += Protocol_RequestReceived;
-        Protocol.RequestCompleted += Protocol_RequestCompleted;
-        Protocol.LogMessage += Protocol_LogMessage;
+        if (_debugProject?.ShowDAPMessages ?? false)
+        {
+            Protocol.RequestReceived += Protocol_RequestReceived;
+            Protocol.RequestCompleted += Protocol_RequestCompleted;
+            Protocol.LogMessage += Protocol_LogMessage;
+        }
     }
 
     private void Protocol_LogMessage(object? sender, LogEventArgs e)
@@ -76,6 +86,7 @@ public class X16Debug : DebugAdapterBase
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
+
     }
 
     private void Protocol_RequestCompleted(object? sender, RequestCompletedEventArgs e)
@@ -155,7 +166,7 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(
             _variableManager.Register(
                 new VariableChildren("Layer 0", "String", () => _emulator.Vera.Layer0Enable ?
-                    (_emulator.Vera.Layer0_BitMapMode ? $"{_emulator.Vera.Layer0_ColourDepth:0}bpp Bitmap" : $"{_emulator.Vera.Layer0_ColourDepth:0}bpp Tiles") :
+                    (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Tiles") :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}"),
@@ -166,7 +177,7 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(
             _variableManager.Register(
                 new VariableChildren("Layer 1", "String", () => _emulator.Vera.Layer1Enable ?
-                    (_emulator.Vera.Layer1_BitMapMode ? $"{_emulator.Vera.Layer1_ColourDepth:0}bpp Bitmap" : $"{_emulator.Vera.Layer1_ColourDepth:0}bpp Tiles") :
+                    (_emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Tiles") :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}"),
@@ -202,6 +213,12 @@ public class X16Debug : DebugAdapterBase
 
         _spriteManager.Register(_variableManager);
 
+        scope.AddVariable(
+                    _variableManager.Register(
+                            new VariableIndex("Palette", _paletteManager.GetFunction)
+                        )
+                );
+
         scope.AddVariable(new VariableMemory("VRAM", "vram", () => "0x20000 bytes"));
 
         scope = _scopeManager.GetScope("Kernal", false);
@@ -233,6 +250,15 @@ public class X16Debug : DebugAdapterBase
 
     }
 
+    private static string GetColourDepth(int inp) => inp switch
+    {
+        0 => "1",
+        1 => "2",
+        2 => "4",
+        3 => "8",
+        _ => "??"
+    };
+
     public SysThread? DebugThread => _debugThread;
 
     /// <summary>
@@ -257,6 +283,7 @@ public class X16Debug : DebugAdapterBase
             SupportsWriteMemoryRequest = true,
             SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
+            SupportsLoadedSourcesRequest = true,
         };
     }
 
@@ -269,7 +296,6 @@ public class X16Debug : DebugAdapterBase
             throw new ProtocolException($"Launch failed because '{toCompile}' does not exist.");
         }
 
-        X16DebugProject debugProject;
         if (string.Equals(Path.GetExtension(toCompile), ".json", StringComparison.CurrentCultureIgnoreCase))
         {
             if (!File.Exists(toCompile))
@@ -277,8 +303,8 @@ public class X16Debug : DebugAdapterBase
 
             try
             {
-                debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(toCompile));
-                if (debugProject == null)
+                _debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(toCompile));
+                if (_debugProject == null)
                     throw new ProtocolException($"Could not deseralise {toCompile} into a X16DebugProject.");
             }
             catch (Exception e)
@@ -288,32 +314,41 @@ public class X16Debug : DebugAdapterBase
         }
         else
         {
-            debugProject = new X16DebugProject();
-            debugProject.Source = toCompile;
+            _debugProject = new X16DebugProject();
+            _debugProject.Source = toCompile;
         }
 
-        if (!File.Exists(debugProject.Source))
+        _sourceMapManager.SetProject(_debugProject);
+
+        if (!File.Exists(_debugProject.Source))
         {
-            var testSource = Path.Join(arguments.ConfigurationProperties.GetValueAsString("cwd"), debugProject.Source);
+            var testSource = Path.Join(arguments.ConfigurationProperties.GetValueAsString("cwd"), _debugProject.Source);
             if (File.Exists(testSource))
-                debugProject.Source = testSource;
+                _debugProject.Source = testSource;
         }
 
-        foreach (var symbols in debugProject.Symbols)
+        if (!string.IsNullOrWhiteSpace(_debugProject.Machine) && string.IsNullOrWhiteSpace(_debugProject.Source) )
+        {
+            _machine = MachineFactory.GetMachine(_debugProject!.Machine);
+
+            if (_machine != null)
+            {
+                _sourceMapManager.AddSymbolsFromMachine(_machine);
+            }
+        }
+
+        foreach (var symbols in _debugProject!.Symbols)
         {
             try
             {
-                Console.WriteLine($"Loading Symbols {symbols.Name}");
+                Console.Write($"Loading Symbols {symbols.Name}... ");
                 _sourceMapManager.LoadSymbols(symbols.Name, symbols.RamBank, symbols.RomBank);
 
-                if (debugProject.DecompileRom && symbols.RomBank != null)
-                {
-                    Console.Write($"Decompiling ROM...");
+                Console.Write($"Decompiling... ");
 
-                    _sourceMapManager.DecompileRomBank(_emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray(), symbols.RomBank ?? 0);
+                _sourceMapManager.DecompileRomBank(_emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray(), symbols.RomBank ?? 0);
 
-                    Console.WriteLine(" Done.");
-                }
+                Console.WriteLine("Done.");
             }
             catch (Exception e)
             {
@@ -323,43 +358,57 @@ public class X16Debug : DebugAdapterBase
 
         try
         {
-            Console.WriteLine($"Compiling {debugProject.Source}");
             var project = new Project();
-            project.Code.Load(debugProject.Source).GetAwaiter().GetResult();
-            var compiler = new Compiler.Compiler(project);
-
-            var compileResult = compiler.Compile().GetAwaiter().GetResult();
-
-            _sourceMapManager.ConstructSourceMap(compileResult);
-
-            if (compileResult.Warnings.Any())
+            if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Warnings:");
-                foreach (var warning in compileResult.Warnings)
+                Console.WriteLine($"Compiling {_debugProject.Source}");
+                project.Code.Load(_debugProject.Source).GetAwaiter().GetResult();
+
+                var compiler = new Compiler.Compiler(project);
+
+                var compileResult = compiler.Compile().GetAwaiter().GetResult();
+
+                _sourceMapManager.ConstructSourceMap(compileResult);
+
+                if (compileResult.Warnings.Any())
                 {
-                    Console.WriteLine(warning);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("Warnings:");
+                    foreach (var warning in compileResult.Warnings)
+                    {
+                        Console.WriteLine(warning);
+                    }
+                    Console.ResetColor();
                 }
-                Console.ResetColor();
+
+                var prg = compileResult.Data["Main"].ToArray();
+                var destAddress = 0x801;
+                for (var i = 2; i < prg.Length; i++)
+                {
+                    _emulator.Memory[destAddress++] = prg[i];
+                }
+                _emulator.Pc = 0x801;
+                Console.WriteLine($"Done. {prg.Length:#,##0} bytes. Starting at 0x801");
+            }
+            else
+            {
+                _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
             }
 
-            var prg = compileResult.Data["Main"].ToArray();
-            var destAddress = 0x801;
-            for (var i = 2; i < prg.Length; i++)
-            {
-                _emulator.Memory[destAddress++] = prg[i];
-            }
-            _emulator.Pc = 0x801;
-            Console.WriteLine($"Done. {prg.Length:#,##0} bytes. Starting at 0x801");
         }
         catch (Exception e)
         {
             throw new ProtocolException(e.Message);
-        }
+        }        
+
+        _emulator.Stepping = true; // arguments.ConfigurationProperties.Contains()
+        _emulator.Control = Control.Paused; // wait for main window
+        _emulator.FrameControl = FrameControl.Synced;
 
         _running = true;
         _debugThread = new SysThread(DebugLoop);
         _debugThread.Name = "DebugLoop Thread";
+        _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
         _windowThread = new SysThread(() => EmulatorWindow.Run(_emulator));
@@ -377,8 +426,15 @@ public class X16Debug : DebugAdapterBase
 
         _emulator = _getNewEmulatorInstance();
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager);
+        _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
+        _paletteManager = new PaletteManager(_emulator);
+
+        if (_machine != null)
+        {
+            _sourceMapManager.AddSymbolsFromMachine(_machine);
+        }
 
         return new DisconnectResponse();
     }
@@ -391,7 +447,9 @@ public class X16Debug : DebugAdapterBase
         => _breakpointManager.HandleSetBreakpointsRequest(arguments);
 
     protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
-        => _exceptionManager.HandleSetExceptionBreakpointsRequest(arguments);
+    {
+        return new SetExceptionBreakpointsResponse();
+    }
 
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
     {
@@ -680,13 +738,54 @@ public class X16Debug : DebugAdapterBase
         var index = variable as VariableIndex;
         if (index != null)
         {
-            toReturn.Variables.AddRange(index.GetChildren());
+            toReturn.Variables.AddRange(index.GetChildren().Skip(arguments.Start ?? 0).Take(arguments.Count ?? int.MaxValue));
 
             return toReturn;
-
         }
 
-        return null;
+        return toReturn;
+    }
+
+    #endregion
+
+    #region Loaded Source
+
+    protected override LoadedSourcesResponse HandleLoadedSourcesRequest(LoadedSourcesArguments arguments)
+    {
+        var toReturn = new LoadedSourcesResponse();
+
+        foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+        {
+            toReturn.Sources.Add(new Source
+            {
+                Name = i.Name,
+                Path = i.Path,
+                SourceReference = i.ReferenceId,
+                Origin = i.Origin,
+            });
+        }
+
+        return toReturn;
+    }
+
+    protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
+    {
+        var toReturn = new SourceResponse();
+
+        var data = _idManager.GetObject<DecompileReturn>(arguments.SourceReference);
+
+        if (data == null)
+            return toReturn;
+
+        var sb = new StringBuilder();
+
+        foreach (var i in data.Items.Values)
+        {
+            sb.AppendLine(i.Instruction);
+        }
+
+        toReturn.Content = sb.ToString();
+        return toReturn;
     }
 
     #endregion

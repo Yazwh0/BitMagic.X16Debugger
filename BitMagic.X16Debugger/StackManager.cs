@@ -1,5 +1,6 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.Compiler.Warnings;
+using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System;
@@ -25,12 +26,14 @@ namespace BitMagic.X16Debugger
 
         //private readonly Dictionary<int, SourceMap> _memoryToSourceMap;
         private readonly SourceMapManager _sourceMapManager;
+        private readonly DisassemblerManager _dissassemblerManager;
 
-        public StackManager(Emulator emulator, IdManager idManager, SourceMapManager sourceMapManager)
+        public StackManager(Emulator emulator, IdManager idManager, SourceMapManager sourceMapManager, DisassemblerManager disassemblerManager)
         {
             _emulator = emulator;
             _idManager = idManager;
             _sourceMapManager = sourceMapManager;
+            _dissassemblerManager = disassemblerManager;
         }
 
         public (string Value, ICollection<Variable> Variables) GetStack()
@@ -114,6 +117,10 @@ namespace BitMagic.X16Debugger
             {
                 frame.Name = $"??? Current: {addressString}";
                 frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
+                var (source, lineNumber) = GetSource(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+                frame.Source = source;
+                frame.Line = lineNumber;
             }
 
             _callStack.Add(frame);
@@ -183,7 +190,7 @@ namespace BitMagic.X16Debugger
                             break;
                         }
 
-                        huntSymbol = _sourceMapManager.GetSymbol(debuggerAddress);
+                        huntSymbol = _sourceMapManager.GetSymbol(thisAddress);
                         if (!string.IsNullOrWhiteSpace(huntSymbol))
                             break;
 
@@ -193,10 +200,44 @@ namespace BitMagic.X16Debugger
                     huntSymbol = string.IsNullOrWhiteSpace(huntSymbol) ? "???" : $"{huntSymbol} +0x{debuggerAddress - thisAddress:X2}"; // todo adjust 
 
                     frame.Name = $"{huntSymbol} ({addressString})";
+                    var (source, lineNumber) = GetSource(address, ramBank, romBank);
+                    frame.Source = source;
+                    frame.Line = lineNumber;
                 }
 
                 _callStack.Add(frame);
             }
+        }
+
+        private (Source? Source, int LineNumber) GetSource(int address, int ramBank, int romBank)
+        {
+            var sourceId = _dissassemblerManager.GetDisassembleyId(address, ramBank, romBank);
+            if (sourceId != 0)
+            {
+                var sourceFile = _idManager.GetObject<DecompileReturn>(sourceId);
+                if (sourceFile != null)
+                {
+                    var lineNumber = 0;
+                    foreach(var i in sourceFile.Items.Where(i => i.Value.HasInstruction))
+                    {
+                        if (i.Value.Address >= address)
+                        {
+                            lineNumber = i.Key;
+                            break;
+                        }
+                    }
+
+                    return (new Source()
+                    {
+                        Name = sourceFile.Name,
+                        Path = sourceFile.Path,
+                        Origin = sourceFile.Origin,
+                        SourceReference = sourceFile.ReferenceId
+                    }, lineNumber);
+                }
+            }
+
+            return (null, 0);
         }
 
         private (byte OpCode, int Address, int RamBank, int RomBank) GetOpCode(uint stackInfo)

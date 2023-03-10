@@ -22,6 +22,11 @@ public class IdManager
         return id;
     }
 
+    public void UpdateObject(int id, object obj)
+    {
+        _objects[id].Object = obj;
+    }
+
     public T? GetObject<T>(int id) where T : class
     {
         if (_objects.ContainsKey(id))
@@ -35,11 +40,21 @@ public class IdManager
         _objects.Clear();
         _id = 1;
     }
+
+    public IEnumerable<T> GetObjects<T>(ObjectType objectType) where T : class
+    {
+        foreach (var i in _objects.Values.Where(i => i.ObjectType == objectType))
+        {
+            var obj = i.Object as T;
+            if (obj != null) 
+                yield return obj;
+        }
+    }
 }
 
 internal class ObjectContainer
 {
     public int Id { get; init; }
     public ObjectType ObjectType { get; init; }
-    public object Object { get; init; }
+    public object? Object { get; set; }
 }

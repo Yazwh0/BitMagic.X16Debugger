@@ -1,5 +1,5 @@
 {
-    "source": "main.bmasm",
+    "source": "",
     "startStepping": false,
     "symbols": [
         {
@@ -43,5 +43,5 @@
             "romBank": 10
         }
     ],
-    "decompileRom" : "true"
+    "machine" : "CommanderX16R42"
 }

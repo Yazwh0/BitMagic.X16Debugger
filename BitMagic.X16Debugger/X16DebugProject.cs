@@ -35,10 +35,25 @@ public class X16DebugProject
     public SymbolsFile[] Symbols { get; set; } = Array.Empty<SymbolsFile>();
 
     /// <summary>
-    /// Decompile ROM parts that have symbols set at startup.
+    /// Show DAP messages between calling host and debugger.
     /// </summary>
-    [JsonProperty("decompileRom", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public bool DecompileRom { get; set; } = false;
+    [JsonProperty("showDAPMessage", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public bool ShowDAPMessages { get; set; } = false;
+
+    /// <summary>
+    /// Display names for the Rom banks.
+    /// </summary>
+    public string[] RomBankNames { get; set; } = new string[] { "Kernel", "Keyboard", "Dos", "Geos", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio" };
+
+    /// <summary>
+    /// Display names for the Ram banks.
+    /// </summary>
+    public string[] RamBankNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Machine to load globals from if there is no bmasm source.
+    /// </summary>
+    public string Machine { get; set; } = "";
 }
 
 public class SymbolsFile

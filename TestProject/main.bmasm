@@ -1,5 +1,5 @@
 .machine CommanderX16R42
-    jmp ($fffc)
+    ;jmp ($fffc)
     nop
     lda $05
     lda $05    
