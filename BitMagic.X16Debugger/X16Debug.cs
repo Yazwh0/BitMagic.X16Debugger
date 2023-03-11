@@ -56,7 +56,6 @@ public class X16Debug : DebugAdapterBase
         _idManager = new IdManager();
 
         _sourceMapManager = new SourceMapManager(_idManager);
-        //_exceptionManager = new ExceptionManager(this);
         _scopeManager = new ScopeManager(_idManager);
         _variableManager = new VariableManager(_idManager);
 
@@ -318,7 +317,7 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
-        _sourceMapManager.SetProject(_debugProject);
+        _dissassemblerManager.SetProject(_debugProject);
 
         if (!File.Exists(_debugProject.Source))
         {
@@ -327,7 +326,7 @@ public class X16Debug : DebugAdapterBase
                 _debugProject.Source = testSource;
         }
 
-        if (!string.IsNullOrWhiteSpace(_debugProject.Machine) && string.IsNullOrWhiteSpace(_debugProject.Source) )
+        if (!string.IsNullOrWhiteSpace(_debugProject.Machine) && string.IsNullOrWhiteSpace(_debugProject.Source))
         {
             _machine = MachineFactory.GetMachine(_debugProject!.Machine);
 
@@ -348,7 +347,7 @@ public class X16Debug : DebugAdapterBase
 
                 Console.Write($"Decompiling... ");
 
-                _sourceMapManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
+                _dissassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
                 Console.WriteLine("Done.");
             }
@@ -401,7 +400,7 @@ public class X16Debug : DebugAdapterBase
         catch (Exception e)
         {
             throw new ProtocolException(e.Message);
-        }        
+        }
 
         _emulator.Stepping = true; // arguments.ConfigurationProperties.Contains()
         _emulator.Control = Control.Paused; // wait for main window
@@ -601,6 +600,26 @@ public class X16Debug : DebugAdapterBase
             }
 
             _stackManager.Invalidate();
+
+            // invalidate any decompiled source
+            if (_emulator.Stepping)
+            {
+                foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+                {
+                    if (i.Volatile)
+                        Protocol.SendEvent(new LoadedSourceEvent()
+                        {
+                            Reason = LoadedSourceEvent.ReasonValue.Changed,
+                            Source = new Source()
+                            {
+                                Name = i.Name,
+                                Path = i.Path,
+                                Origin = i.Origin,
+                                SourceReference = i.ReferenceId
+                            }
+                        });
+                }
+            }
         }
     }
 
@@ -780,6 +799,9 @@ public class X16Debug : DebugAdapterBase
             return toReturn;
 
         var sb = new StringBuilder();
+
+        if (data.Volatile)
+            data.Generate();
 
         foreach (var i in data.Items.Values)
         {

@@ -61,5 +61,6 @@
             "romBank": 10
         }
     ],
-    "machine" : "CommanderX16R42"
+    "machine" : "CommanderX16R42",
+    "ramBankNames" : [ "Kernel_Ram" ]
 }

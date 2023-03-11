@@ -2,11 +2,8 @@
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
-using System.Net;
 using System.Transactions;
-using static BitMagic.Decompiler.Addressing;
 
 namespace BitMagic.X16Debugger;
 
@@ -14,15 +11,29 @@ internal class DisassemblerManager
 {
     private readonly SourceMapManager _sourceMapManager;
     private readonly Emulator _emulator;
-    private readonly IdManager _idManaager;
-
-    private int _mainRamId = 0;
+    private readonly IdManager _idManager;
+    public Dictionary<(int RamBank, int RomBank), int> BankToId { get; } = new();
+    private X16DebugProject? _project;
+    private const int NotSet = -1;
 
     public DisassemblerManager(SourceMapManager sourceMapManager, Emulator emulator, IdManager idManaager)
     {
         _sourceMapManager = sourceMapManager;
         _emulator = emulator;
-        _idManaager = idManaager;
+        _idManager = idManaager;
+        CreateRamDocuments();
+    }
+
+    public void SetProject(X16DebugProject project)
+    {
+        _project = project;
+        for(var i = 0; i < _project.RamBankNames.Length; i++)
+        {
+            var id = BankToId[(i, NotSet)];
+            var data = _idManager.GetObject<DecompileReturn>(id);
+            data.Name = $"{_project.RamBankNames[i]}.bmasm";
+            data.Path = $"Ram/{data.Name}";
+        }
     }
 
     // Consider the request to be delimited by main memory, or banked memeory.
@@ -34,9 +45,11 @@ internal class DisassemblerManager
 
         Console.WriteLine($"Disassemble request: 0x{address:X4} A:{ramBank} O:{romBank} {arguments.InstructionCount} {arguments.InstructionOffset}");
 
-
-        if (address > 0xc000 && _sourceMapManager.DecompiledRom.ContainsKey(romBank))
+        if (address > 0xc000)
             return DisassembleRequestFromRom(arguments, address, romBank);
+
+        if (address > 0xa000)
+            return DisassembleRequestFromRam(arguments, address, ramBank);
 
         return DisassembleRequestFromMainMemory(arguments, address, _emulator.Pc);
     }
@@ -44,35 +57,12 @@ internal class DisassemblerManager
     private DisassembleResponse DisassembleRequestFromMainMemory(DisassembleArguments arguments, int address, int pc)
     {
         DecompileReturn? result = null;
-        if (_mainRamId != 0)
-            result = _idManaager.GetObject<DecompileReturn>(_mainRamId);
+        if (!BankToId.ContainsKey((NotSet, NotSet)))
+            throw new NotImplementedException("Main ram isn't set!");
 
-        if (result == null)
-        {
-            var decompiler = new Decompiler.Decompiler();
+        result = _idManager.GetObject<DecompileReturn>(BankToId[(NotSet, NotSet)]) ?? throw new Exception("Cannot find main ram object!");
 
-            var additionalSymbols = new Dictionary<int, string>
-            {
-                { 0x100, "stackstart" },
-                { 0x200, "stackend" },
-                { pc, "_pc" }
-            };
-
-            result = decompiler.Decompile(_emulator.Memory[0..0x9fff], 0, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
-
-
-            if (_mainRamId == 0)
-            {
-                result.Name = "MainRam.bmasm";
-                result.Path = "Ram/MainRam.bmasm";
-                result.Origin = "Decompiled";
-
-                var id = _idManaager.AddObject(result, ObjectType.DecompiledData);
-                result.ReferenceId = id;
-            }
-            else
-                _idManaager.UpdateObject(_mainRamId, result);
-        }
+        result.Generate();
 
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, result, 0, 0);
     }
@@ -81,9 +71,76 @@ internal class DisassemblerManager
     // As ROM cannot be changed, we can happily use these symbols.
     private DisassembleResponse DisassembleRequestFromRom(DisassembleArguments arguments, int address, int romBank)
     {
-        var romResult = _sourceMapManager.DecompiledRom[romBank];
+        DecompileReturn decompileReturn = GetDecompileReturn(NotSet, romBank);
 
-        return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, romResult, 0, romBank);
+        return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, 0, romBank);
+    }
+
+    private DisassembleResponse DisassembleRequestFromRam(DisassembleArguments arguments, int address, int ramBank)
+    {
+        DecompileReturn decompileReturn = GetDecompileReturn(ramBank, NotSet);
+        
+        return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, ramBank, 0);
+    }
+
+    private DecompileReturn GetDecompileReturn(int ramBank, int romBank)
+    {
+        var id = BankToId[(ramBank, romBank)];
+        return _idManager.GetObject<DecompileReturn>(id) ?? throw new Exception($"Does not exist! {ramBank} {romBank}");
+    }
+
+    private DecompileReturn CreateDecompileReturn(int ramBank)
+    {
+        var decompileReturn = new DecompileReturn();
+        decompileReturn.ReferenceId = _idManager.AddObject(decompileReturn, ObjectType.DecompiledData);
+        var name = $"z_Bank_0x{ramBank:X2}.bmasm"; // name in the project changess this when the project is set
+        decompileReturn.Name = name;
+        decompileReturn.Path = $"Ram/{name}";
+        decompileReturn.Origin = "Decompiled";
+        decompileReturn.Volatile = true;
+        decompileReturn.Generate = () =>
+        {
+            var item = decompileReturn;
+            var decompiler = new Decompiler.Decompiler();
+            var data = _emulator.RamBank.Slice(ramBank * 0x2000, 0x2000);
+            var result = decompiler.Decompile(data, 0xa000, 0xbfff, ramBank, _sourceMapManager.Symbols, null);
+            item.Items = result.Items;
+        };
+
+        BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId);
+
+        return decompileReturn;
+    }
+
+    private void CreateRamDocuments()
+    {
+        for (var i = 0; i < 256; i++)
+            CreateDecompileReturn(i);
+
+        var decompileReturn = new DecompileReturn();
+        decompileReturn.ReferenceId = _idManager.AddObject(decompileReturn, ObjectType.DecompiledData);
+        var name = $"MainRam.bmasm";
+        decompileReturn.Name = name;
+        decompileReturn.Path = name;
+        decompileReturn.Origin = "Decompiled";
+        decompileReturn.Volatile = true;
+        decompileReturn.Generate = () =>
+        {
+            var additionalSymbols = new Dictionary<int, string>
+            {
+                { 0x100, "stackstart" },
+                { 0x200, "stackend" },
+                { _emulator.Pc, "_pc" }
+            };
+
+            var item = decompileReturn;
+            var decompiler = new Decompiler.Decompiler();
+            var data = _emulator.RamBank.Slice(0, 0xa000);
+            var result = decompiler.Decompile(data, 0x0000, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
+            item.Items = result.Items;
+        };
+
+        BankToId.Add((NotSet, NotSet), decompileReturn.ReferenceId);
     }
 
     private DisassembleResponse ConvertDisassemblyToReponse(int instructionOffset, int instructionCount, int address, DecompileReturn decompileReturn, int ramBank, int romBank)
@@ -149,10 +206,13 @@ internal class DisassemblerManager
     public int GetDisassembleyId(int address, int ramBank, int romBank)
     {
         if (address < 0xa000)
-            return _mainRamId;
+            return BankToId[(NotSet, NotSet)];
 
-        if (address > 0xc000)
-            return _sourceMapManager.RomToId[romBank];
+        if (address >= 0xc000)
+            return BankToId[(NotSet, romBank)];
+
+        if (address >= 0xa000)
+            return BankToId[(ramBank, NotSet)];
 
         return 0;
     }
@@ -162,6 +222,27 @@ internal class DisassemblerManager
         var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress);
 
         return GetDisassembleyId(address, ramBank, romBank);
+    }
+
+    public void DecompileRomBank(byte[] data, int bank)
+    {
+        var decompiler = new Decompiler.Decompiler();
+
+        var result = decompiler.Decompile(data, 0xc000, 0xffff, bank, _sourceMapManager.Symbols);
+
+        var id = _idManager.AddObject(result, ObjectType.DecompiledData);
+        BankToId.Add((NotSet, bank), id);
+
+        var name = _project?.RomBankNames.Length >= bank ? _project.RomBankNames[bank] : "";
+
+        if (string.IsNullOrWhiteSpace(name))
+            result.Name = $"RomBank_{bank}.bmasm";
+        else
+            result.Name = name + ".bmasm";
+
+        result.Path = $"Rom/{result.Name}";
+        result.Origin = "Decompiled";
+        result.ReferenceId = id;
     }
 }
 

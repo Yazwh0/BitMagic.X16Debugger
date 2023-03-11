@@ -1,5 +1,10 @@
 .machine CommanderX16R42
-    ;jmp ($fffc)
+    
+    lda #$20
+    sta $10
+    inc $10
+
+
     nop
     lda $05
     lda $05    

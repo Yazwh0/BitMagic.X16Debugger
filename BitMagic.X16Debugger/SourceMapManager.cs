@@ -17,23 +17,14 @@ internal class SourceMapManager
     public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
-    public Dictionary<int, DecompileReturn> DecompiledRom { get; } = new();
-    public Dictionary<int, int> RomToId { get; } = new();
-
     // packed debugger address
     public Dictionary<int, string> Symbols { get; } = new();
 
     private readonly IdManager _idManager;
-    private X16DebugProject? _project;
 
     public SourceMapManager(IdManager idManager)
     {
         _idManager = idManager;
-    }
-
-    public void SetProject(X16DebugProject project)
-    {
-        _project = project;
     }
 
     public SourceMap? GetSourceMap(int debuggerAddress)
@@ -77,11 +68,9 @@ internal class SourceMapManager
 
     public void Clear()
     {
-        RomToId.Clear();
         Symbols.Clear();
         MemoryToSourceMap.Clear();
         SourceToMemoryMap.Clear();
-        DecompiledRom.Clear();
     }
 
     // Construct the source map for the debugger.
@@ -213,28 +202,6 @@ internal class SourceMapManager
                 startAddress += 3;
             }
         }
-    }
-
-    public void DecompileRomBank(byte[] data, int bank)
-    {
-        var decompiler = new Decompiler.Decompiler();
-
-        var result = decompiler.Decompile(data, 0xc000, 0xffff, bank, Symbols);
-
-        DecompiledRom.Add(bank, result);
-        var id = _idManager.AddObject(result, ObjectType.DecompiledData);
-        RomToId.Add(bank, id);
-
-        var name = _project?.RomBankNames.Length >= bank ? _project.RomBankNames[bank] : "";
-
-        if (string.IsNullOrWhiteSpace(name))
-            result.Name = $"RomBank_{bank}.bmasm";
-        else
-            result.Name = name + ".bmasm";
-
-        result.Path = $"Rom/{result.Name}";
-        result.Origin = "Decompiled";
-        result.ReferenceId = id;
     }
 }
 
