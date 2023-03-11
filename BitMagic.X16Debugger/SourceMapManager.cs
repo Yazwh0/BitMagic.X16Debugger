@@ -139,7 +139,7 @@ internal class SourceMapManager
 
     public void AddSymbolsFromMachine(IMachine machine)
     {
-        foreach(var i in machine.Variables.Values)
+        foreach (var i in machine.Variables.Values)
         {
             if (!Symbols.ContainsKey(i.Value))
                 Symbols.Add(i.Value, i.Key);
@@ -153,15 +153,15 @@ internal class SourceMapManager
     /// <param name="ramBank">RAM bank, null for no bank.</param>
     /// <param name="romBank">ROM bank, null for no bank.</param>
     /// <exception cref="Exception"></exception>
-    public void LoadSymbols(string fileName, int? ramBank, int? romBank)
+    public void LoadSymbols(SymbolsFile file)
     {
         const int addressLocation = 1;
         const int symbolLocation = 2;
 
-        if (!File.Exists(fileName))
-            throw new Exception($"File not found '{fileName}'");
+        if (!File.Exists(file.Name))
+            throw new Exception($"File not found '{file.Name}'");
 
-        var contents = File.ReadAllLines(fileName);
+        var contents = File.ReadAllLines(file.Name);
 
         foreach (var line in contents)
         {
@@ -170,16 +170,48 @@ internal class SourceMapManager
             var address = Convert.ToInt32(parts[addressLocation], 16);
 
             // ignore anything in a banked area if there is no bank specified
-            if (address >= 0xc000 && romBank == null)
+            if (address >= 0xc000 && file.RomBank == null)
                 continue;
 
-            if (address >= 0xa000 && address < 0xc000 && ramBank == null)
+            if (address >= 0xa000 && address < 0xc000 && file.RamBank == null)
                 continue;
 
-            var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, ramBank ?? 0, romBank ?? 0);
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, file.RamBank ?? 0, file.RomBank ?? 0);
 
             if (!Symbols.ContainsKey(debuggerAddress))
                 Symbols.Add(debuggerAddress, parts[symbolLocation][1..]);
+        }
+    }
+
+    public void LoadJumpTable(RangeDefinition[] defintion, int baseAddress, int bank, Span<Byte> data)
+    {
+        // Jump tables are lists of `jmp xxxx`
+        // We want to ensure they have symbols so the are decompiled properly.
+
+        var bankAdd = bank << 16;
+
+        foreach (var i in defintion.Where(i => string.Equals(i.Type, "jumptable", StringComparison.InvariantCultureIgnoreCase)))
+        {
+            if (string.IsNullOrWhiteSpace(i.Start) || string.IsNullOrWhiteSpace(i.End)) continue;
+
+            var startAddress = Convert.ToInt32(i.Start, 16) - baseAddress;
+            var endAddress = Convert.ToInt32(i.End, 16) - baseAddress;
+
+            while (startAddress <= endAddress)
+            {
+                if (data[startAddress] == 0x4c) // only abs jumps are considered
+                {
+                    var destAddress = AddressFunctions.GetDebuggerAddress(data[startAddress + 1] + (data[startAddress + 2] << 8), 0, bank);
+                    string dest;
+                    if (Symbols.ContainsKey(destAddress))
+                        dest = $"jt_{Symbols[destAddress]}";
+                    else
+                        dest = $"jt_{destAddress:X4}";
+
+                    Symbols.TryAdd(startAddress + baseAddress + bankAdd, dest);
+                }
+                startAddress += 3;
+            }
         }
     }
 

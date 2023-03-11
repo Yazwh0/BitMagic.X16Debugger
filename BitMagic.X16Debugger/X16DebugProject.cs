@@ -75,4 +75,26 @@ public class SymbolsFile
     /// </summary>
     [JsonProperty("ramBank", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public int? RamBank { get; set; }
+
+    /// <summary>
+    /// Range of memory that is a jump table. Used to create extra symbols.
+    /// </summary>
+    public RangeDefinition[] RangeDefinitions { get; set; } = Array.Empty<RangeDefinition>();
+}
+
+public class RangeDefinition
+{
+    /// <summary>
+    /// Start address of the jump table
+    /// </summary>
+    public string Start { get; set; } = "";
+    /// <summary>
+    /// End address of the jump table
+    /// </summary>
+    public string End { get; set; } = "";
+
+    /// <summary>
+    /// Type of defintion, supported : 'jumptable'
+    /// </summary>
+    public string Type { get; set; } = "jumptable";
 }

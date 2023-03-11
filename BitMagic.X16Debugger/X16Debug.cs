@@ -342,11 +342,13 @@ public class X16Debug : DebugAdapterBase
             try
             {
                 Console.Write($"Loading Symbols {symbols.Name}... ");
-                _sourceMapManager.LoadSymbols(symbols.Name, symbols.RamBank, symbols.RomBank);
+                var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
+                _sourceMapManager.LoadSymbols(symbols);
+                _sourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
 
                 Console.Write($"Decompiling... ");
 
-                _sourceMapManager.DecompileRomBank(_emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray(), symbols.RomBank ?? 0);
+                _sourceMapManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
                 Console.WriteLine("Done.");
             }

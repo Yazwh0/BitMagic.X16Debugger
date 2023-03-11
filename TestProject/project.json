@@ -4,7 +4,18 @@
     "symbols": [
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\kernal.sym",
-            "romBank": 0
+            "romBank": 0,
+            "RangeDefinitions" : [
+                {
+                    "type" : "jumpTable",
+                    "Start" : "0xFEBD",
+                    "End" : "0xFF80"                    
+                },                
+                {
+                    "Start" : "0xFF81",
+                    "End" : "0xFFF6"
+                }
+            ]
         },
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\keymap.sym",
@@ -12,7 +23,14 @@
         },
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\dos.sym",
-            "romBank": 2
+            "romBank": 2,
+            "RangeDefinitions" : [
+                {
+                    "type" : "jumpTable",
+                    "Start" : "0xc000",
+                    "End" : "0xc036"
+                }
+            ]
         },
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\geos.sym",
