@@ -3,6 +3,7 @@ using BitMagic.Compiler.Warnings;
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Silk.NET.OpenGL;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -83,45 +84,12 @@ namespace BitMagic.X16Debugger
 
         public IEnumerable<StackFrame> GetCallStack => _callStack;
 
+        // data stored in the stack info has the ram\rom bank switched to how the debugger address.
         public void GenerateCallStack()
         {
             _callStack.Clear();
 
-            // current position
-            var frame = new StackFrame();
-            frame.Id = _idManager.GetId();
-            var pc = _emulator.Pc;
-
-            var addressString = AddressFunctions.GetDebuggerAddressDisplayString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-            var debuggerAddress = AddressFunctions.GetDebuggerAddress(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-
-            var instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
-
-            if (instruction != null)
-            {
-                var line = instruction.Line as Line;
-                if (line == null)
-                    frame.Name = $"Current: {addressString}";
-                else
-                    frame.Name = $"Current: {line.Procedure.Name} {addressString}";
-
-                frame.Line = instruction.Line.Source.LineNumber;
-                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-                frame.Source = new Source()
-                {
-                    Name = Path.GetFileName(instruction.Line.Source.Name),
-                    Path = instruction.Line.Source.Name,
-                };
-            }
-            else
-            {
-                frame.Name = $"??? Current: {addressString}";
-                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-
-                var (source, lineNumber) = GetSource(pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-                frame.Source = source;
-                frame.Line = lineNumber;
-            }
+            var frame = GenerateFrame("> ", _emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff);
 
             _callStack.Add(frame);
 
@@ -142,10 +110,13 @@ namespace BitMagic.X16Debugger
                 // todo: add code reference to what was interrupted
                 if (stackInfo == _interrupt || stackInfo == _nmi)
                 {
-                    frame = new StackFrame();
-                    frame.Id = _idManager.GetId();
-                    frame.Name = stackInfo == _interrupt ? "INTERRUPT" : "NMI";
-                    _callStack.Add(frame);
+                    var returnAddress = _emulator.Memory[0x100 + sp] + (_emulator.Memory[0x100 + sp + 1] << 8) - 2;
+                    var bankInfo  = _emulator.StackInfo[sp] >> 16;
+                    var iramBank = bankInfo & 0xff;
+                    var iromBank = (bankInfo & 0xff00) >> 8;
+                    sp++;
+
+                    _callStack.Add(GenerateFrame(stackInfo == _interrupt ? "INT: " : "NMI: ", returnAddress, (int)iramBank, (int)iromBank, -1));
                     continue;
                 }
 
@@ -154,59 +125,77 @@ namespace BitMagic.X16Debugger
                 if (opCode != 0x20 && opCode != 0x00)
                     continue;
 
-                addressString = AddressFunctions.GetDebuggerAddressDisplayString(address, ramBank, romBank);
-
-                frame = new StackFrame();
-                frame.Id = _idManager.GetId();
-                frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(address, ramBank, romBank);
-
-                debuggerAddress = AddressFunctions.GetDebuggerAddress(address, ramBank, romBank);
-
-                instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
-                if (instruction != null)
-                {
-                    var line = instruction.Line as Line;
-                    if (line == null)
-                        frame.Name = $"??? From: {addressString} (Data?)";
-                    else
-                        frame.Name = $"{line.Procedure.Name} {addressString}";
-
-                    frame.Line = instruction.Line.Source.LineNumber;
-                    frame.Source = new Source()
-                    {
-                        Name = Path.GetFileName(instruction.Line.Source.Name),
-                        Path = instruction.Line.Source.Name,
-                    };
-                }
-                else
-                {
-                    //// hunt backward for a symbol
-                    var thisAddress = debuggerAddress;
-                    string? huntSymbol = null;
-                    for (var i = 0; i < 256; i++) // 256 is a bit arbitary...?
-                    {
-                        if ((thisAddress & 0xff0000) != ((thisAddress - 1) & 0xff0000))
-                        {
-                            break;
-                        }
-
-                        huntSymbol = _sourceMapManager.GetSymbol(thisAddress);
-                        if (!string.IsNullOrWhiteSpace(huntSymbol))
-                            break;
-
-                        thisAddress--;
-                    }
-
-                    huntSymbol = string.IsNullOrWhiteSpace(huntSymbol) ? "???" : $"{huntSymbol} +0x{debuggerAddress - thisAddress:X2}"; // todo adjust 
-
-                    frame.Name = $"{huntSymbol} ({addressString})";
-                    var (source, lineNumber) = GetSource(address, ramBank, romBank);
-                    frame.Source = source;
-                    frame.Line = lineNumber;
-                }
+                frame = GenerateFrame("", address, ramBank, romBank, sp-1);
 
                 _callStack.Add(frame);
             }
+        }
+
+        private StackFrame GenerateFrame(string prefix, int address, int ramBank, int romBank, int stackPointer)
+        {
+            // return address is adjusted here to give the location of the jsr. need to +3 for the correct return address.
+            var returnAddress = _emulator.Memory[0x100 + stackPointer] + (_emulator.Memory[0x100 + stackPointer + 1] << 8) - 2;
+            var addressString = AddressFunctions.GetDebuggerAddressDisplayString(address, ramBank, romBank);
+
+            if (stackPointer != -1 && (address & 0xffff) != returnAddress)
+            {
+                addressString = $"({addressString} -> {returnAddress + 3:X4})";
+            }
+            else
+            {
+                addressString = $"({addressString})";
+            }
+
+            var frame = new StackFrame();
+            frame.Id = _idManager.GetId();
+            frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(address, ramBank, romBank);
+
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, ramBank, romBank);
+
+            var instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
+            if (instruction != null)
+            {
+                var line = instruction.Line as Line;
+                if (line == null)
+                    frame.Name = $"{prefix}??? {addressString} (Data?)";
+                else
+                    frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
+
+                frame.Line = instruction.Line.Source.LineNumber;
+                frame.Source = new Source()
+                {
+                    Name = Path.GetFileName(instruction.Line.Source.Name),
+                    Path = instruction.Line.Source.Name,
+                };
+            }
+            else
+            {
+                //// hunt backward for a symbol
+                var thisAddress = debuggerAddress;
+                string? huntSymbol = null;
+                for (var i = 0; i < 256; i++) // 256 is a bit arbitary...?
+                {
+                    if ((thisAddress & 0xff0000) != ((thisAddress - 1) & 0xff0000))
+                    {
+                        break;
+                    }
+
+                    huntSymbol = _sourceMapManager.GetSymbol(thisAddress);
+                    if (!string.IsNullOrWhiteSpace(huntSymbol))
+                        break;
+
+                    thisAddress--;
+                }
+
+                huntSymbol = string.IsNullOrWhiteSpace(huntSymbol) ? "???" : $"{huntSymbol} +0x{debuggerAddress - thisAddress:X2}"; // todo adjust 
+
+                frame.Name = $"{prefix}{huntSymbol} {addressString}";
+                var (source, lineNumber) = GetSource(address, ramBank, romBank);
+                frame.Source = source;
+                frame.Line = lineNumber;
+            }
+
+            return frame;
         }
 
         private (Source? Source, int LineNumber) GetSource(int address, int ramBank, int romBank)
@@ -246,13 +235,13 @@ namespace BitMagic.X16Debugger
 
             if (rawAddress >= 0xc000)
             {
-                var romBank = (int)((stackInfo & 0xff0000) >> 16);
+                var romBank = (int)((stackInfo & 0xff000000) >> 24);
                 return (_emulator.RomBank[romBank * 0x4000 + (int)rawAddress - 0xc000], (int)rawAddress, 0, romBank);
             }
 
             if (rawAddress >= 0xa000)
             {
-                var ramBank = (int)((stackInfo & 0xff000000) >> 24);
+                var ramBank = (int)((stackInfo & 0xff0000) >> 16);
                 return (_emulator.RomBank[ramBank * 0x2000 + (int)rawAddress - 0xa000], (int)rawAddress, ramBank, 0);
 
             }

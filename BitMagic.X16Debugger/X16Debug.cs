@@ -484,6 +484,12 @@ public class X16Debug : DebugAdapterBase
 
     protected override StepInResponse HandleStepInRequest(StepInArguments arguments)
     {
+        _emulator.Stepping = true;
+        lock (SyncObject)
+        {
+            _runEvent.Set();
+        }
+
         return new StepInResponse();
     }
 
@@ -494,10 +500,23 @@ public class X16Debug : DebugAdapterBase
 
     protected override NextResponse HandleNextRequest(NextArguments arguments)
     {
-        _emulator.Stepping = true;
-        lock (SyncObject)
+        if (_emulator.Memory[_emulator.Pc] == 0x20)
         {
-            _runEvent.Set();
+            _emulator.StackBreakpoints[_emulator.StackPointer - 0x100] = 0x01;
+
+            _emulator.Stepping = false;
+            lock (SyncObject)
+            {
+                _runEvent.Set();
+            }
+        }
+        else // if its not a jsr, just step
+        {
+            _emulator.Stepping = true;
+            lock (SyncObject)
+            {
+                _runEvent.Set();
+            }
         }
 
         return new NextResponse();
@@ -567,6 +586,26 @@ public class X16Debug : DebugAdapterBase
         {
             var returnCode = _emulator.Emulate();
 
+            // invalidate any decompiled source
+            if (_emulator.Stepping)
+            {
+                foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+                {
+                    if (i.Volatile)
+                        Protocol.SendEvent(new LoadedSourceEvent()
+                        {
+                            Reason = LoadedSourceEvent.ReasonValue.Changed,
+                            Source = new Source()
+                            {
+                                Name = i.Name,
+                                Path = i.Path,
+                                Origin = i.Origin,
+                                SourceReference = i.ReferenceId
+                            }
+                        });
+                }
+            }
+
             switch (returnCode)
             {
                 case Emulator.EmulatorResult.Stepping:
@@ -601,25 +640,6 @@ public class X16Debug : DebugAdapterBase
 
             _stackManager.Invalidate();
 
-            // invalidate any decompiled source
-            if (_emulator.Stepping)
-            {
-                foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
-                {
-                    if (i.Volatile)
-                        Protocol.SendEvent(new LoadedSourceEvent()
-                        {
-                            Reason = LoadedSourceEvent.ReasonValue.Changed,
-                            Source = new Source()
-                            {
-                                Name = i.Name,
-                                Path = i.Path,
-                                Origin = i.Origin,
-                                SourceReference = i.ReferenceId
-                            }
-                        });
-                }
-            }
         }
     }
 
