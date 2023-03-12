@@ -30,7 +30,7 @@ public class X16Debug : DebugAdapterBase
     private StackManager _stackManager;
     private SpriteManager _spriteManager;
     private PaletteManager _paletteManager;
-    private DisassemblerManager _dissassemblerManager;
+    private DisassemblerManager _disassemblerManager;
 
     private readonly IdManager _idManager;
 
@@ -63,8 +63,8 @@ public class X16Debug : DebugAdapterBase
 
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
 
-        _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
+        _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
 
@@ -343,7 +343,7 @@ public class X16Debug : DebugAdapterBase
         }
         // end load rom
 
-        _dissassemblerManager.SetProject(_debugProject);
+        _disassemblerManager.SetProject(_debugProject);
 
         if (!File.Exists(_debugProject.Source))
         {
@@ -373,7 +373,7 @@ public class X16Debug : DebugAdapterBase
 
                 Console.Write($"Decompiling... ");
 
-                _dissassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
+                _disassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
                 Console.WriteLine("Done.");
             }
@@ -381,6 +381,19 @@ public class X16Debug : DebugAdapterBase
             {
                 throw new ProtocolException(e.Message);
             }
+        }
+
+        // disassemble rom banks if the symbols weren't set
+        for(var i = 0; i < 10; i++)
+        {
+            if (_disassemblerManager.IsRomDecompiled(i))
+                continue;
+
+            var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
+
+            Console.Write($"Decompiling Rom Bank {i}... ");
+
+            _disassemblerManager.DecompileRomBank(bankData, i);
         }
 
         try
@@ -453,8 +466,8 @@ public class X16Debug : DebugAdapterBase
 
         _emulator = _getNewEmulatorInstance();
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
-        _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
+        _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
 
@@ -863,7 +876,7 @@ public class X16Debug : DebugAdapterBase
     #region Disassemble
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
-        => _dissassemblerManager.HandleDisassembleRequest(arguments);
+        => _disassemblerManager.HandleDisassembleRequest(arguments);
 
     #endregion
 }

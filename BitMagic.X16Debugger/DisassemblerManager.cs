@@ -246,6 +246,8 @@ internal class DisassemblerManager
         result.ReferenceId = id;
         result.RomBank = bank;
     }
+
+    public bool IsRomDecompiled(int bank) => BankToId.ContainsKey((NotSet, bank));
 }
 
 internal class DissasemblyReturn
