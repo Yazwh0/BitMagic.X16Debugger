@@ -46,10 +46,12 @@ public class X16Debug : DebugAdapterBase
 
     private X16DebugProject? _debugProject;
     private IMachine _machine;
+    private readonly string _defaultRomFile;
 
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut)
+    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile)
     {
+        _defaultRomFile = romFile;
         _getNewEmulatorInstance = getNewEmulatorInstance;
         _emulator = getNewEmulatorInstance();
 
@@ -59,7 +61,7 @@ public class X16Debug : DebugAdapterBase
         _scopeManager = new ScopeManager(_idManager);
         _variableManager = new VariableManager(_idManager);
 
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
 
         _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
@@ -317,6 +319,30 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
+        // Load ROM
+        var rom = _defaultRomFile;
+        if (!string.IsNullOrWhiteSpace(_debugProject.RomFile))
+        {
+            if (File.Exists(_debugProject.RomFile))
+                rom = _debugProject.RomFile;
+            else
+                Console.WriteLine($"*** Project Rom file not found: {_debugProject.RomFile}");
+        }
+
+        if (!File.Exists(rom))
+        {
+            Console.WriteLine($"*** Rom file not found: {rom}");
+            throw new Exception($"Rom file not found {rom}");
+        }
+
+        Console.WriteLine($"Loading '{rom}'.");
+        var romData = File.ReadAllBytes(rom);
+        for (var i = 0; i < romData.Length; i++)
+        {
+            _emulator.RomBank[i] = romData[i];
+        }
+        // end load rom
+
         _dissassemblerManager.SetProject(_debugProject);
 
         if (!File.Exists(_debugProject.Source))
@@ -426,7 +452,7 @@ public class X16Debug : DebugAdapterBase
         EmulatorWindow.Stop();
 
         _emulator = _getNewEmulatorInstance();
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
         _dissassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _dissassemblerManager);
         _spriteManager = new SpriteManager(_emulator);

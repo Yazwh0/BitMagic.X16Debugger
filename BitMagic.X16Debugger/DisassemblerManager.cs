@@ -98,6 +98,7 @@ internal class DisassemblerManager
         decompileReturn.Path = $"Ram/{name}";
         decompileReturn.Origin = "Decompiled";
         decompileReturn.Volatile = true;
+        decompileReturn.RamBank = ramBank;
         decompileReturn.Generate = () =>
         {
             var item = decompileReturn;
@@ -243,6 +244,7 @@ internal class DisassemblerManager
         result.Path = $"Rom/{result.Name}";
         result.Origin = "Decompiled";
         result.ReferenceId = id;
+        result.RomBank = bank;
     }
 }
 
