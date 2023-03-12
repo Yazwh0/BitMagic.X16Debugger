@@ -394,6 +394,8 @@ public class X16Debug : DebugAdapterBase
             Console.Write($"Decompiling Rom Bank {i}... ");
 
             _disassemblerManager.DecompileRomBank(bankData, i);
+
+            Console.WriteLine("Done.");
         }
 
         try
