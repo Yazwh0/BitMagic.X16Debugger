@@ -89,7 +89,7 @@ namespace BitMagic.X16Debugger
         {
             _callStack.Clear();
 
-            var frame = GenerateFrame("> ", _emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff);
+            var frame = GenerateFrame("> ", _emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff, false);
 
             _callStack.Add(frame);
 
@@ -116,7 +116,7 @@ namespace BitMagic.X16Debugger
                     var iromBank = (bankInfo & 0xff00) >> 8;
                     sp++;
 
-                    _callStack.Add(GenerateFrame(stackInfo == _interrupt ? "INT: " : "NMI: ", returnAddress, (int)iramBank, (int)iromBank, -1));
+                    _callStack.Add(GenerateFrame(stackInfo == _interrupt ? "INT: " : "NMI: ", returnAddress, (int)iramBank, (int)iromBank, -1, true));
                     continue;
                 }
 
@@ -125,19 +125,19 @@ namespace BitMagic.X16Debugger
                 if (opCode != 0x20 && opCode != 0x00)
                     continue;
 
-                frame = GenerateFrame("", address, ramBank, romBank, sp-1);
+                frame = GenerateFrame("", address, ramBank, romBank, sp-1, true);
 
                 _callStack.Add(frame);
             }
         }
 
-        private StackFrame GenerateFrame(string prefix, int address, int ramBank, int romBank, int stackPointer)
+        private StackFrame GenerateFrame(string prefix, int address, int ramBank, int romBank, int stackPointer, bool checkReturnAddress)
         {
             // return address is adjusted here to give the location of the jsr. need to +3 for the correct return address.
             var returnAddress = _emulator.Memory[0x100 + stackPointer] + (_emulator.Memory[0x100 + stackPointer + 1] << 8) - 2;
             var addressString = AddressFunctions.GetDebuggerAddressDisplayString(address, ramBank, romBank);
 
-            if (stackPointer != -1 && (address & 0xffff) != returnAddress)
+            if (checkReturnAddress && stackPointer != -1 && (address & 0xffff) != returnAddress)
             {
                 addressString = $"({addressString} -> {returnAddress + 3:X4})";
             }
@@ -200,7 +200,7 @@ namespace BitMagic.X16Debugger
 
         private (Source? Source, int LineNumber) GetSource(int address, int ramBank, int romBank)
         {
-            var sourceId = _dissassemblerManager.GetDisassembleyId(address, ramBank, romBank);
+            var sourceId = _dissassemblerManager.GetDisassemblyId(address, ramBank, romBank);
             if (sourceId != 0)
             {
                 var sourceFile = _idManager.GetObject<DecompileReturn>(sourceId);

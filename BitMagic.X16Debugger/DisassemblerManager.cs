@@ -204,7 +204,7 @@ internal class DisassemblerManager
         return toReturn;
     }
 
-    public int GetDisassembleyId(int address, int ramBank, int romBank)
+    public int GetDisassemblyId(int address, int ramBank, int romBank)
     {
         if (address < 0xa000)
             return BankToId[(NotSet, NotSet)];
@@ -218,11 +218,11 @@ internal class DisassemblerManager
         return 0;
     }
 
-    public int GetDisassembleyId(int debuggerAddress)
+    public int GetDisassemblyId(int debuggerAddress)
     {
         var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress);
 
-        return GetDisassembleyId(address, ramBank, romBank);
+        return GetDisassemblyId(address, ramBank, romBank);
     }
 
     public void DecompileRomBank(byte[] data, int bank)
