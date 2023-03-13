@@ -354,7 +354,7 @@ public class X16Debug : DebugAdapterBase
 
         if (!string.IsNullOrWhiteSpace(_debugProject.Machine) && string.IsNullOrWhiteSpace(_debugProject.Source))
         {
-            _machine = MachineFactory.GetMachine(_debugProject!.Machine);
+            _machine = MachineFactory.GetMachine(_debugProject!.Machine) ?? throw new Exception($"Machine not returned for {_debugProject!.Machine}");
 
             if (_machine != null)
             {
@@ -862,7 +862,9 @@ public class X16Debug : DebugAdapterBase
         var sb = new StringBuilder();
 
         if (data.Volatile)
+        {
             data.Generate();
+        }
 
         foreach (var i in data.Items.Values)
         {

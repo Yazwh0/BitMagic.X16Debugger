@@ -136,7 +136,7 @@ internal class DisassemblerManager
 
             var item = decompileReturn;
             var decompiler = new Decompiler.Decompiler();
-            var data = _emulator.RamBank.Slice(0, 0xa000);
+            var data = _emulator.Memory.Slice(0, 0xa000);
             var result = decompiler.Decompile(data, 0x0000, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
             item.Items = result.Items;
         };
