@@ -1,5 +1,5 @@
 {
-    "source": "main.bmasm",
+    "source": "i2ctest.bmasm",
     "startStepping": false,
     "machine" : "CommanderX16R42",
     "ramBankNames" : [ "Kernel_Ram" ],

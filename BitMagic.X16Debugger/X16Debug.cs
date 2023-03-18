@@ -249,6 +249,30 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("Beam X", "Word", () => $"{_emulator.Vera.Beam_X}"));
         scope.AddVariable(new VariableMap("Beam Y", "Word", () => $"{_emulator.Vera.Beam_Y}"));
 
+        scope = _scopeManager.GetScope("I2C", false);
+
+        scope.AddVariable(new VariableMap("Previous Data", "uint", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
+        scope.AddVariable(new VariableMap("Read Write", "uint", () => $"{_emulator.I2c.ReadWrite}"));
+        scope.AddVariable(new VariableMap("Transmitting", "uint", () => $"0x{_emulator.I2c.Transmit:X2}"));
+        scope.AddVariable(new VariableMap("Mode", "uint", () => $"{_emulator.I2c.Mode}"));
+        scope.AddVariable(new VariableMap("Address", "uint", () => $"0x{_emulator.I2c.Address:X2}"));
+        scope.AddVariable(new VariableMap("Data To Transmit", "uint", () => $"{_emulator.I2c.DataToTransmit}"));
+
+        scope = _scopeManager.GetScope("SMC", false);
+
+        scope.AddVariable(new VariableMap("Data", "uint", () => _emulator.Smc.DataCount switch
+        {
+            0 => "Empty",
+            1 => $"0x{_emulator.Smc.Data & 0xff:X2}",
+            2 => $"0x{_emulator.Smc.Data & 0xff:X2} 0x{(_emulator.Smc.Data & 0xff00) >> 8:X2}",
+            _ => $"0x{_emulator.Smc.Data & 0xff:X2} 0x{(_emulator.Smc.Data & 0xff00) >> 8:X2} 0x{(_emulator.Smc.Data & 0xff0000) >> 16:X2}",
+        }));
+
+        scope.AddVariable(new VariableMap("Last Offset", "uint", () => $"0x{_emulator.Smc.Offset:X2}"));
+        scope.AddVariable(new VariableMap("LED", "uint", () => $"0x{_emulator.Smc.Led:X2}"));
+        scope.AddVariable(new VariableMap("Keyb Read Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_ReadPosition:X2}"));
+        scope.AddVariable(new VariableMap("Keyb Write Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_WritePosition:X2}"));
+        scope.AddVariable(new VariableMap("Keyb No Data", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_ReadNoData:X2}"));
     }
 
     private static string GetColourDepth(int inp) => inp switch
@@ -384,7 +408,7 @@ public class X16Debug : DebugAdapterBase
         }
 
         // disassemble rom banks if the symbols weren't set
-        for(var i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
             if (_disassemblerManager.IsRomDecompiled(i))
                 continue;

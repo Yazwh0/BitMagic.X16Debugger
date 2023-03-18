@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\BitMagic.X16Compiler\BitMagic.Decompiler\BitMagic.Decompiler.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Display\BitMagic.X16Emulator.Display.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator\BitMagic.X16Emulator.csproj" />
+    <ProjectReference Include="..\..\BitMagic.X16Emulator\X16Emulator\EmulatorCore\EmulatorCore.vcxproj" />
   </ItemGroup>
 
 </Project>
