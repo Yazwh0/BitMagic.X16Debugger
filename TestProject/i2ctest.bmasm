@@ -9,7 +9,7 @@
 	sei
 
 	ldx #SMC
-	ldy #$07 ; keyboard
+	ldy #$21 ; keyboard
 
 	jsr i2c_read_first_byte
 	jsr i2c_read_next_byte

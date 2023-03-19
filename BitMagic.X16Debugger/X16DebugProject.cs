@@ -59,6 +59,11 @@ public class X16DebugProject
     /// Prefill the keyboard buffer with this data. 16bytes max, rest are discarded.
     /// </summary>
     public byte[] KeyboardBuffer { get; set; } = new byte[] { };
+
+    /// <summary>
+    /// Prefill the mouse buffer with this data. 8bytes max, rest are discarded.
+    /// </summary>
+    public byte[] MouseBuffer { get; set; } = new byte[] { };
 }
 
 public class SymbolsFile

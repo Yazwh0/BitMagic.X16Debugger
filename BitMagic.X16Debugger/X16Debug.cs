@@ -471,7 +471,14 @@ public class X16Debug : DebugAdapterBase
         if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any()) {
             _emulator.Smc.SmcKeyboard_ReadNoData = 0;
             foreach(var i in _debugProject.KeyboardBuffer.Take(16))
-                _emulator.SmcBuffer.PushByte(i);
+                _emulator.SmcBuffer.PushKeyboard(i);
+        }
+
+        if (_debugProject.MouseBuffer != null && _debugProject.MouseBuffer.Any())
+        {
+            _emulator.Smc.SmcKeyboard_ReadNoData = 0;
+            foreach (var i in _debugProject.MouseBuffer.Take(8))
+                _emulator.SmcBuffer.PushMouseByte(i);
         }
 
         try
