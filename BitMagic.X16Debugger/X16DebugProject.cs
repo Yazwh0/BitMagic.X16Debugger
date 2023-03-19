@@ -54,6 +54,11 @@ public class X16DebugProject
     /// Machine to load globals from if there is no bmasm source.
     /// </summary>
     public string Machine { get; set; } = "";
+
+    /// <summary>
+    /// Prefill the keyboard buffer with this data. 16bytes max, rest are discarded.
+    /// </summary>
+    public byte[] KeyboardBuffer { get; set; } = new byte[] { };
 }
 
 public class SymbolsFile

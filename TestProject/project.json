@@ -4,6 +4,7 @@
     "machine" : "CommanderX16R42",
     "ramBankNames" : [ "Kernel_Ram" ],
     "romFile" : "C:\\Documents\\Source\\x16-rom\\build\\x16\\rom.bin",
+    "keyboardBuffer" : [ 1, 2, 3 ],
     "symbols": [
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\kernal.sym",

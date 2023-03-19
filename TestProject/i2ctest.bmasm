@@ -6,24 +6,37 @@
 .const SCL = 2
 .const SMC = $42
 
-    lda #$00
+	sei
+
 	ldx #SMC
-	ldy #$01
+	ldy #$07 ; keyboard
 
-	jsr write_first_byte
+	jsr i2c_read_first_byte
+	jsr i2c_read_next_byte
+	jsr i2c_read_stop
 
-	lda #$bc
-	jsr i2c_write_next_byte
 
-	jsr i2c_write_stop
+	jsr i2c_read_byte
+	stp
 
+	;jsr write_first_byte
+	jsr i2c_read_first_byte
+	jsr i2c_read_stop
+
+	ldx #SMC
+	ldy #$07 ; keyboard
+
+;	jsr i2c_read_next_byte
+	jsr i2c_read_first_byte
+	jsr i2c_read_stop
+	
     stp
 
 ;---------------------------------------------------------------
 ; i2c_write_first_byte
 ; 
 ; Function: Writes one byte over I2C without stopping the
-;           transmission. Subsequent bytes may be written by
+;           transmission. Subsequent bytes may be wri%tten by
 ;           i2c_write_next_byte. When done, call function
 ;           i2c_write_stop to close the I2C transmission.
 ;
@@ -113,6 +126,172 @@
 	jsr i2c_stop
 .endproc
 
+
+;---------------------------------------------------------------
+; i2c_read_byte
+;
+; Function:
+;
+; Read sequence:
+;   Start condition
+;     > 7 bits of device address, MSb first
+;     > 1 bit = 0 (write indicator bit)
+;     < Read ACK/NAK from device
+;     > 8 bits of register offset
+;   Stop condition
+;   Start condition
+;     > 7 bits of device address, MSb first
+;     > 1 bit = 1 (read indicator bit)
+;     < Read ACK/NAK from device (this is not done by the kernel!!)
+;     < Read 8 bits from device
+;     > NAK to indicate end of requested bytes from device
+;   Stop condition
+;
+; Pass:      x    7-bit device address
+;            y    offset
+;
+; Return:    a    value
+;            x    device (preserved)
+;            y    offset (preserved)
+;            c    1 on error (NAK)
+;---------------------------------------------------------------
+.proc i2c_read_byte
+	php
+	sei
+	phx
+	phy
+
+	jsr i2c_read_first_byte
+	bcs err
+	pha
+	jsr i2c_read_stop
+	pla
+	
+	ply
+	plx
+	plp
+	
+	cmp #0
+	clc
+	
+	rts
+
+.err:
+	ply
+	plx
+	plp
+	sec
+	lda #$ee
+	rts
+.endproc
+
+;---------------------------------------------------------------
+; i2c_read_first_byte
+;
+; Function: Reads one byte over I2C without stopping the
+;           transmission. Subsequent bytes may be read by
+;           i2c_read_next_byte. When done, call function
+;           i2c_read_stop to close the I2C transmission.
+;
+; Pass:      x    7-bit device address
+;            y    offset
+;
+; Return:    a    value
+;            c    1 on error (NAK)
+;---------------------------------------------------------------
+.proc i2c_read_first_byte
+	jsr i2c_init
+	jsr i2c_start                        ; SDA -> LOW, (wait 5 us), SCL -> LOW, (no wait)
+	txa                ; device
+	asl
+	pha                ; device * 2
+	phy
+	jsr i2c_write
+	ply
+	bcs error
+	plx                ; device * 2
+	tya                ; offset
+	phx                ; device * 2
+	jsr i2c_write
+	jsr i2c_stop
+	jsr i2c_start ; doesn't appear to start the i2c protocol
+	pla                ; device * 2
+	inc                ; Flag data is from the SMC
+	jsr i2c_write		
+	bra i2c_read_next_byte_after_ack
+	
+.error:
+	pla
+	jsr i2c_stop
+	lda #$ee
+	sec
+	rts
+.endproc
+
+;---------------------------------------------------------------
+; i2c_read_next_byte
+;
+; Function:	After the first byte has been read by 
+;			i2c_read_first_byte, this function may be used to
+;			read one or more subsequent bytes without 
+;			restarting the I2C transmission
+;
+; Pass:		Nothing
+;
+; Return:	a    value
+;---------------------------------------------------------------
+.proc i2c_read_next_byte
+	jsr i2c_ack
+	jsr i2c_read_next_byte_after_ack
+	rts
+.endproc
+
+;---------------------------------------------------------------
+; i2c_read_stop
+;
+; Function:	Stops I2C transmission that has been initialized
+;			with i2c_read_first_byte
+;
+; Pass:		Nothing
+;
+; Return:	Nothing
+;---------------------------------------------------------------
+.proc i2c_read_stop
+	jsr i2c_nack
+	jsr i2c_stop
+	rts
+.endproc
+
+.proc i2c_ack
+	clc
+	jsr send_bit
+	rts
+.endproc
+
+.proc i2c_nack
+	sec
+	jsr send_bit
+	rts
+.endproc
+
+.proc i2c_read_next_byte_after_ack
+	jsr i2c_read
+	cmp #0
+	clc
+	rts
+.endproc 
+
+.proc i2c_read
+	ldx #8
+.i2c_read_loop:
+	tay
+	jsr rec_bit
+	tya
+	rol
+	dex
+	bne i2c_read_loop
+	rts
+.endproc 
 
 .proc i2c_start
 	jsr sda_low

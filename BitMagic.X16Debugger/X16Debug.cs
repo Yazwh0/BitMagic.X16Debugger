@@ -252,11 +252,11 @@ public class X16Debug : DebugAdapterBase
         scope = _scopeManager.GetScope("I2C", false);
 
         scope.AddVariable(new VariableMap("Previous Data", "uint", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
-        scope.AddVariable(new VariableMap("Read Write", "uint", () => $"{_emulator.I2c.ReadWrite}"));
+        scope.AddVariable(new VariableMap("Direction", "uint", () => $"{(_emulator.I2c.ReadWrite == 0 ? "To SMC" : "From SMC")}"));
         scope.AddVariable(new VariableMap("Transmitting", "uint", () => $"0x{_emulator.I2c.Transmit:X2}"));
         scope.AddVariable(new VariableMap("Mode", "uint", () => $"{_emulator.I2c.Mode}"));
         scope.AddVariable(new VariableMap("Address", "uint", () => $"0x{_emulator.I2c.Address:X2}"));
-        scope.AddVariable(new VariableMap("Data To Transmit", "uint", () => $"{_emulator.I2c.DataToTransmit}"));
+        scope.AddVariable(new VariableMap("Data To Transmit", "bool", () => $"{_emulator.I2c.DataToTransmit != 0}"));
 
         scope = _scopeManager.GetScope("SMC", false);
 
@@ -272,7 +272,53 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("LED", "uint", () => $"0x{_emulator.Smc.Led:X2}"));
         scope.AddVariable(new VariableMap("Keyb Read Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_ReadPosition:X2}"));
         scope.AddVariable(new VariableMap("Keyb Write Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_WritePosition:X2}"));
-        scope.AddVariable(new VariableMap("Keyb No Data", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_ReadNoData:X2}"));
+        scope.AddVariable(new VariableMap("Keyb No Data", "bool", () => $"{_emulator.Smc.SmcKeyboard_ReadNoData != 0}"));
+
+        scope = _scopeManager.GetScope("VIA", false);
+
+        scope.AddVariable(new VariableMap("A In Value ", "string", () => ViaByteDisplay(_emulator.Via.Register_A_InValue, '0', '1')));
+        scope.AddVariable(new VariableMap("A Direction", "string", () => ViaByteDisplay(_emulator.Via.Register_A_Direction, '^', 'v')));
+        scope.AddVariable(new VariableMap("A Out Value", "string", () => ViaByteDisplay(_emulator.Via.Register_A_OutValue, '0', '1')));
+        scope.AddVariable(new VariableMap("A Value    ", "string", () => ViaByteDisplay(_emulator.Memory[0x9f01], '0', '1')));
+
+        scope.AddVariable(new VariableMap("IO 0x9f00 PRB", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f00], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f01 PRA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f01], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f02 DRB", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f02], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f03 DRA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f03], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f04 T1L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f04], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f05 T1H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f05], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f06 L1L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f06], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f07 L1H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f07], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f08 T2L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f08], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f09 T2H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f09], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0a SR ", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0a], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0b ACR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0b], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0c PCR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0c], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0d IFR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0d], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0e IER", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}"));
+        scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}"));
+    }
+
+    private static string ViaByteDisplay(byte input, char zeroValue, char oneValue)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append((input & 0b10000000) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b01000000) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00100000) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00010000) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00001000) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00000100) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00000010) == 0 ? zeroValue : oneValue);
+        sb.Append(' ');
+        sb.Append((input & 0b00000001) == 0 ? zeroValue : oneValue);
+        return sb.ToString();
     }
 
     private static string GetColourDepth(int inp) => inp switch
@@ -420,6 +466,12 @@ public class X16Debug : DebugAdapterBase
             _disassemblerManager.DecompileRomBank(bankData, i);
 
             Console.WriteLine("Done.");
+        }
+
+        if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any()) {
+            _emulator.Smc.SmcKeyboard_ReadNoData = 0;
+            foreach(var i in _debugProject.KeyboardBuffer.Take(16))
+                _emulator.SmcBuffer.PushByte(i);
         }
 
         try
