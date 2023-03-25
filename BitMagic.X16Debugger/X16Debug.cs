@@ -561,7 +561,17 @@ public class X16Debug : DebugAdapterBase
                 if (File.Exists(_debugProject.NvRam.File))
                 {
                     Console.WriteLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
-                    nvramData = File.ReadAllBytes(_debugProject.NvRam.File).Take(0x40).ToArray();
+                    try
+                    {
+                        nvramData = File.ReadAllBytes(_debugProject.NvRam.File).Take(0x40).ToArray();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"Could not read NVRAM File'.");
+                        Console.WriteLine(e.Message);
+                        Console.ResetColor();
+                    }
                 }
                 else
                 {

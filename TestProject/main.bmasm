@@ -1,13 +1,6 @@
 .machine CommanderX16R42
-    lda #02
-    sta CTRL
-    lda DC_HSTART
-    dec DC_HSTART
-    lda DC_HSTART
-    dec DC_HSTART
-    lda DC_HSTART
-    dec DC_HSTART
-    lda DC_HSTART
-    dec DC_HSTART
-    lda DC_HSTART
+    lda #$12
+    sed
+    sec
+    sbc #$99
     stp
