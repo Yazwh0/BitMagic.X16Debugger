@@ -835,6 +835,40 @@ public class X16Debug : DebugAdapterBase
     private void DebugLoop()
     {
         Console.WriteLine("Starting emulator");
+
+        // load in SD Card files here.
+        foreach (var filename in _debugProject!.SdCardFiles.Where(i => !string.IsNullOrWhiteSpace(i)))
+        {
+            if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
+
+            if (File.Exists(filename))
+            {
+                _emulator.SdCard.AddFiles(filename);
+                continue;
+            }
+
+            if (Directory.Exists(filename))
+            {
+                _emulator.SdCard.AddDirectory(filename);
+                continue;
+            }
+
+            var wildcard = Path.GetFileName(filename);
+            var path = Path.GetDirectoryName(filename);
+            if (!Directory.Exists(path))
+            {
+                Console.ForegroundColor= ConsoleColor.Red;
+                Console.WriteLine($"Cannot find directory: {path}");
+                Console.ResetColor();
+                continue;
+            }
+
+            foreach (var actFilename in Directory.GetFiles(path, wildcard))
+            {
+                _emulator.SdCard.AddFiles(actFilename);
+            }
+        }
+
         while (_running)
         {
             var returnCode = _emulator.Emulate();

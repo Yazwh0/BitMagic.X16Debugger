@@ -66,6 +66,11 @@ public class X16DebugProject
     public byte[] MouseBuffer { get; set; } = new byte[] { };
 
     public RtcNvram NvRam { get; set; } = new RtcNvram();
+
+    /// <summary>
+    /// Files to add to the root directory of the SDCard. Wildcards accepted.
+    /// </summary>
+    public string[] SdCardFiles = new string[] { };
 }
 
 public class RtcNvram

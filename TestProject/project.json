@@ -3,6 +3,10 @@
     "startStepping": false,
     "machine" : "CommanderX16R42",
     "ramBankNames" : [ "Kernel_Ram" ],
+    "sdcardfiles": [
+        "C:\\Dev\\control.prg",
+        "c:\\dev\\sdcard"
+    ],
     "romFile" : "C:\\Documents\\Source\\x16-rom\\build\\x16\\rom.bin",
     "nvram" : {
         "file" : "c:\\dev\\nvram.bin",
