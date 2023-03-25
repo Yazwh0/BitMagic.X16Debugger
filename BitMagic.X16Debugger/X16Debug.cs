@@ -186,6 +186,7 @@ public class X16Debug : DebugAdapterBase
                 }
             )));
 
+        scope.AddVariable(new VariableMap("Output", "uint", () => $"{_emulator.Vera.VideoOutput}"));
         scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}"));
         scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}"));
         scope.AddVariable(new VariableMap("DC HStop", "uint", () => $"{_emulator.Vera.Dc_HStop}"));
@@ -225,6 +226,45 @@ public class X16Debug : DebugAdapterBase
                         )
                 );
 
+        scope.AddVariable(
+                _variableManager.Register(
+                    new VariableChildren("IO Area", "string", () => "0x9f20 -> 34",
+                    new[]
+                    {
+                        new VariableMap("IO 0x9f20", "uint", () => $"0x{_emulator.Memory[0x9f20]:X2}"),
+                        new VariableMap("IO 0x9f21", "uint", () => $"0x{_emulator.Memory[0x9f21]:X2}"),
+                        new VariableMap("IO 0x9f22", "uint", () => $"0x{_emulator.Memory[0x9f22]:X2}"),
+                        new VariableMap("IO 0x9f23", "uint", () => $"0x{_emulator.Memory[0x9f23]:X2}"),
+                        new VariableMap("IO 0x9f24", "uint", () => $"0x{_emulator.Memory[0x9f24]:X2}"),
+                        new VariableMap("IO 0x9f25", "uint", () => $"0x{_emulator.Memory[0x9f25]:X2}"),
+                        new VariableMap("IO 0x9f26", "uint", () => $"0x{_emulator.Memory[0x9f26]:X2}"),
+                        new VariableMap("IO 0x9f27", "uint", () => $"0x{_emulator.Memory[0x9f27]:X2}"),
+                        new VariableMap("IO 0x9f28", "uint", () => $"0x{_emulator.Memory[0x9f28]:X2}"),
+                        new VariableMap("IO 0x9f29", "uint", () => $"0x{_emulator.Memory[0x9f29]:X2}"),
+                        new VariableMap("IO 0x9f2a", "uint", () => $"0x{_emulator.Memory[0x9f2a]:X2}"),
+                        new VariableMap("IO 0x9f2b", "uint", () => $"0x{_emulator.Memory[0x9f2b]:X2}"),
+                        new VariableMap("IO 0x9f2c", "uint", () => $"0x{_emulator.Memory[0x9f2c]:X2}"),
+                        new VariableMap("IO 0x9f2d", "uint", () => $"0x{_emulator.Memory[0x9f2d]:X2}"),
+                        new VariableMap("IO 0x9f2e", "uint", () => $"0x{_emulator.Memory[0x9f2e]:X2}"),
+                        new VariableMap("IO 0x9f2f", "uint", () => $"0x{_emulator.Memory[0x9f2f]:X2}"),
+                        new VariableMap("IO 0x9f30", "uint", () => $"0x{_emulator.Memory[0x9f30]:X2}"),
+                        new VariableMap("IO 0x9f31", "uint", () => $"0x{_emulator.Memory[0x9f31]:X2}"),
+                        new VariableMap("IO 0x9f32", "uint", () => $"0x{_emulator.Memory[0x9f32]:X2}"),
+                        new VariableMap("IO 0x9f33", "uint", () => $"0x{_emulator.Memory[0x9f33]:X2}"),
+                        new VariableMap("IO 0x9f34", "uint", () => $"0x{_emulator.Memory[0x9f34]:X2}"),
+                        new VariableMap("IO 0x9f35", "uint", () => $"0x{_emulator.Memory[0x9f35]:X2}"),
+                        new VariableMap("IO 0x9f36", "uint", () => $"0x{_emulator.Memory[0x9f36]:X2}"),
+                        new VariableMap("IO 0x9f37", "uint", () => $"0x{_emulator.Memory[0x9f37]:X2}"),
+                        new VariableMap("IO 0x9f38", "uint", () => $"0x{_emulator.Memory[0x9f38]:X2}"),
+                        new VariableMap("IO 0x9f39", "uint", () => $"0x{_emulator.Memory[0x9f39]:X2}"),
+                        new VariableMap("IO 0x9f3a", "uint", () => $"0x{_emulator.Memory[0x9f3a]:X2}"),
+                        new VariableMap("IO 0x9f3b", "uint", () => $"0x{_emulator.Memory[0x9f3b]:X2}"),
+                        new VariableMap("IO 0x9f3c", "uint", () => $"0x{_emulator.Memory[0x9f3c]:X2}"),
+                        new VariableMap("IO 0x9f3d", "uint", () => $"0x{_emulator.Memory[0x9f3d]:X2}"),
+                        new VariableMap("IO 0x9f3e", "uint", () => $"0x{_emulator.Memory[0x9f3e]:X2}"),
+                        new VariableMap("IO 0x9f3f", "uint", () => $"0x{_emulator.Memory[0x9f3f]:X2}"),
+                    })
+                    ));
         scope.AddVariable(new VariableMemory("VRAM", "vram", () => "0x20000 bytes"));
 
         scope = _scopeManager.GetScope("Kernal", false);
