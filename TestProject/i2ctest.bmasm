@@ -5,11 +5,26 @@
 .const SDA = 1
 .const SCL = 2
 .const SMC = $42
+.const RTC = $64
 
 	sei
 
-	ldx #SMC
-	ldy #$21 ; keyboard
+	ldx #RTC
+	ldy #$21 ; random location
+	lda #$ab
+
+	jsr i2c_write_first_byte
+	jsr i2c_write_stop
+
+	lda #0
+
+	ldx #RTC
+	ldy #$21 ; random location
+	jsr i2c_read_first_byte
+	jsr i2c_read_stop
+
+	nop
+	stp
 
 	jsr i2c_read_first_byte
 	jsr i2c_read_next_byte
@@ -46,7 +61,7 @@
 ;
 ; Return:    c    1 on error (NAK)
 ;---------------------------------------------------------------
-.proc write_first_byte
+.proc i2c_write_first_byte
 	pha                ; value
 	jsr i2c_init
 	jsr i2c_start

@@ -64,6 +64,27 @@ public class X16DebugProject
     /// Prefill the mouse buffer with this data. 8bytes max, rest are discarded.
     /// </summary>
     public byte[] MouseBuffer { get; set; } = new byte[] { };
+
+    public RtcNvram NvRam { get; set; } = new RtcNvram();
+}
+
+public class RtcNvram
+{
+    /// <summary>
+    /// Filename to load into 0x00 -> 0x60 in the RTCs NVRAM.
+    /// Not used if Data has values.
+    /// </summary>
+    public string File { get; set; } = "";
+
+    /// <summary>
+    /// Data to load into 0x00 -> 0x60 in the RTCs NVRAM.
+    /// </summary>
+    public byte[] Data { get; set; } = new byte[] { };
+
+    /// <summary>
+    /// Filename to store the RTCs NVRAM in. This will overwrite.
+    /// </summary>
+    public string WriteFile { get; set; } = "";
 }
 
 public class SymbolsFile

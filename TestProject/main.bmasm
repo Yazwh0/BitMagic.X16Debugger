@@ -1,25 +1,13 @@
 .machine CommanderX16R42
-    nop
-    ldx #$ff      ; reset stack
-    txs
-    jsr ProcA
-
-    lda #$20
-    sta $10
-    inc $10
-.return:
-    nop
-    lda $05
-    lda $05    
-.loop:
-    inc $03
-    jmp loop    
-
-.proc ProcA
-    lda #>return
-    sta $1ff
-    lda #<return
-    dec
-    sta $1fe
-    rts
-.endproc
+    lda #02
+    sta CTRL
+    lda DC_HSTART
+    dec DC_HSTART
+    lda DC_HSTART
+    dec DC_HSTART
+    lda DC_HSTART
+    dec DC_HSTART
+    lda DC_HSTART
+    dec DC_HSTART
+    lda DC_HSTART
+    stp

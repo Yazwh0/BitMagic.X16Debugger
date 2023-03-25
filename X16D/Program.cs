@@ -73,6 +73,7 @@ static class Program
             emulator.Stepping = true;
 
             SdCard sdCard = new SdCard(16);
+            sdCard.AddFiles(@"c:\dev\control.prg");
             emulator.LoadSdCard(sdCard);
 
             return emulator;

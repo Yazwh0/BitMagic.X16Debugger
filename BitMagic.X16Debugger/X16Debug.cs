@@ -186,6 +186,11 @@ public class X16Debug : DebugAdapterBase
                 }
             )));
 
+        scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}"));
+        scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}"));
+        scope.AddVariable(new VariableMap("DC HStop", "uint", () => $"{_emulator.Vera.Dc_HStop}"));
+        scope.AddVariable(new VariableMap("DC VStop", "uint", () => $"{_emulator.Vera.Dc_VStop}"));
+
         scope.AddVariable(
             _variableManager.Register(
                 new VariableChildren("Sprites", "String", () => _emulator.Vera.SpriteEnable ?
@@ -274,6 +279,10 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("Keyb Write Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_WritePosition:X2}"));
         scope.AddVariable(new VariableMap("Keyb No Data", "bool", () => $"{_emulator.Smc.SmcKeyboard_ReadNoData != 0}"));
 
+        scope = _scopeManager.GetScope("RTC", false);
+
+        scope.AddVariable(_variableManager.Register(new VariableIndex("NVRAM", GetRtcnvRam)));
+
         scope = _scopeManager.GetScope("VIA", false);
 
         scope.AddVariable(new VariableMap("A In Value ", "string", () => ViaByteDisplay(_emulator.Via.Register_A_InValue, '0', '1')));
@@ -297,6 +306,21 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("IO 0x9f0d IFR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0d], 2).PadLeft(8, '0')}"));
         scope.AddVariable(new VariableMap("IO 0x9f0e IER", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}"));
         scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}"));
+    }
+
+    public (string Name, ICollection<Variable> Variables) GetRtcnvRam()
+    {
+        var toReturn = new List<Variable>();
+        var i = 0x00;
+        var data = _emulator.RtcNvram;
+
+        while (i < data.Length)
+        {
+            toReturn.Add(new Variable($"0x{i:X2}", $"0x{data[i]:X2}", 0));
+            i++;
+        }
+
+        return ("0x40 bytes", toReturn);
     }
 
     private static string ViaByteDisplay(byte input, char zeroValue, char oneValue)
@@ -468,17 +492,54 @@ public class X16Debug : DebugAdapterBase
             Console.WriteLine("Done.");
         }
 
-        if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any()) {
+        // Keyboard buffer
+        if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any())
+        {
             _emulator.Smc.SmcKeyboard_ReadNoData = 0;
-            foreach(var i in _debugProject.KeyboardBuffer.Take(16))
+            foreach (var i in _debugProject.KeyboardBuffer.Take(16))
                 _emulator.SmcBuffer.PushKeyboard(i);
         }
 
+        // Mouse buffer
         if (_debugProject.MouseBuffer != null && _debugProject.MouseBuffer.Any())
         {
             _emulator.Smc.SmcKeyboard_ReadNoData = 0;
             foreach (var i in _debugProject.MouseBuffer.Take(8))
                 _emulator.SmcBuffer.PushMouseByte(i);
+        }
+
+        // RTC NVRAM
+        if (_debugProject.NvRam != null)
+        {
+            byte[]? nvramData = null;
+            if (_debugProject.NvRam.Data.Any())
+            {
+                nvramData = _debugProject.NvRam.Data;
+            }
+            else if (!string.IsNullOrWhiteSpace(_debugProject.NvRam.File))
+            {
+                if (File.Exists(_debugProject.NvRam.File))
+                {
+                    Console.WriteLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
+                    nvramData = File.ReadAllBytes(_debugProject.NvRam.File).Take(0x40).ToArray();
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"NVRAM File not found '{_debugProject.NvRam.File}'.");
+                    Console.ResetColor();
+                }
+            }
+
+            if (nvramData != null)
+            {
+                int i = 0;
+                while (i < 0x40 && i < nvramData.Length)
+                {
+                    _emulator.RtcNvram[i] = nvramData[i];
+                    i++;
+                }
+            }
         }
 
         try
@@ -548,6 +609,24 @@ public class X16Debug : DebugAdapterBase
         _idManager.Clear();
         _sourceMapManager.Clear();
         EmulatorWindow.Stop();
+
+        // persist anything that needs it
+        // RTC NVRAM
+        if (_debugProject != null && _debugProject.NvRam != null && !string.IsNullOrWhiteSpace(_debugProject.NvRam.WriteFile))
+        {
+            try
+            {
+                Console.WriteLine($"Saving NVRAM to {_debugProject.NvRam.WriteFile}");
+                File.WriteAllBytes(_debugProject.NvRam.WriteFile, _emulator.RtcNvram.ToArray());
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error Saving NVRAM:");
+                Console.WriteLine(e.Message);
+                Console.ResetColor();
+            }
+        }
 
         _emulator = _getNewEmulatorInstance();
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
