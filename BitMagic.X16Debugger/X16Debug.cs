@@ -174,6 +174,10 @@ public class X16Debug : DebugAdapterBase
                     new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}"),
                     new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}"),
                     new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}"),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}"),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}"),
+                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapWidth)}"),
+                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapHeight)}"),
                 }
             )));
 
@@ -187,6 +191,10 @@ public class X16Debug : DebugAdapterBase
                     new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}"),
                     new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}"),
                     new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}"),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}"),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}"),
+                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapWidth)}"),
+                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapHeight)}"),
                 }
             )));
 
@@ -351,6 +359,15 @@ public class X16Debug : DebugAdapterBase
         scope.AddVariable(new VariableMap("IO 0x9f0e IER", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}"));
         scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}"));
     }
+
+    public int GetMapSize(int value) => value switch
+    {
+        0 => 32,
+        1 => 64,
+        2 => 128,
+        3 => 256,
+        _ => throw new Exception("Invalid map size value")
+    };
 
     public (string Name, ICollection<Variable> Variables) GetRtcnvRam()
     {
@@ -974,19 +991,19 @@ public class X16Debug : DebugAdapterBase
         }
 
         toReturn.Address = $"0x{arguments.Offset:X4}";
-        var requestSize = arguments.Count + arguments.Offset ?? 0;
+        var requestEnd = arguments.Count + arguments.Offset ?? 0;
         var unreadCount = 0;
-        if (requestSize > data.Length)
+        if (requestEnd > data.Length)
         {
-            requestSize = data.Length - arguments.Offset ?? 0;
-            unreadCount = arguments.Count - requestSize;
+            requestEnd = data.Length;
+            unreadCount = arguments.Count - requestEnd;
         }
 
         toReturn.UnreadableBytes = unreadCount;
 
         if (arguments.Offset <= data.Length)
         {
-            toReturn.Data = Convert.ToBase64String(data.Slice(arguments.Offset ?? 0, requestSize));
+            toReturn.Data = Convert.ToBase64String(data.Slice(arguments.Offset ?? 0, requestEnd - arguments.Offset ?? 0));
         }
 
         return toReturn;
