@@ -1,4 +1,9 @@
 .machine CommanderX16R42
+
+    lda #0
+    sta $9F41
+    stp
+
     lda #$12
     sed
     sec

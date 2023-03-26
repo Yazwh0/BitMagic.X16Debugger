@@ -170,8 +170,10 @@ public class X16Debug : DebugAdapterBase
                     (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Tiles") :
                     "Disabled",
                 new[] {
-                    new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}"),
-                    new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}"),
+                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}"),
+                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}"),
+                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}"),
+                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}"),
                 }
             )));
 
@@ -183,6 +185,8 @@ public class X16Debug : DebugAdapterBase
                 new[] {
                     new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}"),
                     new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}"),
+                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}"),
+                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}"),
                 }
             )));
 

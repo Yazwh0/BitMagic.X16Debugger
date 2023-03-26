@@ -1,18 +1,18 @@
 {
-    "source": "main.bmasm",
+    "source": "",
     "startStepping": false,
     "machine" : "CommanderX16R42",
     "ramBankNames" : [ "Kernel_Ram" ],
     "sdcardfiles": [
         "C:\\Dev\\control.prg",
-        "c:\\dev\\sdcard"
+        "c:\\dev\\xixit"
     ],
     "romFile" : "C:\\Documents\\Source\\x16-rom\\build\\x16\\rom.bin",
     "nvram" : {
         "file" : "c:\\dev\\nvram.bin",
         "writefile" : "c:\\dev\\nvram.bin"
     },
-    "mouseBuffer" : [ 1, 2, 3 ],
+    "mouseBuffer" : [ ],
     "symbols": [
         {
             "name": "C:\\Documents\\Source\\x16-rom\\build\\x16\\kernal.sym",
