@@ -9,6 +9,7 @@
     <ApplicationIcon>icon\icon.ico</ApplicationIcon>
     <PackageProjectUrl>https://github.com/Yazwh0/BitMagic</PackageProjectUrl>
     <PackageIcon>butterfly.jpg</PackageIcon>
+    <Version>0.0.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

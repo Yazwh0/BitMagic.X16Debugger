@@ -65,6 +65,9 @@ public class X16DebugProject
     /// </summary>
     public byte[] MouseBuffer { get; set; } = new byte[] { };
 
+    /// <summary>
+    /// RTC NvRam Data
+    /// </summary>
     public RtcNvram NvRam { get; set; } = new RtcNvram();
 
     /// <summary>
@@ -124,6 +127,7 @@ public class RangeDefinition
     /// Start address of the jump table
     /// </summary>
     public string Start { get; set; } = "";
+
     /// <summary>
     /// End address of the jump table
     /// </summary>
