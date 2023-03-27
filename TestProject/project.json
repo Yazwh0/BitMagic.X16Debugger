@@ -5,7 +5,7 @@
     "ramBankNames" : [ "Kernel_Ram" ],
     "sdcardfiles": [
         "C:\\Dev\\control.prg",
-        "c:\\dev\\sdcard"
+        "c:\\dev\\xixit"
     ],
     "romFile" : "C:\\Documents\\Source\\x16-rom\\build\\x16\\rom.bin",
     "nvram" : {
