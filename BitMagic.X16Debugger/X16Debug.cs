@@ -45,12 +45,16 @@ public class X16Debug : DebugAdapterBase
     private object SyncObject = new object();
 
     private X16DebugProject? _debugProject;
-    private IMachine _machine;
+    private IMachine? _machine;
     private readonly string _defaultRomFile;
 
+    private readonly IEmulatorLogger _logger;
+
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile)
+    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, IEmulatorLogger? logger = null)
     {
+        _logger = logger ?? new DebugLogger(this);
+
         _defaultRomFile = romFile;
         _getNewEmulatorInstance = getNewEmulatorInstance;
         _emulator = getNewEmulatorInstance();
@@ -481,21 +485,22 @@ public class X16Debug : DebugAdapterBase
             if (File.Exists(_debugProject.RomFile))
                 rom = _debugProject.RomFile;
             else
-                Console.WriteLine($"*** Project Rom file not found: {_debugProject.RomFile}");
+                _logger.LogError($"*** Project Rom file not found: {_debugProject.RomFile}");
         }
 
         if (!File.Exists(rom))
         {
-            Console.WriteLine($"*** Rom file not found: {rom}");
+            _logger.LogError($"*** Rom file not found: {rom}");
             throw new Exception($"Rom file not found {rom}");
         }
 
-        Console.WriteLine($"Loading '{rom}'.");
+        _logger.Log($"Loading '{rom}'... ");
         var romData = File.ReadAllBytes(rom);
         for (var i = 0; i < romData.Length; i++)
         {
             _emulator.RomBank[i] = romData[i];
         }
+        _logger.LogLine("Done.");
         // end load rom
 
         _disassemblerManager.SetProject(_debugProject);
@@ -521,16 +526,16 @@ public class X16Debug : DebugAdapterBase
         {
             try
             {
-                Console.Write($"Loading Symbols {symbols.Name}... ");
+                _logger.Log($"Loading Symbols {symbols.Name}... ");
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
                 _sourceMapManager.LoadSymbols(symbols);
                 _sourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
 
-                Console.Write($"Decompiling... ");
+                _logger.Log($"Decompiling... ");
 
                 _disassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
-                Console.WriteLine("Done.");
+                _logger.LogLine("Done.");
             }
             catch (Exception e)
             {
@@ -546,11 +551,11 @@ public class X16Debug : DebugAdapterBase
 
             var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
 
-            Console.Write($"Decompiling Rom Bank {i}... ");
+            _logger.Log($"Decompiling Rom Bank {i}... ");
 
             _disassemblerManager.DecompileRomBank(bankData, i);
 
-            Console.WriteLine("Done.");
+            _logger.LogLine("Done.");
         }
 
         // Keyboard buffer
@@ -581,24 +586,20 @@ public class X16Debug : DebugAdapterBase
             {
                 if (File.Exists(_debugProject.NvRam.File))
                 {
-                    Console.WriteLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
+                    _logger.LogLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
                     try
                     {
                         nvramData = File.ReadAllBytes(_debugProject.NvRam.File).Take(0x40).ToArray();
                     }
                     catch (Exception e)
                     {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine($"Could not read NVRAM File'.");
-                        Console.WriteLine(e.Message);
-                        Console.ResetColor();
+                        _logger.LogError($"Could not read NVRAM File'.");
+                        _logger.LogError(e.Message);
                     }
                 }
                 else
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"NVRAM File not found '{_debugProject.NvRam.File}'.");
-                    Console.ResetColor();
+                    _logger.LogError($"NVRAM File not found '{_debugProject.NvRam.File}'.");
                 }
             }
 
@@ -618,7 +619,7 @@ public class X16Debug : DebugAdapterBase
             var project = new Project();
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                Console.WriteLine($"Compiling {_debugProject.Source}");
+                _logger.LogLine($"Compiling {_debugProject.Source}");
                 project.Code.Load(_debugProject.Source).GetAwaiter().GetResult();
 
                 var compiler = new Compiler.Compiler(project);
@@ -629,13 +630,11 @@ public class X16Debug : DebugAdapterBase
 
                 if (compileResult.Warnings.Any())
                 {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("Warnings:");
+                    _logger.LogLine("Warnings:");
                     foreach (var warning in compileResult.Warnings)
                     {
-                        Console.WriteLine(warning);
+                        _logger.LogLine(warning);
                     }
-                    Console.ResetColor();
                 }
 
                 var prg = compileResult.Data["Main"].ToArray();
@@ -645,7 +644,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Memory[destAddress++] = prg[i];
                 }
                 _emulator.Pc = 0x801;
-                Console.WriteLine($"Done. {prg.Length:#,##0} bytes. Starting at 0x801");
+                _logger.LogLine($"Done. {prg.Length:#,##0} bytes. Starting at 0x801");
             }
             else
             {
@@ -687,15 +686,13 @@ public class X16Debug : DebugAdapterBase
         {
             try
             {
-                Console.WriteLine($"Saving NVRAM to {_debugProject.NvRam.WriteFile}");
+                _logger.LogLine($"Saving NVRAM to {_debugProject.NvRam.WriteFile}");
                 File.WriteAllBytes(_debugProject.NvRam.WriteFile, _emulator.RtcNvram.ToArray());
             }
             catch (Exception e)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error Saving NVRAM:");
-                Console.WriteLine(e.Message);
-                Console.ResetColor();
+                _logger.LogError("Error Saving NVRAM:");
+                _logger.LogError(e.Message);
             }
         }
 
@@ -855,7 +852,7 @@ public class X16Debug : DebugAdapterBase
     // This is running in _debugThread.
     private void DebugLoop()
     {
-        Console.WriteLine("Starting emulator");
+        _logger.LogLine("Starting emulator");
 
         // load in SD Card files here.
         foreach (var filename in _debugProject!.SdCardFiles.Where(i => !string.IsNullOrWhiteSpace(i)))
@@ -878,9 +875,7 @@ public class X16Debug : DebugAdapterBase
             var path = Path.GetDirectoryName(filename);
             if (!Directory.Exists(path))
             {
-                Console.ForegroundColor= ConsoleColor.Red;
-                Console.WriteLine($"Cannot find directory: {path}");
-                Console.ResetColor();
+                _logger.LogError($"Cannot find directory: {path}");
                 continue;
             }
 
@@ -929,7 +924,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 default:
-                    Console.WriteLine($"Stopping with because of {returnCode} result");
+                    _logger.LogLine($"Stopping with because of {returnCode} result");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
                     this.Protocol.SendEvent(new TerminatedEvent());
                     _running = false;
