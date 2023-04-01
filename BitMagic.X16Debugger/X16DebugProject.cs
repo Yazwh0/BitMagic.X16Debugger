@@ -17,7 +17,7 @@ public class X16DebugProject
     public string Source { get; set; } = "";
 
     /// <summary>
-    /// Start address. If ommitted or -1, will start the ROM normally from the vector at $fffc.
+    /// Start address. If omitted or -1, will start the ROM normally from the vector at $fffc.
     /// </summary>
     [JsonProperty("startAddress", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public int StartAddress { get; set; } = -1;
@@ -134,7 +134,7 @@ public class RangeDefinition
     public string End { get; set; } = "";
 
     /// <summary>
-    /// Type of defintion, supported : 'jumptable'
+    /// Type of definition, supported : 'jumptable'
     /// </summary>
     public string Type { get; set; } = "jumptable";
 }
