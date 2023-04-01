@@ -766,6 +766,14 @@ public class X16Debug : DebugAdapterBase
 
     protected override StepOutResponse HandleStepOutRequest(StepOutArguments arguments)
     {
+        _emulator.Stepping = false;
+        _stackManager.SetBreakpointOnCaller();
+
+        lock (SyncObject)
+        {
+            _runEvent.Set();
+        }
+
         return new StepOutResponse();
     }
 
