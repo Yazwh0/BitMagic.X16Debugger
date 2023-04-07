@@ -3,7 +3,9 @@ using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Silk.NET.Core.Native;
+using System.Security;
 using System.Transactions;
+using System.Xml.Linq;
 
 namespace BitMagic.X16Debugger;
 
@@ -13,6 +15,7 @@ internal class DisassemblerManager
     private readonly Emulator _emulator;
     private readonly IdManager _idManager;
     public Dictionary<(int RamBank, int RomBank), int> BankToId { get; } = new();
+    public Dictionary<string, DecompileReturn> DecompiledData = new();
     private X16DebugProject? _project;
     private const int NotSet = -1;
 
@@ -27,7 +30,7 @@ internal class DisassemblerManager
     public void SetProject(X16DebugProject project)
     {
         _project = project;
-        for(var i = 0; i < _project.RamBankNames.Length; i++)
+        for (var i = 0; i < _project.RamBankNames.Length; i++)
         {
             var id = BankToId[(i, NotSet)];
             var data = _idManager.GetObject<DecompileReturn>(id);
@@ -79,7 +82,7 @@ internal class DisassemblerManager
     private DisassembleResponse DisassembleRequestFromRam(DisassembleArguments arguments, int address, int ramBank)
     {
         DecompileReturn decompileReturn = GetDecompileReturn(ramBank, NotSet);
-        
+
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, ramBank, 0);
     }
 
@@ -110,6 +113,7 @@ internal class DisassemblerManager
 
         BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId);
 
+        DecompiledData.Add(decompileReturn.Path, decompileReturn);
         return decompileReturn;
     }
 
@@ -140,6 +144,7 @@ internal class DisassemblerManager
             var result = decompiler.Decompile(data, 0x0000, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
             item.Items = result.Items;
         };
+        DecompiledData.Add(decompileReturn.Path, decompileReturn);
 
         BankToId.Add((NotSet, NotSet), decompileReturn.ReferenceId);
     }
@@ -245,6 +250,8 @@ internal class DisassemblerManager
         result.Origin = "Decompiled";
         result.ReferenceId = id;
         result.RomBank = bank;
+
+        DecompiledData.Add(result.Path, result);
     }
 
     public bool IsRomDecompiled(int bank) => BankToId.ContainsKey((NotSet, bank));
@@ -260,4 +267,16 @@ internal class DissasemblyItem
 {
     public int Address { get; set; }
     public DisassembledInstruction? Instruction { get; set; }
+}
+
+internal static class DecompileReturnExtensions
+{
+    public static Source AsSource(this DecompileReturn decompileReturn) => new Source()
+    {
+
+        Name = decompileReturn.Name,
+        Path = decompileReturn.Path,
+        Origin = decompileReturn.Origin,
+        SourceReference = decompileReturn.ReferenceId,
+    };
 }

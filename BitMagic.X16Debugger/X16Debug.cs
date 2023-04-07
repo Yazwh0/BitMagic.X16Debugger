@@ -65,9 +65,8 @@ public class X16Debug : DebugAdapterBase
         _sourceMapManager = new SourceMapManager(_idManager);
         _scopeManager = new ScopeManager(_idManager);
 
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
-
         _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
@@ -395,8 +394,8 @@ public class X16Debug : DebugAdapterBase
         }
 
         _emulator = _getNewEmulatorInstance();
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
         _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);

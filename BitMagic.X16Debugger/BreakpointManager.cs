@@ -23,13 +23,16 @@ internal class BreakpointManager
     private readonly X16Debug _debugger;
     private readonly SourceMapManager _sourceMapManager;
     private readonly IdManager _idManager;
+    private readonly DisassemblerManager _disassemblerManager;
 
-    internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager, IdManager idManager)
+    internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager, 
+        IdManager idManager, DisassemblerManager disassemblerManager)
     {
         _emulator = emulator;
         _debugger = debugger;
         _sourceMapManager = sourceMapManager;
         _idManager = idManager;
+        _disassemblerManager = disassemblerManager;
     }
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
@@ -104,6 +107,18 @@ internal class BreakpointManager
 
         // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
         var sourceId = arguments.Source.SourceReference ?? 0;
+        var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
+
+        if (decompiledFile != null && decompiledFile.Path != arguments.Source.Path)
+            decompiledFile = null;
+
+        // if the id doesn't match, then check the dissasembly cache
+        if (decompiledFile == null && _disassemblerManager.DecompiledData.ContainsKey(arguments.Source.Path))
+        {
+            decompiledFile = _disassemblerManager.DecompiledData[arguments.Source.Path];
+            sourceId = decompiledFile.ReferenceId;
+        }
+
         if (_memoryBreakpoints.ContainsKey(sourceId))
         {
             foreach (var breakpoint in _memoryBreakpoints[sourceId])
@@ -126,7 +141,6 @@ internal class BreakpointManager
             _memoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
         }
 
-        var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
         if (decompiledFile == null)
             return new SetBreakpointsResponse(new List<Breakpoint> { });
 
@@ -138,7 +152,7 @@ internal class BreakpointManager
             var thisLine = decompiledFile.Items[sourceBreakpoint.Line];
 
             var breakpoint = new Breakpoint();
-            breakpoint.Source = arguments.Source;
+            breakpoint.Source = decompiledFile.AsSource();
             breakpoint.Line = sourceBreakpoint.Line;
             breakpoint.Verified = true;
 
