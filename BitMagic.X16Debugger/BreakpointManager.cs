@@ -216,6 +216,7 @@ internal class BreakpointManager
     {
         _bitMagicBreakpoints.Clear();
         _memoryBreakpoints.Clear();
+        _breakpointHitCount.Clear();
 
         // yes this is awful.
         for (var i = 0; i < _emulator.Breakpoints.Length; i++)
