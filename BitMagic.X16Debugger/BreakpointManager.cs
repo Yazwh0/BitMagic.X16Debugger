@@ -92,8 +92,11 @@ internal class BreakpointManager
                 biitMagicBreakpoints.Add(toAdd);
 
                 var (address, secondAddress) = GetBreakpointLocation(source!.Bank, source.Address);
+                var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
 
-                _emulator.Breakpoints[address] = 1;
+                if (address < 0xa000 || source!.Bank == currentBank)
+                    _emulator.Breakpoints[address] = 1;
+
                 if (secondAddress != 0)
                     _emulator.Breakpoints[secondAddress] = 1;
 
@@ -160,9 +163,13 @@ internal class BreakpointManager
             _memoryBreakpoints[sourceId].Add(toAdd);
 
             var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
+            var currentBank = thisLine.Address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
             var (address, secondAddress) = GetBreakpointLocation(bank, thisLine.Address);
 
-            _emulator.Breakpoints[address] = 1;
+            // only set local breakpoint if we're in the right bank
+            if (address < 0xa000 || bank == currentBank)
+                _emulator.Breakpoints[address] = 1;
+
             if (secondAddress != 0)
                 _emulator.Breakpoints[secondAddress] = 1;
 
@@ -222,8 +229,8 @@ internal class BreakpointManager
     // breakpoint array:
     // Start      End (-1)     0x:-
     //       0 =>   10,000   : active memory
-    //  10,000 =>  110,000   : ram banks
-    // 110,000 =>  310,000   : rom banks
+    //  10,000 =>  210,000   : ram banks
+    // 210,000 =>  610,000   : rom banks
     private (int address, int secondAddress) GetBreakpointLocation(int bank, int address)
     {
         // normal ram
@@ -239,7 +246,7 @@ internal class BreakpointManager
         }
 
         // rom bank
-        return (address, bank * 0x4000 + address - 0xc000);
+        return (address, 0x210000 + (bank * 0x4000) + address - 0xc000);
     }
 }
 
