@@ -112,7 +112,10 @@ static class Program
 
                     using (Stream stream = new NetworkStream(clientSocket))
                     {
-                        debugger = new X16Debug(getEmulator, stream, stream, rom, new ConsoleLogger());
+                        var logger = new ConsoleLogger();
+                        debugger = new X16Debug(getEmulator, stream, stream, rom, logger);
+                        logger.AddSecondaryLogger(new DebugLogger(debugger));
+
                         debugger.Protocol.DispatcherError += (sender, e) =>
                         {
                             Console.Error.WriteLine(e.Exception.Message);

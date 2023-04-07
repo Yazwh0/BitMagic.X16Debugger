@@ -5,7 +5,8 @@ public enum ObjectType
     Unknown = 0,
     Variable,
     Stack,
-    DecompiledData
+    DecompiledData,
+    Expression
 }
 
 public class IdManager

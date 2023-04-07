@@ -1,10 +1,5 @@
 ﻿using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BitMagic.X16Debugger
 {
@@ -22,21 +17,21 @@ namespace BitMagic.X16Debugger
             for(var i = 0; i < sprites.Length; i++)
             {
                 var index = i;
-                _children[i] = new VariableChildren($"Sprite {index}", "Sprite",
+                _children[i] = new VariableChildren($"Sprite {index}",
                     () => _emulator.Sprites[index].Depth == 0 ? "Disabled" : "Enabled",
-                    new IVariableMap[]
+                    new IVariableItem[]
                     {
-                        new VariableMap("X", "int", () => $"{_emulator.Sprites[index].X}"),
-                        new VariableMap("Y", "int", () => $"{_emulator.Sprites[index].Y}"),
-                        new VariableMap("Width", "int", () => $"{_emulator.Sprites[index].Width}"),
-                        new VariableMap("Height", "int", () => $"{_emulator.Sprites[index].Height}"),
-                        new VariableMap("Address", "Word", () => $"0x{_emulator.Sprites[index].Address:X5}"),
-                        new VariableMap("Palette Offset", "Byte", () => $"{_emulator.Sprites[index].PaletteOffset}"),
-                        new VariableMap("Bpp", "int", () => GetBpp(_emulator.Sprites[index].Mode)),
-                        new VariableMap("Depth", "int", () => $"{_emulator.Sprites[index].Depth}"),
-                        new VariableMap("H Flip", "bool", () => $"{(_emulator.Sprites[index].Mode & 0x01) != 0}"),
-                        new VariableMap("V Flip", "bool", () => $"{(_emulator.Sprites[index].Mode & 0x02) != 0}"),
-                        new VariableMap("Collision Mask", "byte", () => $"0b{Convert.ToString(_emulator.Sprites[index].CollisionMask, 2).PadLeft(4, '0')}"),
+                        new VariableMap("X", "int", () => $"{_emulator.Sprites[index].X}", () => _emulator.Sprites[index].X),
+                        new VariableMap("Y", "int", () => $"{_emulator.Sprites[index].Y}", () => _emulator.Sprites[index].Y),
+                        new VariableMap("Width", "int", () => $"{_emulator.Sprites[index].Width}", () => _emulator.Sprites[index].Width),
+                        new VariableMap("Height", "int", () => $"{_emulator.Sprites[index].Height}", () => _emulator.Sprites[index].Height),
+                        new VariableMap("Address", "Word", () => $"0x{_emulator.Sprites[index].Address:X5}", () => _emulator.Sprites[index].Address),
+                        new VariableMap("Palette Offset", "Byte", () => $"{_emulator.Sprites[index].PaletteOffset}", () => _emulator.Sprites[index].PaletteOffset),
+                        new VariableMap("Bpp", "int", () => GetBpp(_emulator.Sprites[index].Mode), () => _emulator.Sprites[index].Mode),
+                        new VariableMap("Depth", "int", () => $"{_emulator.Sprites[index].Depth}", () => _emulator.Sprites[index].Depth),
+                        new VariableMap("H Flip", "bool", () => $"{(_emulator.Sprites[index].Mode & 0x01) != 0}", () => (_emulator.Sprites[index].Mode & 0x01) != 0),
+                        new VariableMap("V Flip", "bool", () => $"{(_emulator.Sprites[index].Mode & 0x02) != 0}", () => (_emulator.Sprites[index].Mode & 0x02) != 0),
+                        new VariableMap("Collision Mask", "byte", () => $"0b{Convert.ToString(_emulator.Sprites[index].CollisionMask, 2).PadLeft(4, '0')}", () => _emulator.Sprites[index].CollisionMask),
                     });
 
                 _variables[i] = _children[i].GetVariable();

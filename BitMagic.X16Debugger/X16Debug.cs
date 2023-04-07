@@ -26,11 +26,12 @@ public class X16Debug : DebugAdapterBase
     private BreakpointManager _breakpointManager;
     private readonly ScopeManager _scopeManager;
     private readonly SourceMapManager _sourceMapManager;
-    private readonly VariableManager _variableManager;
+    private VariableManager _variableManager;
     private StackManager _stackManager;
     private SpriteManager _spriteManager;
     private PaletteManager _paletteManager;
     private DisassemblerManager _disassemblerManager;
+    private ExpressionManager _expressionManager;
 
     private readonly IdManager _idManager;
 
@@ -63,7 +64,6 @@ public class X16Debug : DebugAdapterBase
 
         _sourceMapManager = new SourceMapManager(_idManager);
         _scopeManager = new ScopeManager(_idManager);
-        _variableManager = new VariableManager(_idManager);
 
         _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager);
 
@@ -71,8 +71,10 @@ public class X16Debug : DebugAdapterBase
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
+        _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
+        _expressionManager = new ExpressionManager(_idManager, _variableManager);
 
-        SetupGlobalObjects();
+        //SetupGlobalObjects();
 
         InitializeProtocolClient(stdIn, stdOut);
 
@@ -91,7 +93,6 @@ public class X16Debug : DebugAdapterBase
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
-
     }
 
     private void Protocol_RequestCompleted(object? sender, RequestCompletedEventArgs e)
@@ -111,313 +112,6 @@ public class X16Debug : DebugAdapterBase
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
     }
-
-    private void SetupGlobalObjects()
-    {
-        var scope = _scopeManager.GetScope("CPU", false);
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Flags", "Flags",
-                () => $"[{(_emulator.Negative ? "N" : " ")}{(_emulator.Overflow ? "V" : " ")} {(_emulator.BreakFlag ? "B" : " ")}{(_emulator.Decimal ? "D" : " ")}{(_emulator.InterruptDisable ? "I" : " ")}{(_emulator.Zero ? "Z" : " ")}{(_emulator.Carry ? "C" : " ")}]",
-                new[] {
-                    new VariableMap("Negative", "Bool", () => _emulator.Negative.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Overflow", "Bool", () => _emulator.Overflow.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Break", "Bool", () => _emulator.BreakFlag.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Decimal", "Bool", () => _emulator.Decimal.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Interupt", "Bool", () => _emulator.InterruptDisable.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Zero", "Bool", () => _emulator.Zero.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Carry", "Bool", () => _emulator.Carry.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                })));
-        scope.AddVariable(new VariableMap("A", "Byte", () => $"0x{_emulator.A:X2}"));
-        scope.AddVariable(new VariableMap("X", "Byte", () => $"0x{_emulator.X:X2}"));
-        scope.AddVariable(new VariableMap("Y", "Byte", () => $"0x{_emulator.Y:X2}"));
-        scope.AddVariable(new VariableMap("PC", "Word", () => $"0x{_emulator.Pc:X4}"));
-        scope.AddVariable(new VariableMap("SP", "Byte", () => $"0x{_emulator.StackPointer:X2}"));
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableIndex("Stack", _stackManager.GetStack)));
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("RAM", "Byte[]", () => $"0x10000 bytes",
-                new IVariableMap[]
-                {
-                    new VariableMap("Ram Bank", "Byte", () => $"0x{_emulator.Memory[0]:X2}"),
-                    new VariableMap("Rom Bank", "Byte", () => $"0x{_emulator.Memory[1]:X2}"),
-                    new VariableMemory("RAM", "main", () => "CPU Visible Ram")
-                })));
-
-        scope = _scopeManager.GetScope("VERA", false);
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Data 0", "Byte", () => $"0x{_emulator.Memory[0x9F23]:X2}",
-                new[] {
-                    new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data0_Address:X5}"),
-                    new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data0_Step}")
-                }
-            )));
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Data 1", "Byte", () => $"0x{_emulator.Memory[0x9F24]:X2}",
-                new[] {
-                    new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data1_Address:X5}"),
-                    new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data1_Step}")
-                }
-            )));
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Layer 0", "String", () => _emulator.Vera.Layer0Enable ?
-                    (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Tiles") :
-                    "Disabled",
-                new[] {
-                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}"),
-                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}"),
-                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}"),
-                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}"),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}"),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}"),
-                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapWidth)}"),
-                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapHeight)}"),
-                }
-            )));
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Layer 1", "String", () => _emulator.Vera.Layer1Enable ?
-                    (_emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Tiles") :
-                    "Disabled",
-                new[] {
-                    new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}"),
-                    new VariableMap("Tile Address", "DWord", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}"),
-                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}"),
-                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}"),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}"),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}"),
-                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapWidth)}"),
-                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapHeight)}"),
-                }
-            )));
-
-        scope.AddVariable(new VariableMap("Output", "uint", () => $"{_emulator.Vera.VideoOutput}"));
-        scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}"));
-        scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}"));
-        scope.AddVariable(new VariableMap("DC HStop", "uint", () => $"{_emulator.Vera.Dc_HStop}"));
-        scope.AddVariable(new VariableMap("DC VStop", "uint", () => $"{_emulator.Vera.Dc_VStop}"));
-
-        scope.AddVariable(
-            _variableManager.Register(
-                new VariableChildren("Sprites", "String", () => _emulator.Vera.SpriteEnable ?
-                    "Enabled" :
-                    "Disabled",
-                new IVariableMap[] {
-                    _variableManager.Register(
-                            new VariableIndex("Sprites", _spriteManager.GetFunction)
-                        )
-                    ,
-                    _variableManager.Register(
-                        new VariableChildren("Renderer", "String", () => $"",
-                        new[] {
-                            new VariableMap("Render Mode", "uint", () => $"{_emulator.Vera.Sprite_Render_Mode}"),
-                            new VariableMap("VRAM Wait", "uint", () => $"{_emulator.Vera.Sprite_Wait}"),
-                            new VariableMap("Sprite Index", "uint", () => $"{_emulator.Vera.Sprite_Position}"),
-                            new VariableMap("Snapped X", "uint", () => $"{_emulator.Vera.Sprite_X}"),
-                            new VariableMap("Snapped Y", "uint", () => $"{_emulator.Vera.Sprite_Y}"),
-                            new VariableMap("Snapped Width", "uint", () => $"{_emulator.Vera.Sprite_Width}"),
-                            new VariableMap("Depth", "uint", () => $"{_emulator.Vera.Sprite_Depth}"),
-                            new VariableMap("Colission mask", "uint", () => $"0b{Convert.ToString(_emulator.Vera.Sprite_CollisionMask, 2).PadLeft(4, '0')}"),
-                            })
-                        )
-                    }
-                )));
-
-        _spriteManager.Register(_variableManager);
-
-        scope.AddVariable(
-                    _variableManager.Register(
-                            new VariableIndex("Palette", _paletteManager.GetFunction)
-                        )
-                );
-
-        scope.AddVariable(
-                _variableManager.Register(
-                    new VariableChildren("IO Area", "string", () => "0x9f20 -> 34",
-                    new[]
-                    {
-                        new VariableMap("IO 0x9f20", "uint", () => $"0x{_emulator.Memory[0x9f20]:X2}"),
-                        new VariableMap("IO 0x9f21", "uint", () => $"0x{_emulator.Memory[0x9f21]:X2}"),
-                        new VariableMap("IO 0x9f22", "uint", () => $"0x{_emulator.Memory[0x9f22]:X2}"),
-                        new VariableMap("IO 0x9f23", "uint", () => $"0x{_emulator.Memory[0x9f23]:X2}"),
-                        new VariableMap("IO 0x9f24", "uint", () => $"0x{_emulator.Memory[0x9f24]:X2}"),
-                        new VariableMap("IO 0x9f25", "uint", () => $"0x{_emulator.Memory[0x9f25]:X2}"),
-                        new VariableMap("IO 0x9f26", "uint", () => $"0x{_emulator.Memory[0x9f26]:X2}"),
-                        new VariableMap("IO 0x9f27", "uint", () => $"0x{_emulator.Memory[0x9f27]:X2}"),
-                        new VariableMap("IO 0x9f28", "uint", () => $"0x{_emulator.Memory[0x9f28]:X2}"),
-                        new VariableMap("IO 0x9f29", "uint", () => $"0x{_emulator.Memory[0x9f29]:X2}"),
-                        new VariableMap("IO 0x9f2a", "uint", () => $"0x{_emulator.Memory[0x9f2a]:X2}"),
-                        new VariableMap("IO 0x9f2b", "uint", () => $"0x{_emulator.Memory[0x9f2b]:X2}"),
-                        new VariableMap("IO 0x9f2c", "uint", () => $"0x{_emulator.Memory[0x9f2c]:X2}"),
-                        new VariableMap("IO 0x9f2d", "uint", () => $"0x{_emulator.Memory[0x9f2d]:X2}"),
-                        new VariableMap("IO 0x9f2e", "uint", () => $"0x{_emulator.Memory[0x9f2e]:X2}"),
-                        new VariableMap("IO 0x9f2f", "uint", () => $"0x{_emulator.Memory[0x9f2f]:X2}"),
-                        new VariableMap("IO 0x9f30", "uint", () => $"0x{_emulator.Memory[0x9f30]:X2}"),
-                        new VariableMap("IO 0x9f31", "uint", () => $"0x{_emulator.Memory[0x9f31]:X2}"),
-                        new VariableMap("IO 0x9f32", "uint", () => $"0x{_emulator.Memory[0x9f32]:X2}"),
-                        new VariableMap("IO 0x9f33", "uint", () => $"0x{_emulator.Memory[0x9f33]:X2}"),
-                        new VariableMap("IO 0x9f34", "uint", () => $"0x{_emulator.Memory[0x9f34]:X2}"),
-                        new VariableMap("IO 0x9f35", "uint", () => $"0x{_emulator.Memory[0x9f35]:X2}"),
-                        new VariableMap("IO 0x9f36", "uint", () => $"0x{_emulator.Memory[0x9f36]:X2}"),
-                        new VariableMap("IO 0x9f37", "uint", () => $"0x{_emulator.Memory[0x9f37]:X2}"),
-                        new VariableMap("IO 0x9f38", "uint", () => $"0x{_emulator.Memory[0x9f38]:X2}"),
-                        new VariableMap("IO 0x9f39", "uint", () => $"0x{_emulator.Memory[0x9f39]:X2}"),
-                        new VariableMap("IO 0x9f3a", "uint", () => $"0x{_emulator.Memory[0x9f3a]:X2}"),
-                        new VariableMap("IO 0x9f3b", "uint", () => $"0x{_emulator.Memory[0x9f3b]:X2}"),
-                        new VariableMap("IO 0x9f3c", "uint", () => $"0x{_emulator.Memory[0x9f3c]:X2}"),
-                        new VariableMap("IO 0x9f3d", "uint", () => $"0x{_emulator.Memory[0x9f3d]:X2}"),
-                        new VariableMap("IO 0x9f3e", "uint", () => $"0x{_emulator.Memory[0x9f3e]:X2}"),
-                        new VariableMap("IO 0x9f3f", "uint", () => $"0x{_emulator.Memory[0x9f3f]:X2}"),
-                    })
-                    ));
-        scope.AddVariable(new VariableMemory("VRAM", "vram", () => "0x20000 bytes"));
-
-        scope = _scopeManager.GetScope("Kernal", false);
-
-        scope.AddVariable(new VariableMap("R0", "Word", () => $"0x{_emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R1", "Word", () => $"0x{_emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R2", "Word", () => $"0x{_emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R3", "Word", () => $"0x{_emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8):X4}"));
-
-        scope.AddVariable(new VariableMap("R4", "Word", () => $"0x{_emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R5", "Word", () => $"0x{_emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R6", "Word", () => $"0x{_emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R7", "Word", () => $"0x{_emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8):X4}"));
-
-        scope.AddVariable(new VariableMap("R8", "Word", () => $"0x{_emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R9", "Word", () => $"0x{_emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R10", "Word", () => $"0x{_emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R11", "Word", () => $"0x{_emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8):X4}"));
-
-        scope.AddVariable(new VariableMap("R12", "Word", () => $"0x{_emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R13", "Word", () => $"0x{_emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R14", "Word", () => $"0x{_emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8):X4}"));
-        scope.AddVariable(new VariableMap("R15", "Word", () => $"0x{_emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8):X4}"));
-
-        scope = _scopeManager.GetScope("Display", false);
-
-        scope.AddVariable(new VariableMap("Beam X", "Word", () => $"{_emulator.Vera.Beam_X}"));
-        scope.AddVariable(new VariableMap("Beam Y", "Word", () => $"{_emulator.Vera.Beam_Y}"));
-
-        scope = _scopeManager.GetScope("I2C", false);
-
-        scope.AddVariable(new VariableMap("Previous Data", "uint", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
-        scope.AddVariable(new VariableMap("Direction", "uint", () => $"{(_emulator.I2c.ReadWrite == 0 ? "To SMC" : "From SMC")}"));
-        scope.AddVariable(new VariableMap("Transmitting", "uint", () => $"0x{_emulator.I2c.Transmit:X2}"));
-        scope.AddVariable(new VariableMap("Mode", "uint", () => $"{_emulator.I2c.Mode}"));
-        scope.AddVariable(new VariableMap("Address", "uint", () => $"0x{_emulator.I2c.Address:X2}"));
-        scope.AddVariable(new VariableMap("Data To Transmit", "bool", () => $"{_emulator.I2c.DataToTransmit != 0}"));
-
-        scope = _scopeManager.GetScope("SMC", false);
-
-        scope.AddVariable(new VariableMap("Data", "uint", () => _emulator.Smc.DataCount switch
-        {
-            0 => "Empty",
-            1 => $"0x{_emulator.Smc.Data & 0xff:X2}",
-            2 => $"0x{_emulator.Smc.Data & 0xff:X2} 0x{(_emulator.Smc.Data & 0xff00) >> 8:X2}",
-            _ => $"0x{_emulator.Smc.Data & 0xff:X2} 0x{(_emulator.Smc.Data & 0xff00) >> 8:X2} 0x{(_emulator.Smc.Data & 0xff0000) >> 16:X2}",
-        }));
-
-        scope.AddVariable(new VariableMap("Last Offset", "uint", () => $"0x{_emulator.Smc.Offset:X2}"));
-        scope.AddVariable(new VariableMap("LED", "uint", () => $"0x{_emulator.Smc.Led:X2}"));
-        scope.AddVariable(new VariableMap("Keyb Read Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_ReadPosition:X2}"));
-        scope.AddVariable(new VariableMap("Keyb Write Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_WritePosition:X2}"));
-        scope.AddVariable(new VariableMap("Keyb No Data", "bool", () => $"{_emulator.Smc.SmcKeyboard_ReadNoData != 0}"));
-
-        scope = _scopeManager.GetScope("RTC", false);
-
-        scope.AddVariable(_variableManager.Register(new VariableIndex("NVRAM", GetRtcnvRam)));
-
-        scope = _scopeManager.GetScope("VIA", false);
-
-        scope.AddVariable(new VariableMap("A In Value ", "string", () => ViaByteDisplay(_emulator.Via.Register_A_InValue, '0', '1')));
-        scope.AddVariable(new VariableMap("A Direction", "string", () => ViaByteDisplay(_emulator.Via.Register_A_Direction, '^', 'v')));
-        scope.AddVariable(new VariableMap("A Out Value", "string", () => ViaByteDisplay(_emulator.Via.Register_A_OutValue, '0', '1')));
-        scope.AddVariable(new VariableMap("A Value    ", "string", () => ViaByteDisplay(_emulator.Memory[0x9f01], '0', '1')));
-
-        scope.AddVariable(new VariableMap("IO 0x9f00 PRB", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f00], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f01 PRA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f01], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f02 DRB", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f02], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f03 DRA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f03], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f04 T1L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f04], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f05 T1H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f05], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f06 L1L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f06], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f07 L1H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f07], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f08 T2L", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f08], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f09 T2H", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f09], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0a SR ", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0a], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0b ACR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0b], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0c PCR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0c], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0d IFR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0d], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0e IER", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}"));
-        scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}"));
-    }
-
-    public int GetMapSize(int value) => value switch
-    {
-        0 => 32,
-        1 => 64,
-        2 => 128,
-        3 => 256,
-        _ => throw new Exception("Invalid map size value")
-    };
-
-    public (string Name, ICollection<Variable> Variables) GetRtcnvRam()
-    {
-        var toReturn = new List<Variable>();
-        var i = 0x00;
-        var data = _emulator.RtcNvram;
-
-        while (i < data.Length)
-        {
-            toReturn.Add(new Variable($"0x{i:X2}", $"0x{data[i]:X2}", 0));
-            i++;
-        }
-
-        return ("0x40 bytes", toReturn);
-    }
-
-    private static string ViaByteDisplay(byte input, char zeroValue, char oneValue)
-    {
-        var sb = new StringBuilder();
-
-        sb.Append((input & 0b10000000) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b01000000) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00100000) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00010000) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00001000) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00000100) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00000010) == 0 ? zeroValue : oneValue);
-        sb.Append(' ');
-        sb.Append((input & 0b00000001) == 0 ? zeroValue : oneValue);
-        return sb.ToString();
-    }
-
-    private static string GetColourDepth(int inp) => inp switch
-    {
-        0 => "1",
-        1 => "2",
-        2 => "4",
-        3 => "8",
-        _ => "??"
-    };
 
     public SysThread? DebugThread => _debugThread;
 
@@ -444,6 +138,10 @@ public class X16Debug : DebugAdapterBase
             SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
             SupportsLoadedSourcesRequest = true,
+            //SupportsSetVariable = true,
+            SupportsLogPoints = true,
+            SupportsConditionalBreakpoints = true,
+            SupportsHitConditionalBreakpoints = true,
         };
     }
 
@@ -702,6 +400,8 @@ public class X16Debug : DebugAdapterBase
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
+        _expressionManager = new ExpressionManager(_idManager, _variableManager);
+        _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
 
         if (_machine != null)
         {
@@ -917,6 +617,7 @@ public class X16Debug : DebugAdapterBase
                 }
             }
 
+            bool wait = true;
             switch (returnCode)
             {
                 case Emulator.EmulatorResult.Stepping:
@@ -924,11 +625,40 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.DebugOpCode:
-                    this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint));
+                    this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "STP hit", 0, null, true));
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.Breakpoint:
+                    var (breakpoint, hitCount)= _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
+                    if (breakpoint != null)
+                    {
+                        var condition = true;
+                        if (!string.IsNullOrWhiteSpace(breakpoint.Condition))
+                        {
+                            condition = _expressionManager.ConditionMet(breakpoint.Condition);
+                        }
+
+                        if (condition && !string.IsNullOrWhiteSpace(breakpoint.HitCondition))
+                        {
+                            condition = _expressionManager.ConditionMet($"{hitCount} {breakpoint.HitCondition}");
+                        }
+
+                        if (!string.IsNullOrEmpty(breakpoint.LogMessage))
+                        {
+                            if (condition)
+                            {
+                                var message = _expressionManager.FormatMessage(breakpoint.LogMessage);
+                                _logger.LogLine(message);
+                            }
+                            _emulator.Stepping = false;
+                            wait = false;
+                            break;
+                        }
+                    }
+
                     this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Breakpoint hit", 0, null, true));
+
                     _emulator.Stepping = true;
                     break;
                 default:
@@ -939,18 +669,20 @@ public class X16Debug : DebugAdapterBase
                     return;
             }
 
-            // todo: only send update events if something has changed.
-            this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
-            this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0x10000 });
-
-            _runEvent.WaitOne(); // wait for a signal to continue
-            lock (SyncObject)
+            if (wait)
             {
-                _runEvent.Reset();
+                // todo: only send update events if something has changed.
+                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
+                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0x10000 });
+
+                _runEvent.WaitOne(); // wait for a signal to continue
+                lock (SyncObject)
+                {
+                    _runEvent.Reset();
+                }
+
+                _stackManager.Invalidate();
             }
-
-            _stackManager.Invalidate();
-
         }
     }
 
@@ -1096,6 +828,16 @@ public class X16Debug : DebugAdapterBase
         }
 
         return toReturn;
+    }
+
+    protected override SetVariableResponse HandleSetVariableRequest(SetVariableArguments arguments)
+    {
+        return new SetVariableResponse();
+    }
+
+    protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
+    {
+        return _expressionManager.Evaluate(arguments);
     }
 
     #endregion

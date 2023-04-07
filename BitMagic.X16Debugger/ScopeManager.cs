@@ -49,8 +49,8 @@ internal class ScopeMap
     public Scope Scope { get; }
     public int Id => Scope.VariablesReference;
 
-    private List<IVariableMap> _variables { get; } = new List<IVariableMap>();
-    public ReadOnlyCollection<IVariableMap> Variables => _variables.AsReadOnly();
+    private List<IVariableItem> _variables { get; } = new List<IVariableItem>();
+    public ReadOnlyCollection<IVariableItem> Variables => _variables.AsReadOnly();
 
     public ScopeMap(string name, bool expensive, int id)
     {
@@ -74,7 +74,7 @@ internal class ScopeMap
         };
     }
 
-    public void AddVariable(IVariableMap variable)
+    public void AddVariable(IVariableItem variable)
     {
         _variables.Add(variable);
         Scope.NamedVariables = _variables.Count;

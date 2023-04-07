@@ -5,13 +5,13 @@ using System.Text;
 
 namespace BitMagic.X16Debugger;
 
-internal class DebugLogger : IEmulatorLogger
+public class DebugLogger : IEmulatorLogger
 {
 
     private readonly DebugAdapterBase _adaptor;
     private readonly StringBuilder _line = new StringBuilder();
 
-    internal DebugLogger(DebugAdapterBase adaptor)
+    public DebugLogger(DebugAdapterBase adaptor)
     {
         _adaptor = adaptor;
     }

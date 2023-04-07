@@ -15,8 +15,10 @@ namespace BitMagic.X16Debugger;
 internal class BreakpointManager
 {
     // breakpoints for bmasm files
-    public Dictionary<string, List<BitMagicBreakpointMap>> BitMagicBreakpoints = new Dictionary<string, List<BitMagicBreakpointMap>>();
-    public Dictionary<int, List<MemoryBreakpointMap>> MemoryBreakpoints = new Dictionary<int, List<MemoryBreakpointMap>>();
+    private readonly Dictionary<string, List<BitMagicBreakpointMap>> _bitMagicBreakpoints = new Dictionary<string, List<BitMagicBreakpointMap>>();
+    private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new Dictionary<int, List<MemoryBreakpointMap>>();
+    private readonly Dictionary<int, SourceBreakpoint> _breakpoints = new Dictionary<int, SourceBreakpoint>();
+    private readonly Dictionary<int, int> _breakpointHitCount = new Dictionary<int, int>();
     private readonly Emulator _emulator;
     private readonly X16Debug _debugger;
     private readonly SourceMapManager _sourceMapManager;
@@ -37,9 +39,9 @@ internal class BreakpointManager
         // Clear breakpoints
         if ((arguments.Source.SourceReference ?? 0) == 0)
         {
-            if (BitMagicBreakpoints.ContainsKey(arguments.Source.Path))
+            if (_bitMagicBreakpoints.ContainsKey(arguments.Source.Path))
             {
-                foreach (var breakpoint in BitMagicBreakpoints[arguments.Source.Path].Where(i => i.Breakpoint.Verified))
+                foreach (var breakpoint in _bitMagicBreakpoints[arguments.Source.Path].Where(i => i.Breakpoint.Verified))
                 {
                     if (breakpoint.Source == null)
                         continue;
@@ -51,16 +53,20 @@ internal class BreakpointManager
                     _emulator.Breakpoints[offset] = 0;
                     if (secondOffset != 0)
                         _emulator.Breakpoints[secondOffset] = 0;
+
+                    var thisAddress = secondOffset == 0 ? offset : secondOffset;
+                    if (_breakpoints.ContainsKey(thisAddress))
+                        _breakpoints.Remove(thisAddress);
                 }
 
-                BitMagicBreakpoints[arguments.Source.Path].Clear();
+                _bitMagicBreakpoints[arguments.Source.Path].Clear();
             }
             else
             {
-                BitMagicBreakpoints.Add(arguments.Source.Path, new List<BitMagicBreakpointMap>());
+                _bitMagicBreakpoints.Add(arguments.Source.Path, new List<BitMagicBreakpointMap>());
             }
 
-            var biitMagicBreakpoints = BitMagicBreakpoints[arguments.Source.Path];
+            var biitMagicBreakpoints = _bitMagicBreakpoints[arguments.Source.Path];
             // Add breakpoints
             foreach (var sourceBreakpoint in arguments.Breakpoints)
             {
@@ -87,6 +93,10 @@ internal class BreakpointManager
                 _emulator.Breakpoints[address] = 1;
                 if (secondAddress != 0)
                     _emulator.Breakpoints[secondAddress] = 1;
+
+                var thisAddress = secondAddress == 0 ? address : secondAddress;
+                if (!_breakpoints.ContainsKey(thisAddress))
+                    _breakpoints.Add(thisAddress, sourceBreakpoint);
             }
 
             return new SetBreakpointsResponse(biitMagicBreakpoints.Select(i => i.Breakpoint).ToList());
@@ -94,22 +104,26 @@ internal class BreakpointManager
 
         // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
         var sourceId = arguments.Source.SourceReference ?? 0;
-        if (MemoryBreakpoints.ContainsKey(sourceId))
+        if (_memoryBreakpoints.ContainsKey(sourceId))
         {
-            foreach (var breakpoint in MemoryBreakpoints[sourceId])
+            foreach (var breakpoint in _memoryBreakpoints[sourceId])
             {
                 var (offset, secondOffset) = GetBreakpointLocation(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
 
                 _emulator.Breakpoints[offset] = 0;
                 if (secondOffset != 0)
                     _emulator.Breakpoints[secondOffset] = 0;
+
+                var thisAddress = secondOffset == 0 ? offset : secondOffset;
+                if (_breakpoints.ContainsKey(thisAddress))
+                    _breakpoints.Remove(thisAddress);
             }
 
-            MemoryBreakpoints[sourceId].Clear();
+            _memoryBreakpoints[sourceId].Clear();
         }
         else
         {
-            MemoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
+            _memoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
         }
 
         var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
@@ -129,7 +143,7 @@ internal class BreakpointManager
             breakpoint.Verified = true;
 
             var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
-            MemoryBreakpoints[sourceId].Add(toAdd);
+            _memoryBreakpoints[sourceId].Add(toAdd);
 
             var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
             var (address, secondAddress) = GetBreakpointLocation(bank, thisLine.Address);
@@ -137,14 +151,50 @@ internal class BreakpointManager
             _emulator.Breakpoints[address] = 1;
             if (secondAddress != 0)
                 _emulator.Breakpoints[secondAddress] = 1;
+
+            var thisAddress = secondAddress == 0 ? address : secondAddress;
+            if (!_breakpoints.ContainsKey(thisAddress))
+                _breakpoints.Add(thisAddress, sourceBreakpoint);
         }
-        return new SetBreakpointsResponse(MemoryBreakpoints[sourceId].Select(i => i.Breakpoint).ToList());
+        return new SetBreakpointsResponse(_memoryBreakpoints[sourceId].Select(i => i.Breakpoint).ToList());
+    }
+
+    /// <summary>
+    /// Gets a breakpoint and the times its been hit this run. Important: Increments the hitcount.
+    /// </summary>
+    /// <param name="address"></param>
+    /// <param name="ramBank"></param>
+    /// <param name="romBank"></param>
+    /// <returns></returns>
+    public (SourceBreakpoint? BreakPoint, int HitCount) GetCurrentBreakpoint(int address, int ramBank, int romBank)
+    {
+        var (_, secondAddress) = GetBreakpointLocation(address >= 0xc000 ? romBank : ramBank, address);
+
+        var thisAddress = secondAddress == 0 ? address : secondAddress;
+
+        int hitCount;
+        if (_breakpointHitCount.ContainsKey(thisAddress))
+        {
+            hitCount = _breakpointHitCount[thisAddress];
+            hitCount++;
+            _breakpointHitCount[thisAddress] = hitCount;
+        }
+        else
+        {
+            hitCount = 1;
+            _breakpointHitCount.Add(thisAddress, hitCount);
+        }
+
+        if (_breakpoints.ContainsKey(thisAddress))
+            return (_breakpoints[thisAddress], hitCount);
+
+        return (null, hitCount);
     }
 
     public void Clear()
     {
-        BitMagicBreakpoints.Clear();
-        MemoryBreakpoints.Clear();
+        _bitMagicBreakpoints.Clear();
+        _memoryBreakpoints.Clear();
 
         // yes this is awful.
         for (var i = 0; i < _emulator.Breakpoints.Length; i++)

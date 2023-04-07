@@ -26,7 +26,7 @@ internal class PaletteManager
         {
             var index = i;
 
-            _children[i] = new VariableMap($"Colour 0x{index:X2}", "Colour", () => $"#{_emulator.Palette[index].ToVariableColour()}");
+            _children[i] = new VariableMap($"Colour 0x{index:X2}", "string", () => $"#{_emulator.Palette[index].ToVariableColour()}", () => _emulator.Palette[index].ToExpression());
             _variables[i] = _children[i].GetVariable();
         }
     }
@@ -51,4 +51,5 @@ internal class PaletteManager
 internal static class PalletteExtensionMethods
 {
     public static string ToVariableColour(this PixelRgba pixel) => $"{pixel.R & 0xf:X1}{pixel.G & 0xf:X1}{pixel.B & 0xf:X1}";
+    public static int ToExpression(this PixelRgba pixel) => pixel.R << 16 + pixel.G << 8 + pixel.B; // should this be the same as memory??
 }
