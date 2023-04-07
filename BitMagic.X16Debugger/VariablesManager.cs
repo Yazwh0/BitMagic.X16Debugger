@@ -598,7 +598,7 @@ public class MemoryWrapper
 
                 var values = _values();
 
-                for (var i = _index; i <= values.Length && values[i] != 0 && i < 1024; i++)
+                for (var i = _index; i < values.Length && values[i] != 0 && i < _index+1024; i++)
                     sb.Append((char)values[i]);
 
                 return sb.ToString();
@@ -610,7 +610,7 @@ public class MemoryWrapper
 
             var values = _values();
 
-            for (var i = _index; i <= values.Length && i < length; i++)
+            for (var i = _index; i < values.Length && i < length + _index; i++)
                 sb.Append((char)values[i]);
 
             return sb.ToString();
