@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using System.Text;
 
 namespace BitMagic.X16Debugger;
 
@@ -15,6 +16,16 @@ public class X16DebugProject
     /// </summary>
     [JsonProperty("source", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string Source { get; set; } = "";
+
+    /// <summary>
+    /// Compile the source and add it as a file.
+    /// </summary>
+    public bool RunSource { get; set; } = false;
+
+    /// <summary>
+    /// Location to save the .prg from the source file on the host. (Not on the sdcard.)
+    /// </summary>
+    public string SourcePrg { get; set; } = "";
 
     /// <summary>
     /// Start address. If omitted or -1, will start the ROM normally from the vector at $fffc.

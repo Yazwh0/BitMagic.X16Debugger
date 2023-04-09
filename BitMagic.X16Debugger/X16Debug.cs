@@ -316,7 +316,7 @@ public class X16Debug : DebugAdapterBase
             var project = new Project();
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                _logger.LogLine($"Compiling {_debugProject.Source}");
+                _logger.Log($"Compiling {_debugProject.Source}");
                 project.Code.Load(_debugProject.Source).GetAwaiter().GetResult();
 
                 var compiler = new Compiler.Compiler(project);
@@ -327,7 +327,7 @@ public class X16Debug : DebugAdapterBase
 
                 if (compileResult.Warnings.Any())
                 {
-                    _logger.LogLine("Warnings:");
+                    _logger.LogLine(" Warnings:");
                     foreach (var warning in compileResult.Warnings)
                     {
                         _logger.LogLine(warning);
@@ -335,13 +335,35 @@ public class X16Debug : DebugAdapterBase
                 }
 
                 var prg = compileResult.Data["Main"].ToArray();
-                var destAddress = 0x801;
-                for (var i = 2; i < prg.Length; i++)
+
+                if (_debugProject.RunSource)
                 {
-                    _emulator.Memory[destAddress++] = prg[i];
+                    var destAddress = 0x801;
+                    for (var i = 2; i < prg.Length; i++)
+                    {
+                        _emulator.Memory[destAddress++] = prg[i];
+                    }
+                    _emulator.Pc = 0x801;
+                    _logger.LogLine($" Done. Injecting {prg.Length:#,##0} bytes. Starting at 0x801");
                 }
-                _emulator.Pc = 0x801;
-                _logger.LogLine($"Done. {prg.Length:#,##0} bytes. Starting at 0x801");
+                else
+                {
+                    var filename = Path.GetFileName(_debugProject.Source);
+                    if (_emulator.SdCard == null)
+                        throw new Exception("SDCard is null");
+
+                    filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
+                    _emulator.SdCard.AddCompiledFile(filename, prg);
+                    _logger.LogLine($" Done. Created '{filename}' ({prg.Length:#,##0} bytes.)");
+                    _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+                }
+
+                if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
+                {
+                    _logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
+                    File.WriteAllBytes(_debugProject.SourcePrg, prg);
+                    _logger.LogLine("Done.");
+                }
             }
             else
             {
