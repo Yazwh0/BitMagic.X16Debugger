@@ -18,7 +18,7 @@ public class X16DebugProject
     public string Source { get; set; } = "";
 
     /// <summary>
-    /// Compile the source and add it as a file.
+    /// Directly run the compiled code, or if false compile the source and add it as a file to the SDCard.
     /// </summary>
     public bool RunSource { get; set; } = false;
 
