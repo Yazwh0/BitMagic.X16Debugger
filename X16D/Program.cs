@@ -13,7 +13,6 @@ namespace X16D;
 
 static class Program
 {
-    // placeholder from the sample
     internal class Options
     {
         [Option("debug", Default = false, Required = false)]

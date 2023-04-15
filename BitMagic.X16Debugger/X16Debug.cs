@@ -71,7 +71,7 @@ public class X16Debug : DebugAdapterBase
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
         _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
-        _expressionManager = new ExpressionManager(_idManager, _variableManager);
+        _expressionManager = new ExpressionManager(_variableManager);
 
         //SetupGlobalObjects();
 
@@ -421,7 +421,7 @@ public class X16Debug : DebugAdapterBase
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
-        _expressionManager = new ExpressionManager(_idManager, _variableManager);
+        _expressionManager = new ExpressionManager(_variableManager);
         _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
 
         if (_machine != null)

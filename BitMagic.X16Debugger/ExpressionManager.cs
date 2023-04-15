@@ -1,4 +1,5 @@
-﻿using CodingSeb.ExpressionEvaluator;
+﻿using BitMagic.Compiler.CodingSeb;
+using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text.RegularExpressions;
 
@@ -7,15 +8,12 @@ namespace BitMagic.X16Debugger;
 
 internal class ExpressionManager
 {
-    private readonly ExpressionEvaluator _evaluator;
-    private readonly IdManager _idManager;
+    private readonly Asm6502ExpressionEvaluator _evaluator;
     private readonly VariableManager _variableManager;
-    private readonly Regex _expressionExtractor = new Regex("\\{(.*?)\\}");
 
-    internal ExpressionManager(IdManager idManager, VariableManager variableManager)
+    internal ExpressionManager(VariableManager variableManager)
     {
-        _evaluator = new ExpressionEvaluator(idManager);
-        _idManager = idManager;
+        _evaluator = new Asm6502ExpressionEvaluator();
         _variableManager = variableManager;
 
         _evaluator.EvaluateVariable += _evaluator_EvaluateVariable;
