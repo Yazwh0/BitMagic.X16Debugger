@@ -30,7 +30,7 @@ static class Program
 
     private const string RomEnvironmentVariable = "BITMAGIC_ROM";
 
-    static async Task<int> Main(string[] args)
+    static int Main(string[] args)
     {
         Console.WriteLine("BitMagic - X16D");
 
