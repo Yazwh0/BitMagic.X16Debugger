@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Silk.NET.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -78,5 +79,10 @@ internal class ScopeMap
     {
         _variables.Add(variable);
         Scope.NamedVariables = _variables.Count;
+    }
+
+    public void Clear()
+    {
+        _variables.Clear();
     }
 }

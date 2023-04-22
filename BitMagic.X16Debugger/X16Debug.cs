@@ -5,6 +5,7 @@ using BitMagic.Decompiler;
 using BitMagic.Machines;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
+using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
@@ -72,8 +73,6 @@ public class X16Debug : DebugAdapterBase
         _paletteManager = new PaletteManager(_emulator);
         _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
         _expressionManager = new ExpressionManager(_variableManager);
-
-        //SetupGlobalObjects();
 
         InitializeProtocolClient(stdIn, stdOut);
 
@@ -614,9 +613,18 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
+        Snapshot? snapshot = _debugProject.CaptureChanges ? _emulator.Snapshot() : null;
         while (_running)
         {
             var returnCode = _emulator.Emulate();
+
+            if (_debugProject.CaptureChanges)
+            {
+                var changes = snapshot!.Compare();
+
+                if (changes != null)
+                    _variableManager.SetChanges(changes);
+            }
 
             // invalidate any decompiled source
             if (_emulator.Stepping)

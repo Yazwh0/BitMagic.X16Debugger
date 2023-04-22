@@ -1,4 +1,5 @@
 ﻿using BitMagic.X16Emulator;
+using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Newtonsoft.Json.Linq;
 using Silk.NET.OpenGL;
@@ -24,7 +25,8 @@ internal class VariableManager
     private readonly SpriteManager _spriteManager;
     private readonly StackManager _stackManager;
 
-    public VariableManager(IdManager idManager, Emulator emulator, ScopeManager scopeManager, PaletteManager paletteManager, SpriteManager spriteManager, StackManager stackManager)
+    public VariableManager(IdManager idManager, Emulator emulator, ScopeManager scopeManager, PaletteManager paletteManager,
+        SpriteManager spriteManager, StackManager stackManager)
     {
         _idManager = idManager;
         _emulator = emulator;
@@ -77,11 +79,77 @@ internal class VariableManager
 
     private ScopeWrapper GetNewScope(string name)
     {
+        var key = name.Replace(" ", "");
+
         var toReturn = new ScopeWrapper(_scopeManager.GetScope(name, false));
 
-        _variableObjectTree.Add(name.Replace(" ", ""), toReturn.ObjectTree);
+        if (_variableObjectTree.ContainsKey(key))
+            _variableObjectTree[key] = toReturn.ObjectTree;
+        else
+            _variableObjectTree.Add(key, toReturn.ObjectTree);
 
         return toReturn;
+    }
+
+    public void SetChanges(SnapshotResult changes)
+    {
+        var scope = GetNewScope("Changes");
+
+        scope.Clear();
+
+        var register = new List<ISnapshotChange>();
+        var flags = new List<ISnapshotChange>();
+        var ram = new List<ISnapshotChange>();
+        var bankedRam = new List<ISnapshotChange>();
+        var vram = new List<ISnapshotChange>();
+        var nvram = new List<ISnapshotChange>();
+
+        foreach(var change in changes.Changes)
+        {
+            (change switch
+            {
+                RegisterChange _ => register,
+                FlagChange _ => flags,
+                MemoryChange m => m.MemoryArea switch
+                {
+                    MemoryAreas.Ram => ram,
+                    MemoryAreas.NVram => nvram,
+                    MemoryAreas.BankedRam => bankedRam,
+                    MemoryAreas.Vram => vram,
+                    _ => throw new Exception($"Unknwn area {m.MemoryArea}"),
+                },
+                MemoryRangeChange m => m.MemoryArea switch
+                {
+                    MemoryAreas.Ram => ram,
+                    MemoryAreas.NVram => nvram,
+                    MemoryAreas.BankedRam => bankedRam,
+                    MemoryAreas.Vram => vram,
+                    _ => throw new Exception($"Unknwn area {m.MemoryArea}"),
+                },
+                _ => throw new Exception("Unknown change")
+            }).Add(change);
+        }
+
+        AddSnapshot("Registers", scope, register);
+        AddSnapshot("Flags", scope, flags);
+        AddSnapshot("Ram", scope, ram);
+        AddSnapshot("BankedRam", scope, bankedRam);
+        AddSnapshot("VRam", scope, vram);
+        AddSnapshot("NVRam", scope, nvram);
+    }
+
+    private void AddSnapshot(string name, ScopeWrapper scope, List<ISnapshotChange> changes)
+    {
+        if (!changes.Any())
+            return;
+
+        var count = changes.Count;
+
+        scope.AddVariable(Register(
+            new VariableChildren(
+                name, () => $"{count} Change{(count == 1 ? "" : "s")}",
+                changes.Select(i => new VariableMap(i.DisplayName, "string", () => i.NewValue)).ToArray()
+            )));
     }
 
     public void SetupVariables()
@@ -400,6 +468,12 @@ internal class ScopeWrapper
 
         if (variable.GetExpressionValue != null)
             ObjectTree.Add(variable.Name, variable.GetExpressionValue);
+    }
+
+    public void Clear()
+    {
+        Scope.Clear();
+        ObjectTree.Clear();
     }
 }
 

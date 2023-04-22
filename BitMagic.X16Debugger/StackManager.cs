@@ -69,7 +69,7 @@ internal class StackManager
             _data.Add(new Variable()
             {
                 Name = i.ToString(),
-                Type = "Byte",
+                Type = "int",
                 PresentationHint = new VariablePresentationHint() { Kind = VariablePresentationHint.KindValue.Data },
                 Value = $"0x{stack[i]:X2}",
             });
