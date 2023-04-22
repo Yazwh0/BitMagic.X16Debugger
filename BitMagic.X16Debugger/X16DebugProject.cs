@@ -54,7 +54,7 @@ public class X16DebugProject
     /// <summary>
     /// Display names for the Rom banks.
     /// </summary>
-    public string[] RomBankNames { get; set; } = new string[] { "Kernel", "Keyboard", "Dos", "Geos", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio" };
+    public string[] RomBankNames { get; set; } = new string[] { "Kernel", "Keyboard", "Dos", "Geos", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio", "Util", "Bannex" };
 
     /// <summary>
     /// Display names for the Ram banks.
