@@ -24,6 +24,9 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.Machines", "..\BitMagic.X16Compiler\BitMagic.Machines\BitMagic.Machines.csproj", "{76C8671F-D8ED-4D63-987B-92DBEA8CDF5B}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DiscUtils", "DiscUtils", "{52770F4D-C2B2-447A-8498-2D1E13EECA86}"
+	ProjectSection(SolutionItems) = preProject
+		..\External\DiscUtils\Library\Directory.Build.props = ..\External\DiscUtils\Library\Directory.Build.props
+	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DiscUtils.Core", "..\External\DiscUtils\Library\DiscUtils.Core\DiscUtils.Core.csproj", "{D01951DC-147D-45AE-B247-AAE63AB1EA67}"
 EndProject
