@@ -82,15 +82,18 @@ static class Program
         else
         {
             Console.WriteLine(@"Running using stdin\stdout.");
-
+            
             var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom);
             try
             {
                 debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
                 debugger.Run();
-            } catch(Exception e)
+                debugger.Logger.LogLine("Finished. (Normally)");
+            }
+            catch (Exception e)
             {
                 debugger.Logger.LogError(e.Message);
+                debugger.Logger.LogLine("Finished. (Error)");
             }
         }
 
