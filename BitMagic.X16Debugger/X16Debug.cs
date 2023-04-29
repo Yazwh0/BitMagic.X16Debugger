@@ -683,6 +683,12 @@ public class X16Debug : DebugAdapterBase
                             _emulator.Stepping = false;
                             wait = false;
                             break;
+                        } 
+                        else if (!condition)
+                        {
+                            _emulator.Stepping = false;
+                            wait = false;
+                            break;
                         }
                     }
 
