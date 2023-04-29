@@ -93,6 +93,8 @@ public class X16Debug : DebugAdapterBase
         Console.ResetColor();
     }
 
+    public IEmulatorLogger Logger => _logger;
+
     private void Protocol_RequestCompleted(object? sender, RequestCompletedEventArgs e)
     {
         Console.ForegroundColor = ConsoleColor.Green;
