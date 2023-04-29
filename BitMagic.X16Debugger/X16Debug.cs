@@ -699,7 +699,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 default:
-                    _logger.LogLine($"Stopping with because of {returnCode} result");
+                    _logger.LogLine($"Stopping. Result : {returnCode}");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
                     this.Protocol.SendEvent(new TerminatedEvent());
                     _running = false;
