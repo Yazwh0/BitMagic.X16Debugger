@@ -48,7 +48,7 @@ public class X16DebugProject
     /// <summary>
     /// Show DAP messages between calling host and debugger.
     /// </summary>
-    [JsonProperty("showDAPMessage", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    [JsonProperty("showDAPMessages", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public bool ShowDAPMessages { get; set; } = false;
 
     /// <summary>

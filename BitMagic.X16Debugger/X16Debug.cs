@@ -3,6 +3,7 @@ using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
+using BitMagic.X16Debugger.CustomMessage;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
 using BitMagic.X16Emulator.Snapshot;
@@ -82,6 +83,11 @@ public class X16Debug : DebugAdapterBase
             Protocol.RequestCompleted += Protocol_RequestCompleted;
             Protocol.LogMessage += Protocol_LogMessage;
         }
+
+        Protocol.RegisterRequestType<PaletteRequest, PaletteRequestArguments, PaletteRequestResponse>(delegate (IRequestResponder<PaletteRequestArguments, PaletteRequestResponse> r)
+        {
+            HandlePaletteRequestAsync(r);
+        });
     }
 
     private void Protocol_LogMessage(object? sender, LogEventArgs e)
@@ -660,7 +666,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.Breakpoint:
-                    var (breakpoint, hitCount)= _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+                    var (breakpoint, hitCount) = _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
                     if (breakpoint != null)
                     {
@@ -685,7 +691,7 @@ public class X16Debug : DebugAdapterBase
                             _emulator.Stepping = false;
                             wait = false;
                             break;
-                        } 
+                        }
                         else if (!condition)
                         {
                             _emulator.Stepping = false;
@@ -930,6 +936,40 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
         => _disassemblerManager.HandleDisassembleRequest(arguments);
+
+    #endregion
+
+    #region Custom X16 Messages
+
+    protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs) =>
+        requestType switch
+        {
+            "bm_palette" => HandlePaletteRequest(),
+            _ => base.HandleProtocolRequest(requestType, requestArgs)
+        };
+
+    internal virtual void HandlePaletteRequestAsync(IRequestResponder<PaletteRequestArguments, PaletteRequestResponse> responder)
+    {
+        responder.SetResponse(HandlePaletteRequest());
+    }
+
+    private PaletteRequestResponse HandlePaletteRequest()
+    {
+        var toReturn = new PaletteRequestResponse() { DisplayPalette = _emulator.Palette.ToArray() };
+
+        var vramPalette = _emulator.Vera.Vram.Slice(0x1fa00, 256 * 2);
+        var palette = new List<VeraPaletteItem>();
+        for(var i = 0; i < 256; i++)
+        {
+            palette.Add(new VeraPaletteItem() { 
+                R = (byte)(vramPalette[i * 2 + 1] & 0x0f), 
+                G = (byte)((vramPalette[i * 2] & 0xf0) >> 4),
+                B = (byte)(vramPalette[i * 2] & 0x0f)
+            });
+        }
+        toReturn.Palette = palette.ToArray();
+        return toReturn;
+    }
 
     #endregion
 }
