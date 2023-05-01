@@ -212,15 +212,30 @@ public class X16Debug : DebugAdapterBase
         {
             _logger.Log($"Loading Cartridge '{_debugProject.Cartridge}'... ");
             var result = _emulator.LoadCartridge(_debugProject.Cartridge);
-            if (result == CartidgeHelperExtension.LoadCartridgeResult.Ok)
+
+            if (result.Result == CartidgeHelperExtension.LoadCartridgeResultCode.Ok)
+            {
                 _logger.LogLine("Done.");
+                if (result.Size > 0)
+                {
+                    var current = _debugProject.RomBankNames.ToList();
+                    while (current.Count < 32)
+                        current.Add("");
+
+                    for (var i = current.Count; i < 32 + Math.Round(result.Size / (double)0x4000, MidpointRounding.ToPositiveInfinity); i++)
+                    {
+                        current.Add($"Cartridge_{i:000}");
+                    }
+                    _debugProject.RomBankNames = current.ToArray();
+                }
+            }
             else
             {
                 _logger.LogLine("Error.");
-                _logger.LogError(result switch
+                _logger.LogError(result.Result switch
                 {
-                    CartidgeHelperExtension.LoadCartridgeResult.FileNotFound => "*** File not found.",
-                    CartidgeHelperExtension.LoadCartridgeResult.FileTooBig => "*** File too big.",
+                    CartidgeHelperExtension.LoadCartridgeResultCode.FileNotFound => "*** File not found.",
+                    CartidgeHelperExtension.LoadCartridgeResultCode.FileTooBig => "*** File too big.",
                     _ => "*** Unknown error."
                 });
             }
@@ -267,8 +282,11 @@ public class X16Debug : DebugAdapterBase
         }
 
         // disassemble rom banks if the symbols weren't set
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < _debugProject.RomBankNames.Length; i++)
         {
+            if (string.IsNullOrWhiteSpace(_debugProject.RomBankNames[i]))
+                continue;
+
             if (_disassemblerManager.IsRomDecompiled(i))
                 continue;
 
