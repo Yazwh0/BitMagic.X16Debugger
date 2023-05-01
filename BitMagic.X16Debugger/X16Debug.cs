@@ -198,7 +198,7 @@ public class X16Debug : DebugAdapterBase
             throw new Exception($"Rom file not found {rom}");
         }
 
-        _logger.Log($"Loading '{rom}'... ");
+        _logger.Log($"Loading Rom '{rom}'... ");
         var romData = File.ReadAllBytes(rom);
         for (var i = 0; i < romData.Length; i++)
         {
@@ -206,6 +206,25 @@ public class X16Debug : DebugAdapterBase
         }
         _logger.LogLine("Done.");
         // end load rom
+
+        // Load Cartridge
+        if (!string.IsNullOrWhiteSpace(_debugProject.Cartridge))
+        {
+            _logger.Log($"Loading Cartridge '{_debugProject.Cartridge}'... ");
+            var result = _emulator.LoadCartridge(_debugProject.Cartridge);
+            if (result == CartidgeHelperExtension.LoadCartridgeResult.Ok)
+                _logger.LogLine("Done.");
+            else
+            {
+                _logger.LogLine("Error.");
+                _logger.LogError(result switch
+                {
+                    CartidgeHelperExtension.LoadCartridgeResult.FileNotFound => "*** File not found.",
+                    CartidgeHelperExtension.LoadCartridgeResult.FileTooBig => "*** File too big.",
+                    _ => "*** Unknown error."
+                });
+            }
+        }
 
         _disassemblerManager.SetProject(_debugProject);
 
@@ -959,10 +978,11 @@ public class X16Debug : DebugAdapterBase
 
         var vramPalette = _emulator.Vera.Vram.Slice(0x1fa00, 256 * 2);
         var palette = new List<VeraPaletteItem>();
-        for(var i = 0; i < 256; i++)
+        for (var i = 0; i < 256; i++)
         {
-            palette.Add(new VeraPaletteItem() { 
-                R = (byte)(vramPalette[i * 2 + 1] & 0x0f), 
+            palette.Add(new VeraPaletteItem()
+            {
+                R = (byte)(vramPalette[i * 2 + 1] & 0x0f),
                 G = (byte)((vramPalette[i * 2] & 0xf0) >> 4),
                 B = (byte)(vramPalette[i * 2] & 0x0f)
             });

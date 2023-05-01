@@ -54,42 +54,56 @@ public class X16DebugProject
     /// <summary>
     /// Display names for the Rom banks.
     /// </summary>
+    [JsonProperty("romBankNames", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string[] RomBankNames { get; set; } = new string[] { "Kernel", "Keyboard", "Dos", "Geos", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio", "Util", "Bannex" };
 
     /// <summary>
     /// Display names for the Ram banks.
     /// </summary>
+    [JsonProperty("ramBankNames", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string[] RamBankNames { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Machine to load globals from if there is no bmasm source.
     /// </summary>
+    [JsonProperty("machine", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string Machine { get; set; } = "";
 
     /// <summary>
     /// Prefill the keyboard buffer with this data. 16bytes max, rest are discarded.
     /// </summary>
+    [JsonProperty("keyboardBuffer", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public byte[] KeyboardBuffer { get; set; } = new byte[] { };
 
     /// <summary>
     /// Prefill the mouse buffer with this data. 8bytes max, rest are discarded.
     /// </summary>
+    [JsonProperty("mouseBuffer", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public byte[] MouseBuffer { get; set; } = new byte[] { };
 
     /// <summary>
     /// RTC NvRam Data
     /// </summary>
+    [JsonProperty("nvRam", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public RtcNvram NvRam { get; set; } = new RtcNvram();
 
     /// <summary>
     /// Files to add to the root directory of the SDCard. Wildcards accepted.
     /// </summary>
+    [JsonProperty("sdCardFiles", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string[] SdCardFiles = new string[] { };
 
     /// <summary>
     /// Capture changes between every time the emulator is paused. (Eg breakpoints or stepping)
     /// </summary>
+    [JsonProperty("captureChanges", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public bool CaptureChanges { get; set; } = false;
+
+    /// <summary>
+    /// Cartridge file to load
+    /// </summary>
+    [JsonProperty("cartridge", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public string Cartridge { get; set; } = "";
 }
 
 public class RtcNvram
