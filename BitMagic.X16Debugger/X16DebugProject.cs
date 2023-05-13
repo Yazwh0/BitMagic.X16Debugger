@@ -46,12 +46,6 @@ public class X16DebugProject
     public SymbolsFile[] Symbols { get; set; } = Array.Empty<SymbolsFile>();
 
     /// <summary>
-    /// Show DAP messages between calling host and debugger.
-    /// </summary>
-    [JsonProperty("showDAPMessages", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public bool ShowDAPMessages { get; set; } = false;
-
-    /// <summary>
     /// Display names for the Rom banks.
     /// </summary>
     [JsonProperty("romBankNames", DefaultValueHandling = DefaultValueHandling.Ignore)]

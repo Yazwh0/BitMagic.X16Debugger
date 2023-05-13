@@ -1,20 +1,11 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
-using BitMagic.Compiler.Warnings;
-using BitMagic.Decompiler;
-using DiscUtils.Partitions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BitMagic.X16Debugger;
 
 internal class SourceMapManager
 {
-    public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
+    public Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
     // packed debugger address
@@ -27,7 +18,7 @@ internal class SourceMapManager
         _idManager = idManager;
     }
 
-    public SourceMap? GetSourceMap(int debuggerAddress)
+    public SourceMapLine? GetSourceMap(int debuggerAddress)
     {
         if (MemoryToSourceMap.ContainsKey(debuggerAddress))
             return MemoryToSourceMap[debuggerAddress];
@@ -35,7 +26,7 @@ internal class SourceMapManager
         return null;
     }
 
-    public SourceMap? GetPreviousMap(int debuggerAddress, int maxStep = -3)
+    public SourceMapLine? GetPreviousMap(int debuggerAddress, int maxStep = -3)
     {
         var step = -1;
         while (step >= maxStep)
@@ -98,7 +89,7 @@ internal class SourceMapManager
     {
         foreach (var line in proc.Data)
         {
-            var toAdd = new SourceMap(line);
+            var toAdd = new SourceMapLine(line, proc);
 
             if (MemoryToSourceMap.ContainsKey(toAdd.DebuggerAddress))
                 throw new Exception("Could add line, as it was already in the hashset.");
@@ -130,8 +121,8 @@ internal class SourceMapManager
     {
         foreach (var i in machine.Variables.Values)
         {
-            if (!Symbols.ContainsKey(i.Value))
-                Symbols.Add(i.Value, i.Key);
+            if (!Symbols.ContainsKey(i.Value.Value))
+                Symbols.Add(i.Value.Value, i.Key);
         }
     }
 
@@ -234,16 +225,15 @@ public class CodeMap
     }
 }
 
-public class SourceMap
+public class SourceMapLine
 {
-    //public int Address => Line.Address;
-    //public int Bank { get; }
+    public Procedure Procedure { get; }
     public IOutputData Line { get; }
 
     public int DebuggerAddress => Line.Address;
-    public SourceMap(IOutputData line)
+    public SourceMapLine(IOutputData line, Procedure proc)
     {
         Line = line;
-        //Address = line.Address;
+        Procedure = proc;
     }
 }

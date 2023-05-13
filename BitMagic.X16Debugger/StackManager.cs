@@ -1,14 +1,7 @@
 ﻿using BitMagic.Compiler;
-using BitMagic.Compiler.Warnings;
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.OpenGL;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Text;
 
 namespace BitMagic.X16Debugger;
 
@@ -23,9 +16,8 @@ internal class StackManager
     private readonly ICollection<Variable> _data = new List<Variable>();
 
     private readonly IdManager _idManager;
-    private readonly List<StackFrame> _callStack = new List<StackFrame>();
+    private readonly List<StackFrameState> _callStack = new List<StackFrameState>();
 
-    //private readonly Dictionary<int, SourceMap> _memoryToSourceMap;
     private readonly SourceMapManager _sourceMapManager;
     private readonly DisassemblerManager _dissassemblerManager;
 
@@ -82,7 +74,7 @@ internal class StackManager
         _invalid = true;
     }
 
-    public IEnumerable<StackFrame> GetCallStack => _callStack;
+    public IEnumerable<StackFrameState> GetCallStack => _callStack;
 
     // data stored in the stack info has the ram\rom bank switched to how the debugger address.
     public void GenerateCallStack()
@@ -92,7 +84,7 @@ internal class StackManager
         var frame = GenerateFrame(new StackItem("> ", _emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff, false));
 
         _callStack.Add(frame);
-        _callStack.AddRange(GenerateFrames().Select(i => GenerateFrame(i)));        
+        _callStack.AddRange(GenerateFrames().Select(i => GenerateFrame(i)));
     }
 
     private IEnumerable<StackItem> GenerateFrames()
@@ -142,7 +134,7 @@ internal class StackManager
         _emulator.StackBreakpoints[first.StackPointer + 1] = 0x01;
     }
 
-    private StackFrame GenerateFrame(StackItem parameters)
+    private StackFrameState GenerateFrame(StackItem parameters)
     {
         var (prefix, address, ramBank, romBank, stackPointer, checkReturnAddress) = parameters;
 
@@ -160,6 +152,7 @@ internal class StackManager
         }
 
         var frame = new StackFrame();
+        var toReturn = new StackFrameState(frame);
         frame.Id = _idManager.GetId();
         frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(address, ramBank, romBank);
 
@@ -170,9 +163,14 @@ internal class StackManager
         {
             var line = instruction.Line as Line;
             if (line == null)
+            {
                 frame.Name = $"{prefix}??? {addressString} (Data?)";
+            }
             else
+            {
                 frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
+                toReturn.Line = line;
+            }
 
             frame.Line = instruction.Line.Source.LineNumber;
             frame.Source = new Source()
@@ -208,7 +206,7 @@ internal class StackManager
             frame.Line = lineNumber;
         }
 
-        return frame;
+        return toReturn;
     }
 
     private (Source? Source, int LineNumber) GetSource(int address, int ramBank, int romBank)
@@ -264,3 +262,14 @@ internal class StackManager
 }
 
 internal record StackItem(string Prefix, int Address, int RamBank, int Rombank, int StackPointer, bool CheckReturnAddress);
+
+public class StackFrameState
+{
+    public StackFrame StackFrame { get; }
+    public Line? Line { get; internal set; } = null;
+
+    public StackFrameState(StackFrame stackFrame)
+    {
+        StackFrame = stackFrame;
+    }
+}

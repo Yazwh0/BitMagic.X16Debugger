@@ -15,7 +15,7 @@ namespace BitMagic.X16Debugger;
 internal class VariableManager
 {
     private readonly Dictionary<int, IVariableItem> _variablesById = new();
-    private readonly Dictionary<string, IVariableItem> _variables = new();
+    //private readonly Dictionary<string, IVariableItem> _variables = new();
     private readonly Dictionary<string, object> _variableObjectTree = new();
 
     private readonly IdManager _idManager;
@@ -91,6 +91,25 @@ internal class VariableManager
         return toReturn;
     }
 
+    private void AddLocalScope(string name)
+    {
+        var map = _scopeManager.CreateLocalsScope(name);
+        _variableObjectTree.Add(name, map);
+    }
+
+    /// <summary>
+    /// Set the current scope for the variables
+    /// </summary>
+    /// <param name="id"></param>
+    public void SetScope(StackFrameState? state)
+    {
+        if (state == null)
+        {
+            // Do we clear something?
+        }
+        _scopeManager.LocalScope?.SetLocalScope(state, _emulator);
+    }
+
     public void SetChanges(SnapshotResult changes)
     {
         var scope = GetNewScope("Changes");
@@ -104,7 +123,7 @@ internal class VariableManager
         var vram = new List<ISnapshotChange>();
         var nvram = new List<ISnapshotChange>();
 
-        foreach(var change in changes.Changes)
+        foreach (var change in changes.Changes)
         {
             (change switch
             {
@@ -394,6 +413,8 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("IO 0x9f0d IFR", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0d], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0d]));
         scope.AddVariable(new VariableMap("IO 0x9f0e IER", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0e]));
         scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "string", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0f]));
+
+        AddLocalScope("Locals");
     }
 
     public int GetMapSize(int value) => value switch
@@ -452,19 +473,26 @@ internal class VariableManager
     };
 }
 
-internal class ScopeWrapper
+internal interface IScopeWrapper
 {
-    public ScopeMap Scope { get; set; }
+    IScopeMap Scope { get; }
+    Dictionary<string, object> ObjectTree { get; }
+}
+
+internal class ScopeWrapper : IScopeWrapper
+{
+    private readonly ScopeMap _scope;
+    public IScopeMap Scope => _scope;
     public Dictionary<string, object> ObjectTree { get; set; } = new();
 
     public ScopeWrapper(ScopeMap scope)
     {
-        Scope = scope;
+        _scope = scope;
     }
 
     public void AddVariable(IVariableItem variable)
     {
-        Scope.AddVariable(variable);
+        _scope.AddVariable(variable);
 
         if (variable.GetExpressionValue != null)
             ObjectTree.Add(variable.Name, variable.GetExpressionValue);
@@ -472,8 +500,22 @@ internal class ScopeWrapper
 
     public void Clear()
     {
-        Scope.Clear();
+        _scope.Clear();
         ObjectTree.Clear();
+    }
+}
+
+/// <summary>
+/// Wraps the local scope map, which provides the local variables from the source map
+/// </summary>
+internal class LocalScopeWrapper : IScopeWrapper
+{
+    public IScopeMap Scope { get; set; }
+    public Dictionary<string, object> ObjectTree => Scope.Variables.ToDictionary(i => i.Name, i => (object)i.GetVariable().Value);
+
+    public LocalScopeWrapper(IScopeMap scope)
+    {
+        Scope = scope;
     }
 }
 
@@ -628,7 +670,6 @@ public class VariableNotKnownException : Exception
     public VariableNotKnownException(string message) : base(message) { }
 }
 
-
 public class MemoryWrapper
 {
     internal readonly Func<byte[]> _values;
@@ -672,7 +713,7 @@ public class MemoryWrapper
 
                 var values = _values();
 
-                for (var i = _index; i < values.Length && values[i] != 0 && i < _index+1024; i++)
+                for (var i = _index; i < values.Length && values[i] != 0 && i < _index + 1024; i++)
                     sb.Append((char)values[i]);
 
                 return sb.ToString();

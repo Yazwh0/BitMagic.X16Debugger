@@ -77,7 +77,7 @@ public class X16Debug : DebugAdapterBase
 
         InitializeProtocolClient(stdIn, stdOut);
 
-        if (_debugProject?.ShowDAPMessages ?? false)
+        if (true)
         {
             Protocol.RequestReceived += Protocol_RequestReceived;
             Protocol.RequestCompleted += Protocol_RequestCompleted;
@@ -677,6 +677,7 @@ public class X16Debug : DebugAdapterBase
                 foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
                 {
                     if (i.Volatile)
+                    {
                         Protocol.SendEvent(new LoadedSourceEvent()
                         {
                             Reason = LoadedSourceEvent.ReasonValue.Changed,
@@ -688,6 +689,7 @@ public class X16Debug : DebugAdapterBase
                                 SourceReference = i.ReferenceId
                             }
                         });
+                    }
                 }
             }
 
@@ -770,10 +772,6 @@ public class X16Debug : DebugAdapterBase
 
     #region Inspection
 
-    //        if (!this.stopped)
-    //        {
-    //            throw new ProtocolException("Not in break mode!");
-    //        }
     protected override ThreadsResponse HandleThreadsRequest(ThreadsArguments arguments)
         => new ThreadsResponse(new List<Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.Thread>
             {
@@ -861,13 +859,18 @@ public class X16Debug : DebugAdapterBase
         var toReturn = new StackTraceResponse();
 
         _stackManager.GenerateCallStack();
-        toReturn.StackFrames.AddRange(_stackManager.GetCallStack);
+        toReturn.StackFrames.AddRange(_stackManager.GetCallStack.Select(i => i.StackFrame));
         return toReturn;
     }
 
     protected override ScopesResponse HandleScopesRequest(ScopesArguments arguments)
     {
         var toReturn = new ScopesResponse();
+
+        Console.WriteLine($"Setting scope {arguments.FrameId}");
+        var current = _stackManager.GetCallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
+
+        _variableManager.SetScope(current);
 
         toReturn.Scopes.AddRange(_scopeManager.AllScopes);
 
@@ -882,6 +885,11 @@ public class X16Debug : DebugAdapterBase
 
         if (scope != null)
         {
+            if (scope is DebuggerLocalVariables localVariables)
+            {
+                var a = 0;
+            }
+
             toReturn.Variables.AddRange(scope.Variables.Select(i => i.GetVariable()));
 
             return toReturn;
