@@ -1,11 +1,6 @@
-﻿using BitMagic.Compiler;
-using BitMagic.Decompiler;
+﻿using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.Core.Native;
-using System.Security;
-using System.Transactions;
-using System.Xml.Linq;
 
 namespace BitMagic.X16Debugger;
 

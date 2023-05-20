@@ -77,7 +77,7 @@ public class X16Debug : DebugAdapterBase
 
         InitializeProtocolClient(stdIn, stdOut);
 
-        if (true)
+        if (false)
         {
             Protocol.RequestReceived += Protocol_RequestReceived;
             Protocol.RequestCompleted += Protocol_RequestCompleted;
@@ -936,7 +936,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new LoadedSourcesResponse();
 
-        foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+        foreach (var i in _idManager.GetObjects<ISourceFile>(ObjectType.DecompiledData))
         {
             toReturn.Sources.Add(new Source
             {
@@ -954,24 +954,12 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new SourceResponse();
 
-        var data = _idManager.GetObject<DecompileReturn>(arguments.SourceReference);
+        var data = _idManager.GetObject<ISourceFile>(arguments.SourceReference);
 
         if (data == null)
             return toReturn;
 
-        var sb = new StringBuilder();
-
-        if (data.Volatile)
-        {
-            data.Generate();
-        }
-
-        foreach (var i in data.Items.Values)
-        {
-            sb.AppendLine(i.Instruction);
-        }
-
-        toReturn.Content = sb.ToString();
+        toReturn.Content = data.GetContent();
         return toReturn;
     }
 
