@@ -24,23 +24,38 @@ internal class BreakpointManager
     private readonly SourceMapManager _sourceMapManager;
     private readonly IdManager _idManager;
     private readonly DisassemblerManager _disassemblerManager;
+    private readonly CodeGeneratorManager _codeGeneratorManager;
 
-    internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager, 
-        IdManager idManager, DisassemblerManager disassemblerManager)
+    internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager,
+        IdManager idManager, DisassemblerManager disassemblerManager, CodeGeneratorManager codeGeneratorManager)
     {
         _emulator = emulator;
         _debugger = debugger;
         _sourceMapManager = sourceMapManager;
         _idManager = idManager;
         _disassemblerManager = disassemblerManager;
+        _codeGeneratorManager = codeGeneratorManager;
     }
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
         // There are two types of breakpoint, those on BitMagic code, and those on Rom\Ram. They have to be handled slightly differently.
 
+        var isBitMagic = false;
+
+        if ((arguments.Source.SourceReference ?? 0) != 0)
+        {
+            var source = _idManager.GetObject<ISourceFile>(arguments.Source.SourceReference ?? 0);
+
+            if (source != null)
+                isBitMagic = source.Origin == SourceFileOrigin.Intermediary;
+        }
+        else
+            isBitMagic = true;
+
+
         // Clear breakpoints
-        if ((arguments.Source.SourceReference ?? 0) == 0)
+        if (isBitMagic)
         {
             if (_bitMagicBreakpoints.ContainsKey(arguments.Source.Path))
             {
@@ -69,43 +84,58 @@ internal class BreakpointManager
                 _bitMagicBreakpoints.Add(arguments.Source.Path, new List<BitMagicBreakpointMap>());
             }
 
-            var biitMagicBreakpoints = _bitMagicBreakpoints[arguments.Source.Path];
+            var bitMagicBreakpoints = _bitMagicBreakpoints[arguments.Source.Path];
             // Add breakpoints
             foreach (var sourceBreakpoint in arguments.Breakpoints)
             {
-                var filemap = _sourceMapManager.GetSourceFileMap(arguments.Source.Path);
+                // get id of generated file
+                var template = _codeGeneratorManager.Get(arguments.Source.Path);
+
+                // get the map to the generated file.
+                var filemap = _sourceMapManager.GetSourceFileMap(template.Template.Name);
                 if (filemap == null) // we dont recognise the file
                     continue;
 
-                var source = filemap.FirstOrDefault(i => i.LineNumber == sourceBreakpoint.Line);
+                // now we need to find all the instances in filemap were the line matches in the template.
+                // as one line in the template can produce multiple items in the filemap.
+                var map = template.Template.Source.Map;
+                for (var i = 0; i < map.Length; i++)
+                {
+                    if (map[i] == sourceBreakpoint.Line)
+                    {
+                        // add breakpoint.
+                        var lineNumber = i + 1;
+                        var source = filemap.FirstOrDefault(i => i.LineNumber == lineNumber);
 
-                if (source == null) // dont recognise the line
-                    continue;
+                        if (source == null) // dont recognise the line
+                            continue;
 
-                var breakpoint = new Breakpoint();
-                breakpoint.Source = arguments.Source;
-                breakpoint.Line = sourceBreakpoint.Line;
-                breakpoint.Verified = source != null;
+                        var breakpoint = new Breakpoint();
+                        breakpoint.Source = arguments.Source;
+                        breakpoint.Line = sourceBreakpoint.Line;
+                        breakpoint.Verified = source != null;
 
-                var toAdd = new BitMagicBreakpointMap(breakpoint, source!.Line);
+                        var toAdd = new BitMagicBreakpointMap(breakpoint, source!.Line);
 
-                biitMagicBreakpoints.Add(toAdd);
+                        bitMagicBreakpoints.Add(toAdd);
 
-                var (address, secondAddress) = GetBreakpointLocation(source!.Bank, source.Address);
-                var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+                        var (address, secondAddress) = GetBreakpointLocation(source!.Bank, source.Address);
+                        var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
 
-                if (address < 0xa000 || source!.Bank == currentBank)
-                    _emulator.Breakpoints[address] = 1;
+                        if (address < 0xa000 || source!.Bank == currentBank)
+                            _emulator.Breakpoints[address] = 1;
 
-                if (secondAddress != 0)
-                    _emulator.Breakpoints[secondAddress] = 1;
+                        if (secondAddress != 0)
+                            _emulator.Breakpoints[secondAddress] = 1;
 
-                var thisAddress = secondAddress == 0 ? address : secondAddress;
-                if (!_breakpoints.ContainsKey(thisAddress))
-                    _breakpoints.Add(thisAddress, sourceBreakpoint);
+                        var thisAddress = secondAddress == 0 ? address : secondAddress;
+                        if (!_breakpoints.ContainsKey(thisAddress))
+                            _breakpoints.Add(thisAddress, sourceBreakpoint);
+                    }
+                }
             }
 
-            return new SetBreakpointsResponse(biitMagicBreakpoints.Select(i => i.Breakpoint).ToList());
+            return new SetBreakpointsResponse(bitMagicBreakpoints.Select(i => i.Breakpoint).ToList());
         }
 
         // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
@@ -119,7 +149,7 @@ internal class BreakpointManager
         if (decompiledFile == null && _disassemblerManager.DecompiledData.ContainsKey(arguments.Source.Path))
         {
             decompiledFile = _disassemblerManager.DecompiledData[arguments.Source.Path];
-            sourceId = decompiledFile.ReferenceId;
+            sourceId = decompiledFile.ReferenceId ?? 0;
         }
 
         if (_memoryBreakpoints.ContainsKey(sourceId))

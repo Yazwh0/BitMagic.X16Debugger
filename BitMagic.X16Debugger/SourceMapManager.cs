@@ -5,7 +5,9 @@ namespace BitMagic.X16Debugger;
 
 internal class SourceMapManager
 {
+    // Address to line lookup
     public Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
+    // filename to codemap
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
 
     // packed debugger address

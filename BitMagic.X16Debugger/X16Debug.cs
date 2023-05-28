@@ -1,11 +1,14 @@
-﻿using BitMagic.Common;
+﻿using BigMagic.TemplateEngine.Compiler;
+using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
+using BitMagic.TemplateEngine.X16;
 using BitMagic.X16Debugger.CustomMessage;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
+using BitMagic.X16Emulator.Serializer;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
@@ -34,6 +37,7 @@ public class X16Debug : DebugAdapterBase
     private PaletteManager _paletteManager;
     private DisassemblerManager _disassemblerManager;
     private ExpressionManager _expressionManager;
+    private CodeGeneratorManager _codeGeneratorManager;
 
     private readonly IdManager _idManager;
 
@@ -67,8 +71,9 @@ public class X16Debug : DebugAdapterBase
         _sourceMapManager = new SourceMapManager(_idManager);
         _scopeManager = new ScopeManager(_idManager);
 
+        _codeGeneratorManager = new CodeGeneratorManager(_idManager);
         _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager , _codeGeneratorManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
@@ -361,7 +366,25 @@ public class X16Debug : DebugAdapterBase
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
                 _logger.Log($"Compiling {_debugProject.Source}");
-                project.Code.Load(_debugProject.Source).GetAwaiter().GetResult();
+
+                project.Code = new ProjectTextFile(_debugProject.Source);
+                project.Code.Generate();
+
+                var engine = CsasmEngine.CreateEngine();
+                var content = project.Code.GetContent();
+
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
+
+                    templateResult.ReferenceId = _codeGeneratorManager.Register(_debugProject.Source, templateResult);
+                    var filename = Path.GetFileNameWithoutExtension(_debugProject.Source) + ".generated.bmasm";
+                    templateResult.Name = filename;
+                    templateResult.Path = filename;
+
+                    templateResult.Parent = project.Code;
+                    project.Code = templateResult;
+                }
 
                 var compiler = new Compiler.Compiler(project);
 
@@ -387,7 +410,7 @@ public class X16Debug : DebugAdapterBase
                     {
                         _emulator.Memory[destAddress++] = prg[i];
                     }
-                    _emulator.Pc = 0x801;
+                    _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
                     _logger.LogLine($" Done. Injecting {prg.Length:#,##0} bytes. Starting at 0x801");
                 }
                 else
@@ -411,7 +434,7 @@ public class X16Debug : DebugAdapterBase
             }
             else
             {
-                _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+                _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
             }
 
         }
@@ -461,7 +484,8 @@ public class X16Debug : DebugAdapterBase
 
         _emulator = _getNewEmulatorInstance();
         _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager);
+        _codeGeneratorManager = new CodeGeneratorManager(_idManager);
+        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager , _codeGeneratorManager);
         _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
         _spriteManager = new SpriteManager(_emulator);
         _paletteManager = new PaletteManager(_emulator);
@@ -685,7 +709,7 @@ public class X16Debug : DebugAdapterBase
                             {
                                 Name = i.Name,
                                 Path = i.Path,
-                                Origin = i.Origin,
+                                Origin = i.Origin.ToString(),
                                 SourceReference = i.ReferenceId
                             }
                         });
@@ -750,6 +774,8 @@ public class X16Debug : DebugAdapterBase
                     _running = false;
                     return;
             }
+//            var test = _emulator.Serialize();
+
 
             if (wait)
             {
@@ -936,16 +962,15 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new LoadedSourcesResponse();
 
-        foreach (var i in _idManager.GetObjects<ISourceFile>(ObjectType.DecompiledData))
-        {
-            toReturn.Sources.Add(new Source
+        toReturn.Sources.AddRange(_idManager.GetObjects<ISourceFile>(ObjectType.DecompiledData)
+            .Where(i => !i.ActualFile)
+            .Select(i => new Source
             {
                 Name = i.Name,
                 Path = i.Path,
                 SourceReference = i.ReferenceId,
-                Origin = i.Origin,
-            });
-        }
+                Origin = i.Origin.ToString(),
+            }));
 
         return toReturn;
     }

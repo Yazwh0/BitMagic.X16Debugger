@@ -70,6 +70,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplateEngine.Com
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplageEngine.Objects", "..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Objects\BitMagic.TemplageEngine.Objects.csproj", "{FA8396D6-9D67-4036-9B22-84B9EE41CB94}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.X16Emulator.Serializer", "..\BitMagic.X16Emulator\BitMagic.X16Emulator.Serializer\BitMagic.X16Emulator.Serializer.csproj", "{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -320,6 +322,18 @@ Global
 		{FA8396D6-9D67-4036-9B22-84B9EE41CB94}.Release|x64.Build.0 = Release|Any CPU
 		{FA8396D6-9D67-4036-9B22-84B9EE41CB94}.Release|x86.ActiveCfg = Release|Any CPU
 		{FA8396D6-9D67-4036-9B22-84B9EE41CB94}.Release|x86.Build.0 = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|x64.Build.0 = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Debug|x86.Build.0 = Debug|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|x64.Build.0 = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|x86.ActiveCfg = Release|Any CPU
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -343,6 +357,7 @@ Global
 		{D8E2FFA7-FEC2-4795-8A0F-27492649CB01} = {629B4461-40B3-4425-932F-B436533B208E}
 		{D701E288-1834-43B1-93B3-3B38F8BD37A9} = {629B4461-40B3-4425-932F-B436533B208E}
 		{FA8396D6-9D67-4036-9B22-84B9EE41CB94} = {629B4461-40B3-4425-932F-B436533B208E}
+		{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A} = {56C1711B-E0BB-40B0-BAF6-77E3206969A6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {DFCB7DF5-52B3-4B9B-9814-3EC16549A76F}

@@ -11,10 +11,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Compiler\BitMagic.TemplateEngine.Compiler.csproj" />
+    <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.X16\BitMagic.TemplateEngine.X16.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Compiler\BitMagic.Compiler\BitMagic.Compiler.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Compiler\BitMagic.Decompiler\BitMagic.Decompiler.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Display\BitMagic.X16Emulator.Display.csproj" />
+    <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Serializer\BitMagic.X16Emulator.Serializer.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator\BitMagic.X16Emulator.csproj" />
   </ItemGroup>
+  
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>OS_WINDOWS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <DefineConstants>OS_LINUX</DefineConstants>
+  </PropertyGroup>
 
 </Project>

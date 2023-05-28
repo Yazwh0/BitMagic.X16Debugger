@@ -1,7 +1,9 @@
-﻿using BitMagic.Compiler;
+﻿using BitMagic.Common;
+using BitMagic.Compiler;
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
 
 namespace BitMagic.X16Debugger;
 
@@ -172,16 +174,28 @@ internal class StackManager
                 toReturn.Line = line;
             }
 
-            frame.Line = instruction.Line.Source.LineNumber;
+            var source = line.Source.SourceFile;
+            var lineNumber = instruction.Line.Source.LineNumber;
+            if (line.Source.SourceFile != null && source is ProcessResult)
+            {   // we're in a mapped file, find the actual line in the source
+                var mapedSource = source as ProcessResult;
+                lineNumber = mapedSource.Source.Map[lineNumber-1];
+
+                source = mapedSource.Parent;
+            }
+
+            frame.Line = lineNumber;
             frame.Source = new Source()
             {
-                Name = Path.GetFileName(instruction.Line.Source.Name),
-                Path = instruction.Line.Source.Name,
+                Name = Path.GetFileName(source.Name),
+                Path = source.Path,
+                SourceReference = source.ReferenceId,
+                Origin = source.Origin.ToString()
             };
         }
         else
         {
-            //// hunt backward for a symbol
+            //// hunt backward for a symbol6
             var thisAddress = debuggerAddress;
             string? huntSymbol = null;
             for (var i = 0; i < 256; i++) // 256 is a bit arbitary...?
@@ -231,7 +245,7 @@ internal class StackManager
                 {
                     Name = sourceFile.Name,
                     Path = sourceFile.Path,
-                    Origin = sourceFile.Origin,
+                    Origin = sourceFile.Origin.ToString(),
                     SourceReference = sourceFile.ReferenceId
                 }, lineNumber);
             }

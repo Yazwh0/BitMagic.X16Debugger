@@ -1,4 +1,5 @@
-﻿using BitMagic.Decompiler;
+﻿using BitMagic.Common;
+using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
@@ -94,7 +95,7 @@ internal class DisassemblerManager
         var name = $"z_Bank_0x{ramBank:X2}.bmasm"; // name in the project changess this when the project is set
         decompileReturn.Name = name;
         decompileReturn.Path = $"Ram/{name}";
-        decompileReturn.Origin = "Decompiled";
+        decompileReturn.Origin = SourceFileOrigin.Decompiled;
         decompileReturn.Volatile = true;
         decompileReturn.RamBank = ramBank;
         decompileReturn.Generate = () =>
@@ -106,7 +107,7 @@ internal class DisassemblerManager
             item.Items = result.Items;
         };
 
-        BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId);
+        BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId ?? 0);
 
         DecompiledData.Add(decompileReturn.Path, decompileReturn);
         return decompileReturn;
@@ -122,7 +123,7 @@ internal class DisassemblerManager
         var name = $"MainRam.bmasm";
         decompileReturn.Name = name;
         decompileReturn.Path = name;
-        decompileReturn.Origin = "Decompiled";
+        decompileReturn.Origin = SourceFileOrigin.Decompiled;
         decompileReturn.Volatile = true;
         decompileReturn.Generate = () =>
         {
@@ -141,7 +142,7 @@ internal class DisassemblerManager
         };
         DecompiledData.Add(decompileReturn.Path, decompileReturn);
 
-        BankToId.Add((NotSet, NotSet), decompileReturn.ReferenceId);
+        BankToId.Add((NotSet, NotSet), decompileReturn.ReferenceId ?? 0);
     }
 
     private DisassembleResponse ConvertDisassemblyToReponse(int instructionOffset, int instructionCount, int address, DecompileReturn decompileReturn, int ramBank, int romBank)
@@ -187,7 +188,7 @@ internal class DisassemblerManager
                 {
                     Name = decompileReturn.Name,
                     Path = decompileReturn.Path,
-                    Origin = decompileReturn.Origin,
+                    Origin = decompileReturn.Origin.ToString(),
                     SourceReference = decompileReturn.ReferenceId,
                 }
             });
@@ -242,7 +243,7 @@ internal class DisassemblerManager
             result.Name = name + ".bmasm";
 
         result.Path = $"Rom/{result.Name}";
-        result.Origin = "Decompiled";
+        result.Origin = SourceFileOrigin.Decompiled;
         result.ReferenceId = id;
         result.RomBank = bank;
 
@@ -271,7 +272,7 @@ internal static class DecompileReturnExtensions
 
         Name = decompileReturn.Name,
         Path = decompileReturn.Path,
-        Origin = decompileReturn.Origin,
+        Origin = decompileReturn.Origin.ToString(),
         SourceReference = decompileReturn.ReferenceId,
     };
 }
