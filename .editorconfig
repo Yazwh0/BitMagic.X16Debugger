@@ -2,3 +2,9 @@
 
 # S112: General exceptions should never be thrown
 dotnet_diagnostic.S112.severity = none
+
+# S3925: "ISerializable" should be implemented correctly
+dotnet_diagnostic.S3925.severity = none
+
+# RCS1194: Implement exception constructors.
+dotnet_diagnostic.RCS1194.severity = none

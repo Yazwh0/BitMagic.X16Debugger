@@ -57,6 +57,15 @@ public class X16Debug : DebugAdapterBase
 
     private readonly IEmulatorLogger _logger;
 
+    private const int KERNEL_SetNam = 0xffbd;
+    private const int KERNEL_Load = 0xffd5;
+    private const int KERNEL_SetLfs = 0xffba;
+
+    private string _setnam_value = "";
+    private int _setlfs_secondaryaddress = 0;
+    private int _setnam_fileaddress = 0;
+    private bool _setnam_fileexists = false;
+
     // This will be started on a second thread, seperate to the emulator
     public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, IEmulatorLogger? logger = null)
     {
@@ -360,8 +369,9 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _breakpointManager.DebuggerBreakpoints.Add(0xffbd); // setnam
-        _breakpointManager.DebuggerBreakpoints.Add(0xffd5); // load
+        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_SetNam);
+        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_Load); 
+        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_SetLfs); 
         _breakpointManager.SetDebuggerBreakpoints();
 
         try
@@ -495,6 +505,7 @@ public class X16Debug : DebugAdapterBase
         _paletteManager = new PaletteManager(_emulator);
         _expressionManager = new ExpressionManager(_variableManager);
         _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
+        _setnam_value = "";
 
         if (_machine != null)
         {
@@ -813,7 +824,79 @@ public class X16Debug : DebugAdapterBase
 
     private void HandleDebuggerBreakpoint(int breakpointType)
     {
+        if (_emulator.Pc == KERNEL_SetNam) // setnam
+        {
+            var filenameAddress = _emulator.X + (_emulator.Y << 8);
+            var len = _emulator.A;
 
+            var x = new MemoryWrapper(() => _emulator.Memory.ToArray());
+            var filename = x[filenameAddress].FixedString(len);
+            _setnam_value = filename;
+
+            if (string.IsNullOrWhiteSpace(_setnam_value))
+            {
+                // set first file.
+                _setnam_value = _emulator.SdCard!.FileSystem.GetFiles("").FirstOrDefault() ?? "";
+            }
+
+            _setnam_fileaddress = 0;
+            _setnam_fileexists = false;
+            if (_emulator.SdCard!.FileSystem.FileExists(_setnam_value))
+            {
+                using var data = _emulator.SdCard.FileSystem.OpenFile(_setnam_value, FileMode.Open);
+
+                _setnam_fileaddress = data.ReadByte();
+                _setnam_fileaddress += data.ReadByte() << 8;
+
+                data.Close();
+                _setnam_fileexists = true;
+            }
+
+            if (_setnam_fileexists)
+                _logger.LogLine($"SETNAM called with '{filename}', found '{_setnam_value}' with header ${_setnam_fileaddress:X4}.");
+            else
+                _logger.LogLine($"SETNAM called with '{filename}', no file found.");
+
+            return;
+        }
+
+        if (_emulator.Pc == KERNEL_Load) // load
+        {
+            if (!_setnam_fileexists) // 1 is verify, we dont care about that
+            {
+                _logger.LogLine($"LOAD called but file does not exist.");
+                return;
+            }
+
+            if (_emulator.A != 0)
+            {
+                _logger.LogLine($"LOAD called but in verify mode.");
+                return;
+            }
+
+            var loadAddress = 0;
+            if (_setlfs_secondaryaddress == 0)
+            {
+                loadAddress = _emulator.X + (_emulator.Y << 8);
+                _logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (parameters)");
+            }
+            else
+            {
+                loadAddress = _setnam_fileaddress;
+                _logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
+            }
+
+
+            return;
+        }
+
+        if (_emulator.Pc == KERNEL_SetLfs)
+        {
+            _logger.LogLine($"SETLFS A: {_emulator.A}, X: {_emulator.X}, Y: {_emulator.Y}");
+            _setlfs_secondaryaddress = _emulator.Y;
+
+            return;
+        }
     }
 
     #endregion
