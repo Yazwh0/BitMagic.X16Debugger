@@ -38,9 +38,7 @@ public class X16Debug : DebugAdapterBase
     private X16DebugProject? _debugProject;
     private IMachine? _machine;
     private readonly string _defaultRomFile;
-
-    private readonly IEmulatorLogger _logger;
-    public IEmulatorLogger Logger => _logger;
+    public IEmulatorLogger Logger { get; }
 
     private const int KERNEL_SetNam = 0xffbd;
     private const int KERNEL_Load = 0xffd5;
@@ -57,7 +55,7 @@ public class X16Debug : DebugAdapterBase
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
         _emulator = _serviceManager.Emulator;
 
-        _logger = logger ?? new DebugLogger(this);
+        Logger = logger ?? new DebugLogger(this);
 
         _defaultRomFile = romFile;
 
@@ -174,33 +172,33 @@ public class X16Debug : DebugAdapterBase
             if (File.Exists(_debugProject.RomFile))
                 rom = _debugProject.RomFile;
             else
-                _logger.LogError($"*** Project Rom file not found: {_debugProject.RomFile}");
+                Logger.LogError($"*** Project Rom file not found: {_debugProject.RomFile}");
         }
 
         if (!File.Exists(rom))
         {
-            _logger.LogError($"*** Rom file not found: {rom}");
+            Logger.LogError($"*** Rom file not found: {rom}");
             throw new Exception($"Rom file not found {rom}");
         }
 
-        _logger.Log($"Loading Rom '{rom}'... ");
+        Logger.Log($"Loading Rom '{rom}'... ");
         var romData = File.ReadAllBytes(rom);
         for (var i = 0; i < romData.Length; i++)
         {
             _emulator.RomBank[i] = romData[i];
         }
-        _logger.LogLine("Done.");
+        Logger.LogLine("Done.");
         // end load rom
 
         // Load Cartridge
         if (!string.IsNullOrWhiteSpace(_debugProject.Cartridge))
         {
-            _logger.Log($"Loading Cartridge '{_debugProject.Cartridge}'... ");
+            Logger.Log($"Loading Cartridge '{_debugProject.Cartridge}'... ");
             var result = _emulator.LoadCartridge(_debugProject.Cartridge);
 
             if (result.Result == CartridgeHelperExtension.LoadCartridgeResultCode.Ok)
             {
-                _logger.LogLine("Done.");
+                Logger.LogLine("Done.");
                 if (result.Size > 0)
                 {
                     var current = _debugProject.RomBankNames.ToList();
@@ -216,8 +214,8 @@ public class X16Debug : DebugAdapterBase
             }
             else
             {
-                _logger.LogLine("Error.");
-                _logger.LogError(result.Result switch
+                Logger.LogLine("Error.");
+                Logger.LogError(result.Result switch
                 {
                     CartridgeHelperExtension.LoadCartridgeResultCode.FileNotFound => "*** File not found.",
                     CartridgeHelperExtension.LoadCartridgeResultCode.FileTooBig => "*** File too big.",
@@ -249,16 +247,16 @@ public class X16Debug : DebugAdapterBase
         {
             try
             {
-                _logger.Log($"Loading Symbols {symbols.Name}... ");
+                Logger.Log($"Loading Symbols {symbols.Name}... ");
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
                 _serviceManager.SourceMapManager.LoadSymbols(symbols);
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
 
-                _logger.Log($"Decompiling... ");
+                Logger.Log($"Decompiling... ");
 
                 _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
-                _logger.LogLine("Done.");
+                Logger.LogLine("Done.");
             }
             catch (Exception e)
             {
@@ -277,11 +275,11 @@ public class X16Debug : DebugAdapterBase
 
             var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
 
-            _logger.Log($"Decompiling Rom Bank {i}... ");
+            Logger.Log($"Decompiling Rom Bank {i}... ");
 
             _serviceManager.DisassemblerManager.DecompileRomBank(bankData, i);
 
-            _logger.LogLine("Done.");
+            Logger.LogLine("Done.");
         }
 
         // Keyboard buffer
@@ -312,20 +310,20 @@ public class X16Debug : DebugAdapterBase
             {
                 if (File.Exists(_debugProject.NvRam.File))
                 {
-                    _logger.LogLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
+                    Logger.LogLine($"Loading NVRAM from '{_debugProject.NvRam.File}'.");
                     try
                     {
                         nvramData = File.ReadAllBytes(_debugProject.NvRam.File).Take(0x40).ToArray();
                     }
                     catch (Exception e)
                     {
-                        _logger.LogError($"Could not read NVRAM File'.");
-                        _logger.LogError(e.Message);
+                        Logger.LogError($"Could not read NVRAM File'.");
+                        Logger.LogError(e.Message);
                     }
                 }
                 else
                 {
-                    _logger.LogError($"NVRAM File not found '{_debugProject.NvRam.File}'.");
+                    Logger.LogError($"NVRAM File not found '{_debugProject.NvRam.File}'.");
                 }
             }
 
@@ -350,7 +348,7 @@ public class X16Debug : DebugAdapterBase
             var project = new Project();
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                _logger.Log($"Compiling {_debugProject.Source}");
+                Logger.Log($"Compiling {_debugProject.Source}");
 
                 project.Code = new ProjectTextFile(_debugProject.Source);
                 project.Code.Generate();
@@ -379,10 +377,10 @@ public class X16Debug : DebugAdapterBase
 
                 if (compileResult.Warnings.Any())
                 {
-                    _logger.LogLine(" Warnings:");
+                    Logger.LogLine(" Warnings:");
                     foreach (var warning in compileResult.Warnings)
                     {
-                        _logger.LogLine(warning);
+                        Logger.LogLine(warning);
                     }
                 }
 
@@ -396,7 +394,7 @@ public class X16Debug : DebugAdapterBase
                         _emulator.Memory[destAddress++] = prg[i];
                     }
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
-                    _logger.LogLine($" Done. Injecting {prg.Length:#,##0} bytes. Starting at 0x801");
+                    Logger.LogLine($" Done. Injecting {prg.Length:#,##0} bytes. Starting at 0x801");
                 }
                 else
                 {
@@ -406,15 +404,15 @@ public class X16Debug : DebugAdapterBase
 
                     filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
                     _emulator.SdCard.AddCompiledFile(filename, prg);
-                    _logger.LogLine($" Done. Created '{filename}' ({prg.Length:#,##0} bytes.)");
+                    Logger.LogLine($" Done. Created '{filename}' ({prg.Length:#,##0} bytes.)");
                     _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
                 }
 
                 if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
                 {
-                    _logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
+                    Logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
                     File.WriteAllBytes(_debugProject.SourcePrg, prg);
-                    _logger.LogLine("Done.");
+                    Logger.LogLine("Done.");
                 }
             }
             else
@@ -455,13 +453,13 @@ public class X16Debug : DebugAdapterBase
         {
             try
             {
-                _logger.LogLine($"Saving NVRAM to {_debugProject.NvRam.WriteFile}");
+                Logger.LogLine($"Saving NVRAM to {_debugProject.NvRam.WriteFile}");
                 File.WriteAllBytes(_debugProject.NvRam.WriteFile, _emulator.RtcNvram.ToArray());
             }
             catch (Exception e)
             {
-                _logger.LogError("Error Saving NVRAM:");
-                _logger.LogError(e.Message);
+                Logger.LogError("Error Saving NVRAM:");
+                Logger.LogError(e.Message);
             }
         }
 
@@ -624,7 +622,7 @@ public class X16Debug : DebugAdapterBase
     // This is running in _debugThread.
     private void DebugLoop()
     {
-        _logger.LogLine("Starting emulator");
+        Logger.LogLine("Starting emulator");
 
         // load in SD Card files here.
         foreach (var filename in _debugProject!.SdCardFiles.Where(i => !string.IsNullOrWhiteSpace(i)))
@@ -647,7 +645,7 @@ public class X16Debug : DebugAdapterBase
             var path = Path.GetDirectoryName(filename);
             if (!Directory.Exists(path))
             {
-                _logger.LogError($"Cannot find directory: {path}");
+                Logger.LogError($"Cannot find directory: {path}");
                 continue;
             }
 
@@ -737,7 +735,7 @@ public class X16Debug : DebugAdapterBase
                             if (condition)
                             {
                                 var message = _serviceManager.ExpressionManager.FormatMessage(breakpoint.LogMessage);
-                                _logger.LogLine(message);
+                                Logger.LogLine(message);
                             }
                             _emulator.Stepping = false;
                             wait = false;
@@ -756,7 +754,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 default:
-                    _logger.LogLine($"Stopping. Result : {returnCode}");
+                    Logger.LogLine($"Stopping. Result : {returnCode}");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
                     this.Protocol.SendEvent(new TerminatedEvent());
                     _running = false;
@@ -813,9 +811,9 @@ public class X16Debug : DebugAdapterBase
             }
 
             if (_setnam_fileexists)
-                _logger.LogLine($"SETNAM called with '{filename}', found '{_setnam_value}' with header ${_setnam_fileaddress:X4}.");
+                Logger.LogLine($"SETNAM called with '{filename}', found '{_setnam_value}' with header ${_setnam_fileaddress:X4}.");
             else
-                _logger.LogLine($"SETNAM called with '{filename}', no file found.");
+                Logger.LogLine($"SETNAM called with '{filename}', no file found.");
 
             return;
         }
@@ -824,13 +822,13 @@ public class X16Debug : DebugAdapterBase
         {
             if (!_setnam_fileexists)
             {
-                _logger.LogLine($"LOAD called but file does not exist.");
+                Logger.LogLine($"LOAD called but file does not exist.");
                 return;
             }
 
             if (_emulator.A != 0) // 1+ is verify, we dont care about that
             {
-                _logger.LogLine($"LOAD called but in verify mode.");
+                Logger.LogLine($"LOAD called but in verify mode.");
                 return;
             }
 
@@ -838,12 +836,12 @@ public class X16Debug : DebugAdapterBase
             if (_setlfs_secondaryaddress == 0)
             {
                 loadAddress = _emulator.X + (_emulator.Y << 8);
-                _logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (parameters)");
+                Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (parameters)");
             }
             else
             {
                 loadAddress = _setnam_fileaddress;
-                _logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
+                Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
             }
 
             return;
@@ -851,7 +849,7 @@ public class X16Debug : DebugAdapterBase
 
         if (_emulator.Pc == KERNEL_SetLfs)
         {
-            _logger.LogLine($"SETLFS A: {_emulator.A}, X: {_emulator.X}, Y: {_emulator.Y}");
+            Logger.LogLine($"SETLFS A: {_emulator.A}, X: {_emulator.X}, Y: {_emulator.Y}");
             _setlfs_secondaryaddress = _emulator.Y;
 
             return;
