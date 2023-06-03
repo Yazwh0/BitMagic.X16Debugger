@@ -21,28 +21,12 @@ namespace BitMagic.X16Debugger;
 
 public class X16Debug : DebugAdapterBase
 {
-    private readonly Func<Emulator> _getNewEmulatorInstance;
     private Emulator _emulator;
 
     private SysThread? _debugThread;
     private SysThread? _windowThread;
 
-    // managers
-    private BreakpointManager _breakpointManager;
-    private readonly ScopeManager _scopeManager;
-    private readonly SourceMapManager _sourceMapManager;
-    private VariableManager _variableManager;
-    private StackManager _stackManager;
-    private SpriteManager _spriteManager;
-    private PaletteManager _paletteManager;
-    private DisassemblerManager _disassemblerManager;
-    private ExpressionManager _expressionManager;
-    private CodeGeneratorManager _codeGeneratorManager;
-
-    private readonly IdManager _idManager;
-
-    //public Dictionary<int, SourceMap> MemoryToSourceMap { get; } = new();
-    //public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
+    private readonly ServiceManager _serviceManager;
 
     private Dictionary<int, CodeMap> _GotoTargets = new();
 
@@ -56,6 +40,7 @@ public class X16Debug : DebugAdapterBase
     private readonly string _defaultRomFile;
 
     private readonly IEmulatorLogger _logger;
+    public IEmulatorLogger Logger => _logger;
 
     private const int KERNEL_SetNam = 0xffbd;
     private const int KERNEL_Load = 0xffd5;
@@ -69,25 +54,12 @@ public class X16Debug : DebugAdapterBase
     // This will be started on a second thread, seperate to the emulator
     public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, IEmulatorLogger? logger = null)
     {
+        _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
+        _emulator = _serviceManager.Emulator;
+
         _logger = logger ?? new DebugLogger(this);
 
         _defaultRomFile = romFile;
-        _getNewEmulatorInstance = getNewEmulatorInstance;
-        _emulator = getNewEmulatorInstance();
-
-        _idManager = new IdManager();
-
-        _sourceMapManager = new SourceMapManager(_idManager);
-        _scopeManager = new ScopeManager(_idManager);
-
-        _codeGeneratorManager = new CodeGeneratorManager(_idManager);
-        _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager , _codeGeneratorManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
-        _spriteManager = new SpriteManager(_emulator);
-        _paletteManager = new PaletteManager(_emulator);
-        _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
-        _expressionManager = new ExpressionManager(_variableManager);
 
         InitializeProtocolClient(stdIn, stdOut);
 
@@ -113,7 +85,6 @@ public class X16Debug : DebugAdapterBase
         Console.ResetColor();
     }
 
-    public IEmulatorLogger Logger => _logger;
 
     private void Protocol_RequestCompleted(object? sender, RequestCompletedEventArgs e)
     {
@@ -255,7 +226,7 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _disassemblerManager.SetProject(_debugProject);
+        _serviceManager.DisassemblerManager.SetProject(_debugProject);
 
         if (!File.Exists(_debugProject.Source))
         {
@@ -270,7 +241,7 @@ public class X16Debug : DebugAdapterBase
 
             if (_machine != null)
             {
-                _sourceMapManager.AddSymbolsFromMachine(_machine);
+                _serviceManager.SourceMapManager.AddSymbolsFromMachine(_machine);
             }
         }
 
@@ -280,12 +251,12 @@ public class X16Debug : DebugAdapterBase
             {
                 _logger.Log($"Loading Symbols {symbols.Name}... ");
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
-                _sourceMapManager.LoadSymbols(symbols);
-                _sourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
+                _serviceManager.SourceMapManager.LoadSymbols(symbols);
+                _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
 
                 _logger.Log($"Decompiling... ");
 
-                _disassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
+                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
                 _logger.LogLine("Done.");
             }
@@ -301,14 +272,14 @@ public class X16Debug : DebugAdapterBase
             if (string.IsNullOrWhiteSpace(_debugProject.RomBankNames[i]))
                 continue;
 
-            if (_disassemblerManager.IsRomDecompiled(i))
+            if (_serviceManager.DisassemblerManager.IsRomDecompiled(i))
                 continue;
 
             var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
 
             _logger.Log($"Decompiling Rom Bank {i}... ");
 
-            _disassemblerManager.DecompileRomBank(bankData, i);
+            _serviceManager.DisassemblerManager.DecompileRomBank(bankData, i);
 
             _logger.LogLine("Done.");
         }
@@ -369,10 +340,10 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_SetNam);
-        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_Load); 
-        _breakpointManager.DebuggerBreakpoints.Add(KERNEL_SetLfs); 
-        _breakpointManager.SetDebuggerBreakpoints();
+        _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_SetNam);
+        _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_Load);
+        _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_SetLfs);
+        _serviceManager.BreakpointManager.SetDebuggerBreakpoints();
 
         try
         {
@@ -391,7 +362,7 @@ public class X16Debug : DebugAdapterBase
                 {
                     var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
 
-                    templateResult.ReferenceId = _codeGeneratorManager.Register(_debugProject.Source, templateResult);
+                    templateResult.ReferenceId = _serviceManager.CodeGeneratorManager.Register(_debugProject.Source, templateResult);
                     var filename = Path.GetFileNameWithoutExtension(_debugProject.Source) + ".generated.bmasm";
                     templateResult.Name = filename;
                     templateResult.Path = filename;
@@ -404,7 +375,7 @@ public class X16Debug : DebugAdapterBase
 
                 var compileResult = compiler.Compile().GetAwaiter().GetResult();
 
-                _sourceMapManager.ConstructSourceMap(compileResult);
+                _serviceManager.SourceMapManager.ConstructSourceMap(compileResult);
 
                 if (compileResult.Warnings.Any())
                 {
@@ -476,8 +447,6 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
-        _idManager.Clear();
-        _sourceMapManager.Clear();
         EmulatorWindow.Stop();
 
         // persist anything that needs it
@@ -496,20 +465,11 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _emulator = _getNewEmulatorInstance();
-        _disassemblerManager = new DisassemblerManager(_sourceMapManager, _emulator, _idManager);
-        _codeGeneratorManager = new CodeGeneratorManager(_idManager);
-        _breakpointManager = new BreakpointManager(_emulator, this, _sourceMapManager, _idManager, _disassemblerManager , _codeGeneratorManager);
-        _stackManager = new StackManager(_emulator, _idManager, _sourceMapManager, _disassemblerManager);
-        _spriteManager = new SpriteManager(_emulator);
-        _paletteManager = new PaletteManager(_emulator);
-        _expressionManager = new ExpressionManager(_variableManager);
-        _variableManager = new VariableManager(_idManager, _emulator, _scopeManager, _paletteManager, _spriteManager, _stackManager);
-        _setnam_value = "";
+        _emulator = _serviceManager.Reset();
 
         if (_machine != null)
         {
-            _sourceMapManager.AddSymbolsFromMachine(_machine);
+            _serviceManager.SourceMapManager.AddSymbolsFromMachine(_machine);
         }
 
         return new DisconnectResponse();
@@ -520,7 +480,7 @@ public class X16Debug : DebugAdapterBase
     #region Breakpoints
 
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
-        => _breakpointManager.HandleSetBreakpointsRequest(arguments);
+        => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
 
     protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
     {
@@ -571,7 +531,7 @@ public class X16Debug : DebugAdapterBase
     protected override StepOutResponse HandleStepOutRequest(StepOutArguments arguments)
     {
         _emulator.Stepping = false;
-        _stackManager.SetBreakpointOnCaller();
+        _serviceManager.StackManager.SetBreakpointOnCaller();
 
         lock (SyncObject)
         {
@@ -630,7 +590,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new GotoTargetsResponse();
 
-        var file = _sourceMapManager.GetSourceFileMap(arguments.Source.Path);
+        var file = _serviceManager.SourceMapManager.GetSourceFileMap(arguments.Source.Path);
         if (file == null)
             return toReturn;
 
@@ -639,7 +599,7 @@ public class X16Debug : DebugAdapterBase
         if (line == null)
             return toReturn;
 
-        var id = _idManager.GetId();
+        var id = _serviceManager.IdManager.GetId();
 
         _GotoTargets.Add(id, line);
 
@@ -707,13 +667,13 @@ public class X16Debug : DebugAdapterBase
                 var changes = snapshot!.Compare();
 
                 if (changes != null)
-                    _variableManager.SetChanges(changes);
+                    _serviceManager.VariableManager.SetChanges(changes);
             }
 
             // invalidate any decompiled source
             if (_emulator.Stepping)
             {
-                foreach (var i in _idManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+                foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
                 {
                     if (i.Volatile)
                     {
@@ -744,7 +704,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.Breakpoint:
-                    var (breakpoint, hitCount, breakpointType) = _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+                    var (breakpoint, hitCount, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
                     if ((breakpointType & 0x80) != 0)
                     {
@@ -764,19 +724,19 @@ public class X16Debug : DebugAdapterBase
                         var condition = true;
                         if (!string.IsNullOrWhiteSpace(breakpoint.Condition))
                         {
-                            condition = _expressionManager.ConditionMet(breakpoint.Condition);
+                            condition = _serviceManager.ExpressionManager.ConditionMet(breakpoint.Condition);
                         }
 
                         if (condition && !string.IsNullOrWhiteSpace(breakpoint.HitCondition))
                         {
-                            condition = _expressionManager.ConditionMet($"{hitCount} {breakpoint.HitCondition}");
+                            condition = _serviceManager.ExpressionManager.ConditionMet($"{hitCount} {breakpoint.HitCondition}");
                         }
 
                         if (!string.IsNullOrEmpty(breakpoint.LogMessage))
                         {
                             if (condition)
                             {
-                                var message = _expressionManager.FormatMessage(breakpoint.LogMessage);
+                                var message = _serviceManager.ExpressionManager.FormatMessage(breakpoint.LogMessage);
                                 _logger.LogLine(message);
                             }
                             _emulator.Stepping = false;
@@ -817,7 +777,7 @@ public class X16Debug : DebugAdapterBase
                     _runEvent.Reset();
                 }
 
-                _stackManager.Invalidate();
+                _serviceManager.StackManager.Invalidate();
             }
         }
     }
@@ -862,13 +822,13 @@ public class X16Debug : DebugAdapterBase
 
         if (_emulator.Pc == KERNEL_Load) // load
         {
-            if (!_setnam_fileexists) // 1 is verify, we dont care about that
+            if (!_setnam_fileexists)
             {
                 _logger.LogLine($"LOAD called but file does not exist.");
                 return;
             }
 
-            if (_emulator.A != 0)
+            if (_emulator.A != 0) // 1+ is verify, we dont care about that
             {
                 _logger.LogLine($"LOAD called but in verify mode.");
                 return;
@@ -885,7 +845,6 @@ public class X16Debug : DebugAdapterBase
                 loadAddress = _setnam_fileaddress;
                 _logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
             }
-
 
             return;
         }
@@ -989,8 +948,8 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new StackTraceResponse();
 
-        _stackManager.GenerateCallStack();
-        toReturn.StackFrames.AddRange(_stackManager.GetCallStack.Select(i => i.StackFrame));
+        _serviceManager.StackManager.GenerateCallStack();
+        toReturn.StackFrames.AddRange(_serviceManager.StackManager.GetCallStack.Select(i => i.StackFrame));
         return toReturn;
     }
 
@@ -999,11 +958,11 @@ public class X16Debug : DebugAdapterBase
         var toReturn = new ScopesResponse();
 
         Console.WriteLine($"Setting scope {arguments.FrameId}");
-        var current = _stackManager.GetCallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
+        var current = _serviceManager.StackManager.GetCallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
 
-        _variableManager.SetScope(current);
+        _serviceManager.VariableManager.SetScope(current);
 
-        toReturn.Scopes.AddRange(_scopeManager.AllScopes);
+        toReturn.Scopes.AddRange(_serviceManager.ScopeManager.AllScopes);
 
         return toReturn;
     }
@@ -1012,7 +971,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new VariablesResponse();
 
-        var scope = _scopeManager.GetScope(arguments.VariablesReference);
+        var scope = _serviceManager.ScopeManager.GetScope(arguments.VariablesReference);
 
         if (scope != null)
         {
@@ -1025,7 +984,7 @@ public class X16Debug : DebugAdapterBase
 
             return toReturn;
         }
-        var variable = _variableManager.Get(arguments.VariablesReference);
+        var variable = _serviceManager.VariableManager.Get(arguments.VariablesReference);
 
         if (variable == null)
             return toReturn;
@@ -1056,7 +1015,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
     {
-        return _expressionManager.Evaluate(arguments);
+        return _serviceManager.ExpressionManager.Evaluate(arguments);
     }
 
     #endregion
@@ -1067,7 +1026,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new LoadedSourcesResponse();
 
-        toReturn.Sources.AddRange(_idManager.GetObjects<ISourceFile>(ObjectType.DecompiledData)
+        toReturn.Sources.AddRange(_serviceManager.IdManager.GetObjects<ISourceFile>(ObjectType.DecompiledData)
             .Where(i => !i.ActualFile)
             .Select(i => new Source
             {
@@ -1084,7 +1043,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new SourceResponse();
 
-        var data = _idManager.GetObject<ISourceFile>(arguments.SourceReference);
+        var data = _serviceManager.IdManager.GetObject<ISourceFile>(arguments.SourceReference);
 
         if (data == null)
             return toReturn;
@@ -1098,7 +1057,7 @@ public class X16Debug : DebugAdapterBase
     #region Disassemble
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
-        => _disassemblerManager.HandleDisassembleRequest(arguments);
+        => _serviceManager.DisassemblerManager.HandleDisassembleRequest(arguments);
 
     #endregion
 
