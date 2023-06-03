@@ -218,7 +218,7 @@ public class X16Debug : DebugAdapterBase
             _logger.Log($"Loading Cartridge '{_debugProject.Cartridge}'... ");
             var result = _emulator.LoadCartridge(_debugProject.Cartridge);
 
-            if (result.Result == CartidgeHelperExtension.LoadCartridgeResultCode.Ok)
+            if (result.Result == CartridgeHelperExtension.LoadCartridgeResultCode.Ok)
             {
                 _logger.LogLine("Done.");
                 if (result.Size > 0)
@@ -239,8 +239,8 @@ public class X16Debug : DebugAdapterBase
                 _logger.LogLine("Error.");
                 _logger.LogError(result.Result switch
                 {
-                    CartidgeHelperExtension.LoadCartridgeResultCode.FileNotFound => "*** File not found.",
-                    CartidgeHelperExtension.LoadCartridgeResultCode.FileTooBig => "*** File too big.",
+                    CartridgeHelperExtension.LoadCartridgeResultCode.FileNotFound => "*** File not found.",
+                    CartridgeHelperExtension.LoadCartridgeResultCode.FileTooBig => "*** File too big.",
                     _ => "*** Unknown error."
                 });
             }
@@ -359,6 +359,10 @@ public class X16Debug : DebugAdapterBase
                 }
             }
         }
+
+        _breakpointManager.DebuggerBreakpoints.Add(0xffbd); // setnam
+        _breakpointManager.DebuggerBreakpoints.Add(0xffd5); // load
+        _breakpointManager.SetDebuggerBreakpoints();
 
         try
         {
@@ -729,7 +733,20 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.Breakpoint:
-                    var (breakpoint, hitCount) = _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+                    var (breakpoint, hitCount, breakpointType) = _breakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
+                    if ((breakpointType & 0x80) != 0)
+                    {
+                        // debugger breakpoint
+                        HandleDebuggerBreakpoint(breakpointType);
+
+                        if ((breakpointType & 0x7f) == 0) // this is just a debugger breakpoint, so continue
+                        {
+                            _emulator.Stepping = false;
+                            wait = false;
+                            break;
+                        }
+                    }
 
                     if (breakpoint != null)
                     {
@@ -774,7 +791,7 @@ public class X16Debug : DebugAdapterBase
                     _running = false;
                     return;
             }
-//            var test = _emulator.Serialize();
+            //var test = _emulator.Serialize();
 
 
             if (wait)
@@ -792,6 +809,11 @@ public class X16Debug : DebugAdapterBase
                 _stackManager.Invalidate();
             }
         }
+    }
+
+    private void HandleDebuggerBreakpoint(int breakpointType)
+    {
+
     }
 
     #endregion

@@ -16,6 +16,22 @@ internal static class AddressFunctions
             _ => address
         };
 
+    internal static (int Address, int RamBank, int RomBank) GetAddress(int debuggerAddress) =>
+        (debuggerAddress) switch
+        {
+            >= 0xc000 => (debuggerAddress & 0xffff, 0, (debuggerAddress & 0xff0000) >> 16),
+            >= 0xa000 => (debuggerAddress & 0xffff, (debuggerAddress & 0xff0000) >> 16, 0),
+            _ => (debuggerAddress & 0xffff, 0, 0)
+        };
+
+    internal static (int Address, int Bank) GetAddressBank(int debuggerAddress) =>
+        (debuggerAddress) switch
+        {
+            >= 0xc000 => (debuggerAddress & 0xffff, (debuggerAddress & 0xff0000) >> 16),
+            >= 0xa000 => (debuggerAddress & 0xffff, (debuggerAddress & 0xff0000) >> 16),
+            _ => (debuggerAddress & 0xffff, 0)
+        };
+
     internal static string GetDebuggerAddressString(int address, int ramBank, int romBank) =>
         (address, ramBank, romBank) switch
         {
@@ -45,4 +61,18 @@ internal static class AddressFunctions
              _ => (debuggerAddress & 0xffff, 0, 0)
          };
 
+    // returns the location in the break point array for a given bank\address
+    // second value is returned if the address is currently the active bank
+    // breakpoint array:
+    // Start      End (-1)     0x:-
+    //       0 =>   10,000   : active memory
+    //  10,000 =>  210,000   : ram banks
+    // 210,000 =>  610,000   : rom banks
+    internal static (int address, int secondAddress) GetMemoryLocations(int bank, int address) =>
+        (bank, address) switch
+        {
+            (_, < 0xa000) => (address, 0),
+            (_, < 0xc000) => (address, bank * 0x2000 + address - 0xa000),
+            _ => (address, 0x210000 + (bank * 0x4000) + address - 0xc000)
+        };
 }

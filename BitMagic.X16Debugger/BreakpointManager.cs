@@ -15,16 +15,18 @@ namespace BitMagic.X16Debugger;
 internal class BreakpointManager
 {
     // breakpoints for bmasm files
-    private readonly Dictionary<string, List<BitMagicBreakpointMap>> _bitMagicBreakpoints = new Dictionary<string, List<BitMagicBreakpointMap>>();
-    private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new Dictionary<int, List<MemoryBreakpointMap>>();
-    private readonly Dictionary<int, SourceBreakpoint> _breakpoints = new Dictionary<int, SourceBreakpoint>();
-    private readonly Dictionary<int, int> _breakpointHitCount = new Dictionary<int, int>();
+    private readonly Dictionary<string, List<BitMagicBreakpointMap>> _bitMagicBreakpoints = new();
+    private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new();
+    private readonly Dictionary<int, SourceBreakpoint> _breakpoints = new();
+    private readonly Dictionary<int, int> _breakpointHitCount = new();
     private readonly Emulator _emulator;
     private readonly X16Debug _debugger;
     private readonly SourceMapManager _sourceMapManager;
     private readonly IdManager _idManager;
     private readonly DisassemblerManager _disassemblerManager;
     private readonly CodeGeneratorManager _codeGeneratorManager;
+
+    private HashSet<int> _debuggerBreakpoints = new(); // breakpoints which the debugger rely on.
 
     internal BreakpointManager(Emulator emulator, X16Debug debugger, SourceMapManager sourceMapManager,
         IdManager idManager, DisassemblerManager disassemblerManager, CodeGeneratorManager codeGeneratorManager)
@@ -35,6 +37,26 @@ internal class BreakpointManager
         _idManager = idManager;
         _disassemblerManager = disassemblerManager;
         _codeGeneratorManager = codeGeneratorManager;
+    }
+
+    public HashSet<int> DebuggerBreakpoints => _debuggerBreakpoints;
+
+    public void SetDebuggerBreakpoints()
+    {
+        foreach(var debuggerAddress in _debuggerBreakpoints)
+        {
+            var (address, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
+
+            var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+            var (primaryAddress, secondAddress) = AddressFunctions.GetMemoryLocations(bank, address);
+
+            // only set local breakpoint if we're in the right bank
+            if (primaryAddress < 0xa000 || bank == currentBank)
+                _emulator.Breakpoints[address] = 0x80;
+
+            if (secondAddress != 0)
+                _emulator.Breakpoints[secondAddress] = 0x80;
+        }
     }
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
@@ -64,13 +86,16 @@ internal class BreakpointManager
                     if (breakpoint.Source == null)
                         continue;
 
+                    // Need to ensure system breakpoints are set
+                    var breakpointValue = _debuggerBreakpoints.Contains(breakpoint.Source.Address) ? (byte)0x80 : (byte)0;
+
                     // todo: add bank handling
                     var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(breakpoint.Source.Address);
-                    var (offset, secondOffset) = GetBreakpointLocation(ramBank > 0 ? ramBank : romBank, address);
+                    var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
 
-                    _emulator.Breakpoints[offset] = 0;
+                    _emulator.Breakpoints[offset] = breakpointValue;
                     if (secondOffset != 0)
-                        _emulator.Breakpoints[secondOffset] = 0;
+                        _emulator.Breakpoints[secondOffset] = breakpointValue;
 
                     var thisAddress = secondOffset == 0 ? offset : secondOffset;
                     if (_breakpoints.ContainsKey(thisAddress))
@@ -110,6 +135,9 @@ internal class BreakpointManager
                         if (source == null) // dont recognise the line
                             continue;
 
+                        // set system bit
+                        var breakpointValue = _debuggerBreakpoints.Contains(source.Address) ? (byte)0x81 : (byte)0x01;
+
                         var breakpoint = new Breakpoint();
                         breakpoint.Source = arguments.Source;
                         breakpoint.Line = sourceBreakpoint.Line;
@@ -119,14 +147,14 @@ internal class BreakpointManager
 
                         bitMagicBreakpoints.Add(toAdd);
 
-                        var (address, secondAddress) = GetBreakpointLocation(source!.Bank, source.Address);
+                        var (address, secondAddress) = AddressFunctions.GetMemoryLocations(source!.Bank, source.Address);
                         var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
 
                         if (address < 0xa000 || source!.Bank == currentBank)
-                            _emulator.Breakpoints[address] = 1;
+                            _emulator.Breakpoints[address] = breakpointValue;
 
                         if (secondAddress != 0)
-                            _emulator.Breakpoints[secondAddress] = 1;
+                            _emulator.Breakpoints[secondAddress] = breakpointValue;
 
                         var thisAddress = secondAddress == 0 ? address : secondAddress;
                         if (!_breakpoints.ContainsKey(thisAddress))
@@ -156,11 +184,15 @@ internal class BreakpointManager
         {
             foreach (var breakpoint in _memoryBreakpoints[sourceId])
             {
-                var (offset, secondOffset) = GetBreakpointLocation(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
+                // Need to ensure system breakpoints are set
+                var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x80 : (byte)0;
 
-                _emulator.Breakpoints[offset] = 0;
+                var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
+
+                _emulator.Breakpoints[offset] = breakpointValue;
                 if (secondOffset != 0)
-                    _emulator.Breakpoints[secondOffset] = 0;
+                    _emulator.Breakpoints[secondOffset] = breakpointValue;
 
                 var thisAddress = secondOffset == 0 ? offset : secondOffset;
                 if (_breakpoints.ContainsKey(thisAddress))
@@ -189,19 +221,22 @@ internal class BreakpointManager
             breakpoint.Line = sourceBreakpoint.Line;
             breakpoint.Verified = true;
 
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank);
+            var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)1;
+
             var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
             _memoryBreakpoints[sourceId].Add(toAdd);
 
             var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
             var currentBank = thisLine.Address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
-            var (address, secondAddress) = GetBreakpointLocation(bank, thisLine.Address);
+            var (address, secondAddress) = AddressFunctions.GetMemoryLocations(bank, thisLine.Address);
 
             // only set local breakpoint if we're in the right bank
             if (address < 0xa000 || bank == currentBank)
-                _emulator.Breakpoints[address] = 1;
+                _emulator.Breakpoints[address] = breakpointValue;
 
             if (secondAddress != 0)
-                _emulator.Breakpoints[secondAddress] = 1;
+                _emulator.Breakpoints[secondAddress] = breakpointValue;
 
             var thisAddress = secondAddress == 0 ? address : secondAddress;
             if (!_breakpoints.ContainsKey(thisAddress))
@@ -217,9 +252,9 @@ internal class BreakpointManager
     /// <param name="ramBank"></param>
     /// <param name="romBank"></param>
     /// <returns></returns>
-    public (SourceBreakpoint? BreakPoint, int HitCount) GetCurrentBreakpoint(int address, int ramBank, int romBank)
+    public (SourceBreakpoint? BreakPoint, int HitCount, int BreakpointValue) GetCurrentBreakpoint(int address, int ramBank, int romBank)
     {
-        var (_, secondAddress) = GetBreakpointLocation(address >= 0xc000 ? romBank : ramBank, address);
+        var (_, secondAddress) = AddressFunctions.GetMemoryLocations(address >= 0xc000 ? romBank : ramBank, address);
 
         var thisAddress = secondAddress == 0 ? address : secondAddress;
 
@@ -237,9 +272,9 @@ internal class BreakpointManager
         }
 
         if (_breakpoints.ContainsKey(thisAddress))
-            return (_breakpoints[thisAddress], hitCount);
+            return (_breakpoints[thisAddress], hitCount, _emulator.Breakpoints[address]);
 
-        return (null, hitCount);
+        return (null, hitCount, _emulator.Breakpoints[address]);
     }
 
     public void Clear()
@@ -253,31 +288,6 @@ internal class BreakpointManager
         {
             _emulator.Breakpoints[i] = 0;
         }
-    }
-
-    // returns the location in the break point array for a given bank\address
-    // second value is returned if the address is currently the active bank
-    // breakpoint array:
-    // Start      End (-1)     0x:-
-    //       0 =>   10,000   : active memory
-    //  10,000 =>  210,000   : ram banks
-    // 210,000 =>  610,000   : rom banks
-    private (int address, int secondAddress) GetBreakpointLocation(int bank, int address)
-    {
-        // normal ram
-        if (address < 0xa000)
-        {
-            return (address, 0);
-        }
-
-        // ram bank
-        if (address < 0xc000)
-        {
-            return (address, bank * 0x2000 + address - 0xa000);
-        }
-
-        // rom bank
-        return (address, 0x210000 + (bank * 0x4000) + address - 0xc000);
     }
 }
 
