@@ -1,0 +1,15 @@
+﻿using BitMagic.X16Emulator;
+
+namespace BitMagic.X16Debugger.Extensions;
+
+internal static class EmulatorExtensions
+{
+    public static void LoadIntoMemory(this Emulator emulator, byte[] data, int address)
+    {
+        var destAddress = address;
+        for (var i = 2; i < data.Length; i++)
+        {
+            emulator.Memory[destAddress++] = data[i];
+        }
+    }
+}

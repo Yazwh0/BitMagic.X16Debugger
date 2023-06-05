@@ -1,20 +1,17 @@
 ﻿using BigMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
-using BitMagic.Compiler.Exceptions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.X16Debugger.CustomMessage;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
-using BitMagic.X16Emulator.Serializer;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
-using System.Text;
 using SysThread = System.Threading.Thread;
 
 namespace BitMagic.X16Debugger;
@@ -28,12 +25,12 @@ public class X16Debug : DebugAdapterBase
 
     private readonly ServiceManager _serviceManager;
 
-    private Dictionary<int, CodeMap> _GotoTargets = new();
+    private readonly Dictionary<int, CodeMap> _GotoTargets = new();
 
     private bool _running = true;
 
-    private ManualResetEvent _runEvent = new ManualResetEvent(false);
-    private object SyncObject = new object();
+    private readonly ManualResetEvent _runEvent = new ManualResetEvent(false);
+    private readonly object SyncObject = new object();
 
     private X16DebugProject? _debugProject;
     private IMachine? _machine;
@@ -52,10 +49,9 @@ public class X16Debug : DebugAdapterBase
     // This will be started on a second thread, seperate to the emulator
     public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, IEmulatorLogger? logger = null)
     {
+        Logger = logger ?? new DebugLogger(this);
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
         _emulator = _serviceManager.Emulator;
-
-        Logger = logger ?? new DebugLogger(this);
 
         _defaultRomFile = romFile;
 
@@ -109,15 +105,15 @@ public class X16Debug : DebugAdapterBase
     /// </summary>
     public void Run()
     {
-        this.Protocol.Run();
-        this.Protocol.WaitForReader();
+        Protocol.Run();
+        Protocol.WaitForReader();
     }
 
     #region Initialize/Disconnect
 
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
-        this.Protocol.SendEvent(new InitializedEvent());
+        Protocol.SendEvent(new InitializedEvent());
 
         return new InitializeResponse()
         {
@@ -345,73 +341,74 @@ public class X16Debug : DebugAdapterBase
 
         try
         {
-            var project = new Project();
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                Logger.Log($"Compiling {_debugProject.Source}");
+                var results = _serviceManager.BitmagicBuilder.Build(_debugProject);
 
-                project.Code = new ProjectTextFile(_debugProject.Source);
-                project.Code.Generate();
+                //var project = new Project();
+                //Logger.Log($"Compiling {_debugProject.Source}");
 
-                var engine = CsasmEngine.CreateEngine();
-                var content = project.Code.GetContent();
+                //project.Code = new ProjectTextFile(_debugProject.Source);
+                //project.Code.Generate();
 
-                if (!string.IsNullOrWhiteSpace(content))
-                {
-                    var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
+                //var engine = CsasmEngine.CreateEngine();
+                //var content = project.Code.GetContent();
 
-                    templateResult.ReferenceId = _serviceManager.CodeGeneratorManager.Register(_debugProject.Source, templateResult);
-                    var filename = Path.GetFileNameWithoutExtension(_debugProject.Source) + ".generated.bmasm";
-                    templateResult.Name = filename;
-                    templateResult.Path = filename;
+                //if (!string.IsNullOrWhiteSpace(content))
+                //{
+                //    var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
 
-                    templateResult.Parent = project.Code;
-                    project.Code = templateResult;
-                }
+                //    templateResult.ReferenceId = _serviceManager.CodeGeneratorManager.Register(_debugProject.Source, templateResult);
+                //    var filename = Path.GetFileNameWithoutExtension(_debugProject.Source) + ".generated.bmasm";
+                //    templateResult.Name = filename;
+                //    templateResult.Path = filename;
 
-                var compiler = new Compiler.Compiler(project);
+                //    templateResult.Parent = project.Code;
+                //    project.Code = templateResult;
+                //}
 
-                var compileResult = compiler.Compile().GetAwaiter().GetResult();
+                //var compiler = new Compiler.Compiler(project);
 
-                _serviceManager.SourceMapManager.ConstructSourceMap(compileResult);
+                //var compileResult = compiler.Compile().GetAwaiter().GetResult();
 
-                if (compileResult.Warnings.Any())
-                {
-                    Logger.LogLine(" Warnings:");
-                    foreach (var warning in compileResult.Warnings)
-                    {
-                        Logger.LogLine(warning);
-                    }
-                }
+                //_serviceManager.SourceMapManager.ConstructSourceMap(compileResult);
 
-                var prg = compileResult.Data["Main"].ToArray();
+                //if (compileResult.Warnings.Any())
+                //{
+                //    Logger.LogLine(" Warnings:");
+                //    foreach (var warning in compileResult.Warnings)
+                //    {
+                //        Logger.LogLine(warning);
+                //    }
+                //}
+
+                //var prg = compileResult.Data["Main"].ToArray();
+                var prg = results.First(i => i.IsMain);
 
                 if (_debugProject.RunSource)
                 {
-                    var destAddress = 0x801;
-                    for (var i = 2; i < prg.Length; i++)
-                    {
-                        _emulator.Memory[destAddress++] = prg[i];
-                    }
+                    prg.LoadIntoMemory(_emulator, 0x801);
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
-                    Logger.LogLine($" Done. Injecting {prg.Length:#,##0} bytes. Starting at 0x801");
+                    Logger.LogLine($"Injecting {prg.Data.Length:#,##0} bytes. Starting at 0x801");
                 }
                 else
                 {
-                    var filename = Path.GetFileName(_debugProject.Source);
-                    if (_emulator.SdCard == null)
-                        throw new Exception("SDCard is null");
+                    //var filename = Path.GetFileName(_debugProject.Source);
+                    //if (_emulator.SdCard == null)
+                    //    throw new Exception("SDCard is null");
 
-                    filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
-                    _emulator.SdCard.AddCompiledFile(filename, prg);
-                    Logger.LogLine($" Done. Created '{filename}' ({prg.Length:#,##0} bytes.)");
+                    //filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
+                    //_emulator.SdCard.AddCompiledFile(filename, prg.Data);
+                    //Logger.LogLine($" Done. Created '{filename}' ({prg.Data.Length:#,##0} bytes.)");
                     _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
                 }
+
+                _serviceManager.DebugableFileManager.AddFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
 
                 if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
                 {
                     Logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
-                    File.WriteAllBytes(_debugProject.SourcePrg, prg);
+                    File.WriteAllBytes(_debugProject.SourcePrg, prg.Data);
                     Logger.LogLine("Done.");
                 }
             }
@@ -842,6 +839,25 @@ public class X16Debug : DebugAdapterBase
             {
                 loadAddress = _setnam_fileaddress;
                 Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
+            }
+
+            var debugableFile = _serviceManager.DebugableFileManager.GetFile(_setnam_value);
+            if (debugableFile != null)
+            {
+                Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
+                var breakpoints = debugableFile.LoadDebuggerInfo(loadAddress, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+                Logger.LogLine("Done");
+
+                foreach (var breakpoint in breakpoints)
+                {
+                    Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
+                }
+            }
+            else
+            {
+                var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
+                Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength - 2:X4}");
+                _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength - 2);
             }
 
             return;
