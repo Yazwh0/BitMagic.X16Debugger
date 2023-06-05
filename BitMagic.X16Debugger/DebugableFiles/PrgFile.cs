@@ -58,7 +58,7 @@ internal class DebugableFileManager
 internal interface IPrgFile
 {
     string Filename { get; }
-    List<Breakpoint> LoadDebuggerInfo(int address, SourceMapManager sourceMapManager, BreakpointManager breakpointManager);
+    List<Breakpoint> LoadDebuggerInfo(int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager);
     public byte[] Data { get; }
     public bool Loaded { get; }
     public IEnumerable<IPrgSourceFile> SourceFiles { get; }
@@ -98,10 +98,10 @@ internal class BitMagicPrgFile : IPrgFile
         SourceFiles.Add(new PrgSourceFile((result.Project.Code.Parent ?? result.Project.Code).Path, this));
     }
 
-    public List<Breakpoint> LoadDebuggerInfo(int address, SourceMapManager sourceMapManager, BreakpointManager breakpointManager)
+    public List<Breakpoint> LoadDebuggerInfo(int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager)
     {
         // need to load debugger symbols and maps
-        var toReturn = breakpointManager.ClearBreakpoints(address, Data.Length - 2); // unload any breakpoints
+        var toReturn = breakpointManager.ClearBreakpoints(address, Data.Length - (hasHeader ? 2 : 0)); // unload any breakpoints
 
         sourceMapManager.ConstructSourceMap(Result);
         foreach(var source in SourceFiles.Where(i => i.Breakpoints.Any()))

@@ -2,7 +2,6 @@
 using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
-using DiscUtils.Fat;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 

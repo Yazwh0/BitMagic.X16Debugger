@@ -845,7 +845,7 @@ public class X16Debug : DebugAdapterBase
             if (debugableFile != null)
             {
                 Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
-                var breakpoints = debugableFile.LoadDebuggerInfo(loadAddress, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+                var breakpoints = debugableFile.LoadDebuggerInfo(loadAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)
@@ -856,8 +856,11 @@ public class X16Debug : DebugAdapterBase
             else
             {
                 var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
-                Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength - 2:X4}");
-                _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength - 2);
+                if (_setlfs_secondaryaddress < 2)
+                    fileLength = -2;
+
+                Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
+                _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
             }
 
             return;
