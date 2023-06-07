@@ -195,7 +195,8 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("SP", "Byte", () => $"0x{_emulator.StackPointer:X2}", () => _emulator.StackPointer));
 
         scope.AddVariable(new VariableMap("Ram Bank", "Byte", () => $"0x{_emulator.Memory[0]:X2}", () => _emulator.Memory[0]));
-        scope.AddVariable(new VariableMap("Rom Bank", "Byte", () => $"0x{_emulator.Memory[1]:X2}", () => _emulator.Memory[1]));
+        scope.AddVariable(new VariableMap("Rom Bank (Act)", "int", () => $"0x{_emulator.RomBankAct:X2}", () => _emulator.RomBankAct));
+        scope.AddVariable(new VariableMap("Rom Bank (Memory)", "Byte", () => $"0x{_emulator.Memory[1]:X2}", () => _emulator.Memory[1]));
         scope.AddVariable(new VariableMemory("Ram", () => "CPU Visible Ram", "main", () => _emulator.Memory.ToArray()));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
 
