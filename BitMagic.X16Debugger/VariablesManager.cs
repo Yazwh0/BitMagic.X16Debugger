@@ -335,6 +335,11 @@ internal class VariableManager
                     ));
         scope.AddVariable(new VariableMemory("VRam", () => "0x20000 bytes", "vram", () => _emulator.Vera.Vram.ToArray()));
 
+        scope = GetNewScope("VERA Audio");
+
+        scope.AddVariable(new VariableMap("PCM Read Position", "int", () => $"{_emulator.VeraAudio.PcmBufferRead}", () => _emulator.VeraAudio.PcmBufferRead));
+        scope.AddVariable(new VariableMap("PCM Write Position", "int", () => $"{_emulator.VeraAudio.PcmBufferWrite}", () => _emulator.VeraAudio.PcmBufferWrite));
+
         scope = GetNewScope("Kernal");
 
         scope.AddVariable(new VariableMap("R0", "Word", () => $"0x{_emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8):X4}", () => _emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8)));

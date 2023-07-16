@@ -201,19 +201,16 @@ internal class BreakpointManager
 
         if (debugableFile != null)
         {
+            debugableFile.Breakpoints.Clear();
+            debugableFile.Breakpoints.AddRange(
+                arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
+
             if (!debugableFile.Parent.Loaded)
             {
-                debugableFile.Breakpoints.Clear();
-                debugableFile.Breakpoints.AddRange(
-                    arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
-
                 // need to respond that the breakpoints are loaded, but not set
                 return new SetBreakpointsResponse(debugableFile.Breakpoints.Select(i => i.Breakpoint).ToList());
             }
-        }
 
-        if (debugableFile != null)
-        {
             SetBitmagicBreakpoints(debugableFile);
 
             return new SetBreakpointsResponse(debugableFile.Breakpoints.Select(i => i.Breakpoint).ToList());

@@ -388,6 +388,7 @@ public class X16Debug : DebugAdapterBase
                 if (_debugProject.RunSource)
                 {
                     prg.LoadIntoMemory(_emulator, 0x801);
+                    prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
                     Logger.LogLine($"Injecting {prg.Data.Length:#,##0} bytes. Starting at 0x801");
                 }
