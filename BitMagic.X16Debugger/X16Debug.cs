@@ -68,6 +68,7 @@ public class X16Debug : DebugAdapterBase
         });
     }
 
+    #if SHOWDAP
     private void Protocol_LogMessage(object? sender, LogEventArgs e)
     {
         Console.ForegroundColor = ConsoleColor.Green;
@@ -94,6 +95,7 @@ public class X16Debug : DebugAdapterBase
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
     }
+    #endif
 
     public SysThread? DebugThread => _debugThread;
 
@@ -106,7 +108,7 @@ public class X16Debug : DebugAdapterBase
         Protocol.WaitForReader();
     }
 
-    #region Initialize/Disconnect
+#region Initialize/Disconnect
 
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
@@ -468,9 +470,9 @@ public class X16Debug : DebugAdapterBase
         return new DisconnectResponse();
     }
 
-    #endregion
+#endregion
 
-    #region Breakpoints
+#region Breakpoints
 
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
         => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
@@ -489,9 +491,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-    #endregion
+#endregion
 
-    #region Continue/Stepping
+#region Continue/Stepping
 
     // Startup
     protected override ConfigurationDoneResponse HandleConfigurationDoneRequest(ConfigurationDoneArguments arguments)
@@ -609,9 +611,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-    #endregion
+#endregion
 
-    #region Debug Loop
+#region Debug Loop
 
     // Run the emulator, handle stops, breakpoints, etc.
     // This is running in _debugThread.
@@ -760,6 +762,7 @@ public class X16Debug : DebugAdapterBase
 
             if (wait)
             {
+                EmulatorWindow.PauseAudio();
                 // todo: only send update events if something has changed.
                 this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
                 this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0x10000 });
@@ -771,6 +774,7 @@ public class X16Debug : DebugAdapterBase
                 }
 
                 _serviceManager.StackManager.Invalidate();
+                EmulatorWindow.ContinueAudio();
             }
         }
     }
@@ -873,9 +877,9 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
-    #endregion
+#endregion
 
-    #region Inspection
+#region Inspection
 
     protected override ThreadsResponse HandleThreadsRequest(ThreadsArguments arguments)
         => new ThreadsResponse(new List<Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.Thread>
@@ -887,9 +891,9 @@ public class X16Debug : DebugAdapterBase
                 }
             });
 
-    #endregion
+#endregion
 
-    #region Memory
+#region Memory
 
     protected override ReadMemoryResponse HandleReadMemoryRequest(ReadMemoryArguments arguments)
     {
@@ -955,9 +959,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-    #endregion
+#endregion
 
-    #region DebugInfo
+#region DebugInfo
 
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
@@ -1033,9 +1037,9 @@ public class X16Debug : DebugAdapterBase
         return _serviceManager.ExpressionManager.Evaluate(arguments);
     }
 
-    #endregion
+#endregion
 
-    #region Loaded Source
+#region Loaded Source
 
     protected override LoadedSourcesResponse HandleLoadedSourcesRequest(LoadedSourcesArguments arguments)
     {
@@ -1067,16 +1071,16 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-    #endregion
+#endregion
 
-    #region Disassemble
+#region Disassemble
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
         => _serviceManager.DisassemblerManager.HandleDisassembleRequest(arguments);
 
-    #endregion
+#endregion
 
-    #region Custom X16 Messages
+#region Custom X16 Messages
 
     protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs) =>
         requestType switch
@@ -1109,5 +1113,5 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-    #endregion
+#endregion
 }
