@@ -1,4 +1,5 @@
 ﻿using BitMagic.Common;
+using BitMagic.Compiler.Extensions;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
@@ -29,6 +30,16 @@ public class DebugLogger : IEmulatorLogger
 
     public void LogError(string message)
     {
-        _adaptor.Protocol.SendEvent(new OutputEvent() { Output = message + Environment.NewLine, Severity = OutputEvent.SeverityValue.Warning });
+        _adaptor.Protocol.SendEvent(new OutputEvent() { Output = message + Environment.NewLine, Severity = OutputEvent.SeverityValue.Error, Category = OutputEvent.CategoryValue.Stdout });
     }
+
+    public void LogError(string message, ISourceFile source, int lineNumber) =>
+        _adaptor.Protocol.SendEvent(new OutputEvent()
+        {
+            Output = message + Environment.NewLine,
+            Severity = OutputEvent.SeverityValue.Error,
+            Category = OutputEvent.CategoryValue.Stderr,
+            Line = lineNumber,
+            Source = source.AsSource()
+        });
 }

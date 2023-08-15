@@ -1,6 +1,8 @@
-﻿//#define SHOWDAP
+﻿#define SHOWDAP
 
 using BitMagic.Common;
+using BitMagic.Compiler.Exceptions;
+using BitMagic.Compiler.Extensions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
 using BitMagic.X16Debugger.CustomMessage;
@@ -11,6 +13,7 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
+using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 
 namespace BitMagic.X16Debugger;
@@ -56,11 +59,11 @@ public class X16Debug : DebugAdapterBase
 
         InitializeProtocolClient(stdIn, stdOut);
 
-        #if SHOWDAP
+#if SHOWDAP
         Protocol.RequestReceived += Protocol_RequestReceived;
         Protocol.RequestCompleted += Protocol_RequestCompleted;
         Protocol.LogMessage += Protocol_LogMessage;
-        #endif
+#endif
 
         Protocol.RegisterRequestType<PaletteRequest, PaletteRequestArguments, PaletteRequestResponse>(delegate (IRequestResponder<PaletteRequestArguments, PaletteRequestResponse> r)
         {
@@ -68,7 +71,7 @@ public class X16Debug : DebugAdapterBase
         });
     }
 
-    #if SHOWDAP
+#if SHOWDAP
     private void Protocol_LogMessage(object? sender, LogEventArgs e)
     {
         Console.ForegroundColor = ConsoleColor.Green;
@@ -95,7 +98,7 @@ public class X16Debug : DebugAdapterBase
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
     }
-    #endif
+#endif
 
     public SysThread? DebugThread => _debugThread;
 
@@ -108,7 +111,7 @@ public class X16Debug : DebugAdapterBase
         Protocol.WaitForReader();
     }
 
-#region Initialize/Disconnect
+    #region Initialize/Disconnect
 
     protected override InitializeResponse HandleInitializeRequest(InitializeArguments arguments)
     {
@@ -132,6 +135,7 @@ public class X16Debug : DebugAdapterBase
     protected override LaunchResponse HandleLaunchRequest(LaunchArguments arguments)
     {
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
+        var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
 
         if (!File.Exists(toCompile))
         {
@@ -418,6 +422,61 @@ public class X16Debug : DebugAdapterBase
             }
 
         }
+        catch (CompilerLineException e)
+        {
+            var sourceFile = e.Line.Source.SourceFile;
+            var lineNumber = e.Line.Source.LineNumber;
+
+            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr)
+            {
+                if (pr != null)
+                {
+                    lineNumber = pr.Source.Map[lineNumber - 1];
+                    sourceFile = pr.Parent;
+                }
+            }
+
+            var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
+
+            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({lineNumber}) \"{e.Message}\"", sourceFile, lineNumber);
+
+            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
+
+            return new LaunchResponse();
+        }
+        catch (CompilerSourceException e)
+        {
+            var sourceFile = e.SourceFile.SourceFile;
+            var lineNumber = e.SourceFile.LineNumber;
+
+            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr)
+            {
+                if (pr != null)
+                {
+                    lineNumber = pr.Source.Map[lineNumber - 1];
+                    sourceFile = pr.Parent;
+                }
+            }
+
+            var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
+
+            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({lineNumber}) \"{e.Message}\"", sourceFile, lineNumber);
+
+            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
+
+            return new LaunchResponse();
+        }
+        catch (CompilerException e)
+        {
+            Logger.LogError($"ERROR: {e.Message}");
+
+            //if (!string.IsNullOrWhiteSpace(e.ErrorDetail))
+            //    Logger.LogError(e.ErrorDetail);
+
+            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
+
+            return new LaunchResponse();
+        }
         catch (Exception e)
         {
             throw new ProtocolException(e.Message);
@@ -470,9 +529,9 @@ public class X16Debug : DebugAdapterBase
         return new DisconnectResponse();
     }
 
-#endregion
+    #endregion
 
-#region Breakpoints
+    #region Breakpoints
 
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
         => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
@@ -491,9 +550,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-#endregion
+    #endregion
 
-#region Continue/Stepping
+    #region Continue/Stepping
 
     // Startup
     protected override ConfigurationDoneResponse HandleConfigurationDoneRequest(ConfigurationDoneArguments arguments)
@@ -611,9 +670,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-#endregion
+    #endregion
 
-#region Debug Loop
+    #region Debug Loop
 
     // Run the emulator, handle stops, breakpoints, etc.
     // This is running in _debugThread.
@@ -877,9 +936,9 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
-#endregion
+    #endregion
 
-#region Inspection
+    #region Inspection
 
     protected override ThreadsResponse HandleThreadsRequest(ThreadsArguments arguments)
         => new ThreadsResponse(new List<Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.Thread>
@@ -891,9 +950,9 @@ public class X16Debug : DebugAdapterBase
                 }
             });
 
-#endregion
+    #endregion
 
-#region Memory
+    #region Memory
 
     protected override ReadMemoryResponse HandleReadMemoryRequest(ReadMemoryArguments arguments)
     {
@@ -959,9 +1018,9 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-#endregion
+    #endregion
 
-#region DebugInfo
+    #region DebugInfo
 
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
@@ -1037,9 +1096,9 @@ public class X16Debug : DebugAdapterBase
         return _serviceManager.ExpressionManager.Evaluate(arguments);
     }
 
-#endregion
+    #endregion
 
-#region Loaded Source
+    #region Loaded Source
 
     protected override LoadedSourcesResponse HandleLoadedSourcesRequest(LoadedSourcesArguments arguments)
     {
@@ -1071,16 +1130,16 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-#endregion
+    #endregion
 
-#region Disassemble
+    #region Disassemble
 
     protected override DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
         => _serviceManager.DisassemblerManager.HandleDisassembleRequest(arguments);
 
-#endregion
+    #endregion
 
-#region Custom X16 Messages
+    #region Custom X16 Messages
 
     protected override ResponseBody HandleProtocolRequest(string requestType, object requestArgs) =>
         requestType switch
@@ -1113,5 +1172,5 @@ public class X16Debug : DebugAdapterBase
         return toReturn;
     }
 
-#endregion
+    #endregion
 }
