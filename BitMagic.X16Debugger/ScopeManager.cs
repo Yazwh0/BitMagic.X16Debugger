@@ -131,7 +131,7 @@ internal class DebuggerLocalVariables : IScopeMap
 
         foreach (var i in state.Line.Procedure.Variables.Values)
         {
-            if (i.Value.VariableType is VariableType.Constant or VariableType.ProcStart or VariableType.ProcEnd or VariableType.SegmentStart or VariableType.Pointer)
+            if (i.Value.VariableType is VariableType.Constant or VariableType.ProcStart or VariableType.ProcEnd or VariableType.SegmentStart or VariableType.LabelPointer)
                 continue;
 
             var j = i;

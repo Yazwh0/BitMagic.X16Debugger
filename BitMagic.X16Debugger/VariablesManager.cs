@@ -24,9 +24,10 @@ internal class VariableManager
     private readonly PaletteManager _paletteManager;
     private readonly SpriteManager _spriteManager;
     private readonly StackManager _stackManager;
+    private readonly PsgManager _psgManager;
 
     public VariableManager(IdManager idManager, Emulator emulator, ScopeManager scopeManager, PaletteManager paletteManager,
-        SpriteManager spriteManager, StackManager stackManager)
+        SpriteManager spriteManager, StackManager stackManager, PsgManager psgManager)
     {
         _idManager = idManager;
         _emulator = emulator;
@@ -34,6 +35,7 @@ internal class VariableManager
         _paletteManager = paletteManager;
         _spriteManager = spriteManager;
         _stackManager = stackManager;
+        _psgManager = psgManager;
         SetupVariables();
     }
 
@@ -339,6 +341,16 @@ internal class VariableManager
 
         scope.AddVariable(new VariableMap("PCM Read Position", "int", () => $"{_emulator.VeraAudio.PcmBufferRead}", () => _emulator.VeraAudio.PcmBufferRead));
         scope.AddVariable(new VariableMap("PCM Write Position", "int", () => $"{_emulator.VeraAudio.PcmBufferWrite}", () => _emulator.VeraAudio.PcmBufferWrite));
+
+        scope.AddVariable(
+            Register(
+                new VariableChildren("PSG", () => "",
+                new IVariableItem[] {
+                    Register(new VariableIndex("Voices", _psgManager.GetFunction))
+                }
+            )));
+
+        _psgManager.Register(this);
 
         scope = GetNewScope("Kernal");
 

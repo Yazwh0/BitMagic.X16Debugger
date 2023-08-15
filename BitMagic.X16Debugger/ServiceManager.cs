@@ -17,6 +17,7 @@ internal class ServiceManager
     public StackManager StackManager { get; private set; }
     public SpriteManager SpriteManager { get; private set; }
     public PaletteManager PaletteManager { get; private set; }
+    public PsgManager PsgManager { get; private set; }
     public DisassemblerManager DisassemblerManager { get; private set; }
     public ExpressionManager ExpressionManager { get; private set; }
     public CodeGeneratorManager CodeGeneratorManager { get; private set; }
@@ -51,7 +52,8 @@ internal class ServiceManager
         StackManager = new(Emulator, IdManager, SourceMapManager, DisassemblerManager);
         SpriteManager = new(Emulator);
         PaletteManager = new(Emulator);
-        VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager);
+        PsgManager = new(Emulator);
+        VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
         ExpressionManager = new(VariableManager);
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
 

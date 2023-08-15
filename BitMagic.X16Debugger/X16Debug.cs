@@ -1,9 +1,8 @@
-﻿using BigMagic.TemplateEngine.Compiler;
+﻿//#define SHOWDAP
+
 using BitMagic.Common;
-using BitMagic.Compiler;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
-using BitMagic.TemplateEngine.X16;
 using BitMagic.X16Debugger.CustomMessage;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
@@ -57,12 +56,11 @@ public class X16Debug : DebugAdapterBase
 
         InitializeProtocolClient(stdIn, stdOut);
 
-        if (false)
-        {
-            Protocol.RequestReceived += Protocol_RequestReceived;
-            Protocol.RequestCompleted += Protocol_RequestCompleted;
-            Protocol.LogMessage += Protocol_LogMessage;
-        }
+        #if SHOWDAP
+        Protocol.RequestReceived += Protocol_RequestReceived;
+        Protocol.RequestCompleted += Protocol_RequestCompleted;
+        Protocol.LogMessage += Protocol_LogMessage;
+        #endif
 
         Protocol.RegisterRequestType<PaletteRequest, PaletteRequestArguments, PaletteRequestResponse>(delegate (IRequestResponder<PaletteRequestArguments, PaletteRequestResponse> r)
         {
@@ -78,7 +76,6 @@ public class X16Debug : DebugAdapterBase
         Console.WriteLine(JsonConvert.SerializeObject(e));
         Console.ResetColor();
     }
-
 
     private void Protocol_RequestCompleted(object? sender, RequestCompletedEventArgs e)
     {
