@@ -136,6 +136,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
+        var stopOnEntry = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
 
         if (!File.Exists(toCompile))
         {
@@ -482,7 +483,7 @@ public class X16Debug : DebugAdapterBase
             throw new ProtocolException(e.Message);
         }
 
-        _emulator.Stepping = true; // arguments.ConfigurationProperties.Contains()
+        _emulator.Stepping = stopOnEntry;
         _emulator.Control = Control.Paused; // wait for main window
         _emulator.FrameControl = FrameControl.Synced;
 
