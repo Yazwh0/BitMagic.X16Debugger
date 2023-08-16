@@ -31,7 +31,7 @@ internal class BitmagicBuilder
 
         if (!string.IsNullOrWhiteSpace(content))
         {
-            var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
+            var templateResult = engine.ProcessFile(content, "main.dll", debugProject.Source).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm";

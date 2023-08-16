@@ -1,6 +1,8 @@
-﻿#define SHOWDAP
+﻿//#define SHOWDAP
 
+using BigMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
+using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
 using BitMagic.Compiler.Extensions;
 using BitMagic.Decompiler;
@@ -13,6 +15,8 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
+using System.Diagnostics;
+using System.IO;
 using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 
@@ -471,8 +475,19 @@ public class X16Debug : DebugAdapterBase
         {
             Logger.LogError($"ERROR: {e.Message}");
 
-            //if (!string.IsNullOrWhiteSpace(e.ErrorDetail))
-            //    Logger.LogError(e.ErrorDetail);
+            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
+
+            return new LaunchResponse();
+        }
+        catch (TemplateCompilationException e)
+        {
+            Logger.LogLine(""); // ensure there is a new line
+            foreach (var error in e.Errors)
+            {
+                var path = e.Filename != null ? Path.GetRelativePath(workspaceFolder, e.Filename) : "";
+                var source = new ProjectTextFile(e.Filename);
+                Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
+            }
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 

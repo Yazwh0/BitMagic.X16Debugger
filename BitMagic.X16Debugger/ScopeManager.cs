@@ -1,6 +1,5 @@
 ﻿using BitMagic.Common;
 using BitMagic.X16Emulator;
-using DiscUtils.Streams;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 namespace BitMagic.X16Debugger;
