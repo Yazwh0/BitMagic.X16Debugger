@@ -508,7 +508,17 @@ public class X16Debug : DebugAdapterBase
         _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
-        _windowThread = new SysThread(() => EmulatorWindow.Run(_emulator));
+        _windowThread = new SysThread(() => {
+            try
+            {
+                EmulatorWindow.Run(_emulator);
+            }
+            catch (Exception e)
+            {
+                Logger.LogError(e.Message);
+                throw new ProtocolException(e.Message);
+            }
+        });
         _windowThread.Name = "Debugger Window";
         _windowThread.Start();
 

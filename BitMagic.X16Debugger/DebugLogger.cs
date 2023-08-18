@@ -23,16 +23,15 @@ public class DebugLogger : IEmulatorLogger
         _line.Clear();
     }
 
-    public void Log(string message)
-    {
-        _line.Append(message);
-    }
+    public void Log(string message) => _line.Append(message);
 
-    public void LogError(string message)
-    {
-        _adaptor.Protocol.SendEvent(new OutputEvent() { Output = message + Environment.NewLine, Severity = OutputEvent.SeverityValue.Error, Category = OutputEvent.CategoryValue.Stdout });
-    }
-
+    public void LogError(string message) =>    
+        _adaptor.Protocol.SendEvent(new OutputEvent() {
+            Output = message + Environment.NewLine,
+            Severity = OutputEvent.SeverityValue.Error,
+            Category = OutputEvent.CategoryValue.Stderr
+        });
+    
     public void LogError(string message, ISourceFile source, int lineNumber) =>
         _adaptor.Protocol.SendEvent(new OutputEvent()
         {
