@@ -130,8 +130,8 @@ internal class DisassemblerManager
             var additionalSymbols = new Dictionary<int, string>
             {
                 { 0x100, "stackstart" },
-                { 0x200, "stackend" },
-                { _emulator.Pc, "_pc" }
+                { 0x200, "stackend" }
+                //{ _emulator.Pc, "_pc" }
             };
 
             var item = decompileReturn;
