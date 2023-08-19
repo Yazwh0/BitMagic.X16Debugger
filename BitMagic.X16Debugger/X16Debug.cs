@@ -835,6 +835,10 @@ public class X16Debug : DebugAdapterBase
 
                     _emulator.Stepping = true;
                     break;
+                case Emulator.EmulatorResult.UnknownOpCode:
+                    this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Unknown OpCode hit", 0, null, true));
+                    _emulator.Stepping = true;
+                    break;
                 default:
                     Logger.LogLine($"Stopping. Result : {returnCode}");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
