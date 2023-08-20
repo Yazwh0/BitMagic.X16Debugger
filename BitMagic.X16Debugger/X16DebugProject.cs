@@ -124,24 +124,31 @@ public class SymbolsFile
     /// <summary>
     /// File name.
     /// </summary>
-    [JsonProperty("name", DefaultValueHandling = DefaultValueHandling.Ignore, Required = Required.Always)]
-    public string Name { get; set; } = "";
+    [JsonProperty("symbols", DefaultValueHandling = DefaultValueHandling.Ignore, Required = Required.Always)]
+    public string Symbols { get; set; } = "";
 
     /// <summary>
-    /// ROM bank that the symbols are for. Omit or not a rombank file. Any symbols in the ROM area will be discarded.
+    /// ROM bank that the symbols are for. Omit if not a rombank file. Any symbols in the ROM area will be discarded.
     /// </summary>
     [JsonProperty("romBank", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public int? RomBank { get; set; }
+    public int? RomBank { get; set; } = null;
 
     /// <summary>
-    /// RAM bank that the symbols are for. Omit for not a rambank file. Any symbols in the RAM area will be discarded.
+    /// RAM bank that the symbols are for. Omit if not a rambank file. Any symbols in the RAM area will be discarded.
     /// </summary>
     [JsonProperty("ramBank", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public int? RamBank { get; set; }
+    public int? RamBank { get; set; } = null;
+
+    /// <summary>
+    /// X16 Filename that the symbols are for. Omit if not a X16 binary.
+    /// </summary>
+    [JsonProperty("filename", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public string Filename { get; set; } = "";
 
     /// <summary>
     /// Range of memory that is a jump table. Used to create extra symbols.
     /// </summary>
+    [JsonProperty("rangeDefinitions", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public RangeDefinition[] RangeDefinitions { get; set; } = Array.Empty<RangeDefinition>();
 }
 

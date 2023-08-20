@@ -140,10 +140,10 @@ internal class SourceMapManager
         const int addressLocation = 1;
         const int symbolLocation = 2;
 
-        if (!File.Exists(file.Name))
-            throw new Exception($"File not found '{file.Name}'");
+        if (!File.Exists(file.Symbols))
+            throw new Exception($"File not found '{file.Symbols}'");
 
-        var contents = File.ReadAllLines(file.Name);
+        var contents = File.ReadAllLines(file.Symbols);
 
         foreach (var line in contents)
         {

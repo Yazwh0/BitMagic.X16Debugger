@@ -32,11 +32,14 @@ internal class DebugableFileManager
         }
     }
 
-    public void AddFilesToSdCard(SdCard sdCard)
+    public void AddBitMagicFilesToSdCard(SdCard sdCard)
     {
         foreach (var file in Files.Values)
         {
-            sdCard.AddCompiledFile(file.Filename, file.Data);
+            if (file is not BitMagicPrgFile bmPrg)
+                continue;
+
+            sdCard.AddCompiledFile(bmPrg.Filename, bmPrg.Data);
         }
     }
 

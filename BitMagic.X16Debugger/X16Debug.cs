@@ -251,7 +251,7 @@ public class X16Debug : DebugAdapterBase
         {
             try
             {
-                Logger.Log($"Loading Symbols {symbols.Name}... ");
+                Logger.Log($"Loading Symbols {symbols.Symbols}... ");
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
                 _serviceManager.SourceMapManager.LoadSymbols(symbols);
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
@@ -412,7 +412,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
                 }
 
-                _serviceManager.DebugableFileManager.AddFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
+                _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
 
                 if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
                 {
