@@ -7,5 +7,10 @@ internal interface IPrgSourceFile
 {
     IPrgFile Parent { get; }
     string Filename { get; }
-    public List<(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> Breakpoints { get; }
+    public IEnumerable<Breakpoint> Breakpoints { get; }
+}
+
+internal interface IBitMagicPrgSourceFile : IPrgSourceFile
+{
+    public IEnumerable<(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> SourceBreakpoints { get; }
 }

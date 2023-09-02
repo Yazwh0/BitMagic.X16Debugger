@@ -40,8 +40,11 @@ internal class BitMagicPrgFile : IPrgFile
         sourceMapManager.ConstructSourceMap(Result);
         foreach(var source in SourceFiles.Where(i => i.Breakpoints.Any()))
         {
-            breakpointManager.SetBitmagicBreakpoints(source);
-            toReturn.AddRange(source.Breakpoints.Select(i => i.Breakpoint));
+            if (source is not IBitMagicPrgSourceFile bmSource)
+                continue;
+
+            breakpointManager.SetBitmagicBreakpoints(bmSource);
+            toReturn.AddRange(bmSource.Breakpoints);
         }
         Loaded = true;
         return toReturn;

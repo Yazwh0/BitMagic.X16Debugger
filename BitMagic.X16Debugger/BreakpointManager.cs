@@ -108,7 +108,7 @@ internal class BreakpointManager
     }
 
     // Called when a debugable file is loaded
-    public void SetBitmagicBreakpoints(IPrgSourceFile sourceFile)
+    public void SetBitmagicBreakpoints(IBitMagicPrgSourceFile sourceFile)
     {
         if (_bitMagicBreakpoints.ContainsKey(sourceFile.Filename))
         {
@@ -140,7 +140,7 @@ internal class BreakpointManager
 
         var bitMagicBreakpoints = _bitMagicBreakpoints[sourceFile.Filename];
         // Add breakpoints
-        foreach (var bps in sourceFile.Breakpoints)
+        foreach (var bps in sourceFile.SourceBreakpoints)
         {
             // get id of generated file
             var template = _codeGeneratorManager.Get(sourceFile.Filename);
@@ -196,24 +196,23 @@ internal class BreakpointManager
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
         // There are two types of breakpoint, those on BitMagic code, and those on Rom\Ram. They have to be handled slightly differently.
-
         var debugableFile = _debugableFileManager.GetFileFromSource(arguments.Source.Path);
 
-        if (debugableFile != null)
+        if (debugableFile is BitMagicPrgSourceFile bmDebugableFile)
         {
-            debugableFile.Breakpoints.Clear();
-            debugableFile.Breakpoints.AddRange(
+            bmDebugableFile.SourceBreakpoints.Clear();
+            bmDebugableFile.SourceBreakpoints.AddRange(
                 arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
 
-            if (!debugableFile.Parent.Loaded)
+            if (!bmDebugableFile.Parent.Loaded)
             {
                 // need to respond that the breakpoints are loaded, but not set
-                return new SetBreakpointsResponse(debugableFile.Breakpoints.Select(i => i.Breakpoint).ToList());
+                return new SetBreakpointsResponse(bmDebugableFile.Breakpoints.ToList());
             }
 
-            SetBitmagicBreakpoints(debugableFile);
+            SetBitmagicBreakpoints(bmDebugableFile);
 
-            return new SetBreakpointsResponse(debugableFile.Breakpoints.Select(i => i.Breakpoint).ToList());
+            return new SetBreakpointsResponse(bmDebugableFile.Breakpoints.ToList());
         }
 
         // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
