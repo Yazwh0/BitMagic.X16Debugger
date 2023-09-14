@@ -21,7 +21,7 @@ internal class BitMagicPrgFile : IPrgFile
     private CompileResult Result { get; }
     public bool Loaded { get; private set; }
     IEnumerable<IPrgSourceFile> IPrgFile.SourceFiles => SourceFiles;
-    public List<PrgSourceFile> SourceFiles { get; } = new();
+    public List<IPrgSourceFile> SourceFiles { get; } = new();
 
     public BitMagicPrgFile(string filename, byte[] data, bool isMain, CompileResult result)
     {
@@ -29,7 +29,7 @@ internal class BitMagicPrgFile : IPrgFile
         Data = data;
         IsMain = isMain;
         Result = result;
-        SourceFiles.Add(new PrgSourceFile((result.Project.Code.Parent ?? result.Project.Code).Path, this));
+        SourceFiles.Add(new BitMagicPrgSourceFile((result.Project.Code.Parent ?? result.Project.Code).Path, this));
     }
 
     public List<Breakpoint> LoadDebuggerInfo(int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager)

@@ -23,6 +23,11 @@ internal class BitmagicBuilder
         var project = new Project();
         _logger.Log($"Compiling {debugProject.Source} ");
 
+        //if (!string.IsNullOrWhiteSpace(debugProject.SourcePrg))
+        //{
+        //    project.OutputFile.Filename = debugProject.SourcePrg;
+        //}
+
         project.Code = new ProjectTextFile(debugProject.Source);
         project.Code.Generate();
 
