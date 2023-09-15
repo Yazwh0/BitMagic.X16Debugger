@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Reflection.Metadata.Ecma335;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
@@ -195,104 +196,115 @@ internal class BreakpointManager
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
+        var toReturn = new SetBreakpointsResponse();
+
         // There are two types of breakpoint, those on BitMagic code, and those on Rom\Ram. They have to be handled slightly differently.
-        var debugableFile = _debugableFileManager.GetFileFromSource(arguments.Source.Path);
+        var debugableFiles = _debugableFileManager.GetFileFromSource(arguments.Source.Path);
 
-        if (debugableFile is BitMagicPrgSourceFile bmDebugableFile)
+        foreach (var debugableFile in debugableFiles)
         {
-            bmDebugableFile.SourceBreakpoints.Clear();
-            bmDebugableFile.SourceBreakpoints.AddRange(
-                arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
 
-            if (!bmDebugableFile.Parent.Loaded)
+            if (debugableFile is BitMagicPrgSourceFile bmDebugableFile)
             {
-                // need to respond that the breakpoints are loaded, but not set
-                return new SetBreakpointsResponse(bmDebugableFile.Breakpoints.ToList());
+                bmDebugableFile.SourceBreakpoints.Clear();
+                bmDebugableFile.SourceBreakpoints.AddRange(
+                    arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
+
+                if (!bmDebugableFile.Parent.Loaded)
+                {
+                    // need to respond that the breakpoints are loaded, but not set
+                    toReturn.Breakpoints.AddRange(bmDebugableFile.Breakpoints);
+                    continue;
+                }
+
+                SetBitmagicBreakpoints(bmDebugableFile);
+
+                toReturn.Breakpoints.AddRange(bmDebugableFile.Breakpoints);
+                continue;
             }
 
-            SetBitmagicBreakpoints(bmDebugableFile);
+            // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
+            var sourceId = arguments.Source.SourceReference ?? 0;
+            var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
 
-            return new SetBreakpointsResponse(bmDebugableFile.Breakpoints.ToList());
-        }
+            if (decompiledFile != null && decompiledFile.Path != arguments.Source.Path)
+                decompiledFile = null;
 
-        // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
-        var sourceId = arguments.Source.SourceReference ?? 0;
-        var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
-
-        if (decompiledFile != null && decompiledFile.Path != arguments.Source.Path)
-            decompiledFile = null;
-
-        // if the id doesn't match, then check the dissasembly cache
-        if (decompiledFile == null && _disassemblerManager.DecompiledData.ContainsKey(arguments.Source.Path))
-        {
-            decompiledFile = _disassemblerManager.DecompiledData[arguments.Source.Path];
-            sourceId = decompiledFile.ReferenceId ?? 0;
-        }
-
-        if (_memoryBreakpoints.ContainsKey(sourceId))
-        {
-            foreach (var breakpoint in _memoryBreakpoints[sourceId])
+            // if the id doesn't match, then check the dissasembly cache
+            if (decompiledFile == null && _disassemblerManager.DecompiledData.ContainsKey(arguments.Source.Path))
             {
-                // Need to ensure system breakpoints are set
-                var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x80 : (byte)0;
-
-                var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
-
-                _emulator.Breakpoints[offset] = breakpointValue;
-                if (secondOffset != 0)
-                    _emulator.Breakpoints[secondOffset] = breakpointValue;
-
-                var thisAddress = secondOffset == 0 ? offset : secondOffset;
-                if (_breakpoints.ContainsKey(thisAddress))
-                    _breakpoints.Remove(thisAddress);
+                decompiledFile = _disassemblerManager.DecompiledData[arguments.Source.Path];
+                sourceId = decompiledFile.ReferenceId ?? 0;
             }
 
-            _memoryBreakpoints[sourceId].Clear();
-        }
-        else
-        {
-            _memoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
-        }
+            if (_memoryBreakpoints.ContainsKey(sourceId))
+            {
+                foreach (var breakpoint in _memoryBreakpoints[sourceId])
+                {
+                    // Need to ensure system breakpoints are set
+                    var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
+                    var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x80 : (byte)0;
 
-        if (decompiledFile == null)
-            return new SetBreakpointsResponse(new List<Breakpoint> { });
+                    var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
 
-        foreach (var sourceBreakpoint in arguments.Breakpoints)
-        {
-            if (!decompiledFile.Items.ContainsKey(sourceBreakpoint.Line))
+                    _emulator.Breakpoints[offset] = breakpointValue;
+                    if (secondOffset != 0)
+                        _emulator.Breakpoints[secondOffset] = breakpointValue;
+
+                    var thisAddress = secondOffset == 0 ? offset : secondOffset;
+                    if (_breakpoints.ContainsKey(thisAddress))
+                        _breakpoints.Remove(thisAddress);
+                }
+
+                _memoryBreakpoints[sourceId].Clear();
+            }
+            else
+            {
+                _memoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
+            }
+
+            if (decompiledFile == null)
                 continue;
 
-            var thisLine = decompiledFile.Items[sourceBreakpoint.Line];
+            foreach (var sourceBreakpoint in arguments.Breakpoints)
+            {
+                if (!decompiledFile.Items.ContainsKey(sourceBreakpoint.Line))
+                    continue;
 
-            var breakpoint = new Breakpoint();
-            breakpoint.Source = decompiledFile.AsSource();
-            breakpoint.Line = sourceBreakpoint.Line;
-            breakpoint.Verified = true;
-            breakpoint.Id = _idManager.GetId();
+                var thisLine = decompiledFile.Items[sourceBreakpoint.Line];
 
-            var debuggerAddress = AddressFunctions.GetDebuggerAddress(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank);
-            var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)1;
+                var breakpoint = new Breakpoint();
+                breakpoint.Source = decompiledFile.AsSource();
+                breakpoint.Line = sourceBreakpoint.Line;
+                breakpoint.Verified = true;
+                breakpoint.Id = _idManager.GetId();
 
-            var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
-            _memoryBreakpoints[sourceId].Add(toAdd);
+                var debuggerAddress = AddressFunctions.GetDebuggerAddress(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank);
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)1;
 
-            var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
-            var currentBank = thisLine.Address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
-            var (address, secondAddress) = AddressFunctions.GetMemoryLocations(bank, thisLine.Address);
+                var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
+                _memoryBreakpoints[sourceId].Add(toAdd);
 
-            // only set local breakpoint if we're in the right bank
-            if (address < 0xa000 || bank == currentBank)
-                _emulator.Breakpoints[address] = breakpointValue;
+                var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
+                var currentBank = thisLine.Address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+                var (address, secondAddress) = AddressFunctions.GetMemoryLocations(bank, thisLine.Address);
 
-            if (secondAddress != 0)
-                _emulator.Breakpoints[secondAddress] = breakpointValue;
+                // only set local breakpoint if we're in the right bank
+                if (address < 0xa000 || bank == currentBank)
+                    _emulator.Breakpoints[address] = breakpointValue;
 
-            var thisAddress = secondAddress == 0 ? address : secondAddress;
-            if (!_breakpoints.ContainsKey(thisAddress))
-                _breakpoints.Add(thisAddress, (breakpoint, sourceBreakpoint));
+                if (secondAddress != 0)
+                    _emulator.Breakpoints[secondAddress] = breakpointValue;
+
+                var thisAddress = secondAddress == 0 ? address : secondAddress;
+                if (!_breakpoints.ContainsKey(thisAddress))
+                    _breakpoints.Add(thisAddress, (breakpoint, sourceBreakpoint));
+            }
+
+            toReturn.Breakpoints.AddRange(_memoryBreakpoints[sourceId].Select(i => i.Breakpoint));
         }
-        return new SetBreakpointsResponse(_memoryBreakpoints[sourceId].Select(i => i.Breakpoint).ToList());
+
+        return toReturn;
     }
 
     /// <summary>

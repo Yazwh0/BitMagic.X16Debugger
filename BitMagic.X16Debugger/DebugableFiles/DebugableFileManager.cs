@@ -5,7 +5,7 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 internal class DebugableFileManager
 {
     private readonly Dictionary<string, IPrgFile> Files = new();
-    private readonly Dictionary<string, IPrgSourceFile> SourceFiles = new();
+    private readonly Dictionary<string, IList<IPrgSourceFile>> SourceFiles = new();
 
     public IPrgFile? GetFile(string filename)
     {
@@ -15,12 +15,12 @@ internal class DebugableFileManager
         return null;
     }
 
-    public IPrgSourceFile? GetFileFromSource(string filename)
+    public IList<IPrgSourceFile> GetFileFromSource(string filename)
     {
         if (SourceFiles.ContainsKey(filename))
             return SourceFiles[filename];
 
-        return null;
+        return Array.Empty<IPrgSourceFile>();
     }
 
     public void Addfile(IPrgFile file)
@@ -28,7 +28,11 @@ internal class DebugableFileManager
         Files.Add(file.Filename, file);
         foreach(var source in file.SourceFiles)
         {
-            SourceFiles.Add(FixFilename(source.Filename), source);
+            var filename = FixFilename(source.Filename);
+            if (!SourceFiles.ContainsKey(filename))
+                SourceFiles.Add(filename, new List<IPrgSourceFile> { source });
+            else
+                SourceFiles[filename].Add(source);
         }
     }
 
