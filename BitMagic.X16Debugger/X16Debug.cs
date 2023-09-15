@@ -879,7 +879,7 @@ public class X16Debug : DebugAdapterBase
             var filename = x[filenameAddress].FixedString(len);
             _setnam_value = filename;
 
-            if (string.IsNullOrWhiteSpace(_setnam_value))
+            if (string.IsNullOrWhiteSpace(_setnam_value) || _setnam_value.All(i => i == 0))
             {
                 // set first file.
                 _setnam_value = _emulator.SdCard!.FileSystem.GetFiles("").FirstOrDefault() ?? "";
