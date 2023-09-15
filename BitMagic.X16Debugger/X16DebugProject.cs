@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using BitMagic.Compiler;
+using Newtonsoft.Json;
 using System.Text;
 
 namespace BitMagic.X16Debugger;
@@ -98,6 +99,12 @@ public class X16DebugProject
     /// </summary>
     [JsonProperty("cartridge", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public string Cartridge { get; set; } = "";
+
+    /// <summary>
+    /// Display Segments
+    /// </summary>
+    [JsonProperty("compileOptions", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public CompileOptions? CompileOptions { get; set; } = null;
 }
 
 public class RtcNvram
