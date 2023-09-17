@@ -7,12 +7,45 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal class BitMagicPrgFile : IPrgFile
 {
+    /// <summary>
+    /// Create properly linked objects from the compile result.
+    /// Includes a many to many link between source and output
+    /// </summary>
+    /// <param name="result">CompileResult to parse</param>
+    /// <returns>BitMagicPrgFiles that are properly linked</returns>
     public static IEnumerable<BitMagicPrgFile> ProcessCompileResult(CompileResult result)
     {
+        List<BitMagicPrgFile> outputs = new();
+        Dictionary<string, BitMagicPrgSourceFile> sources = new();
+
+        var sourceFilename = (result.Project.Code.Parent ?? result.Project.Code).Path;
+
+        BitMagicPrgSourceFile source;
+        if (!sources.ContainsKey(sourceFilename))
+        {
+            source = new BitMagicPrgSourceFile(sourceFilename);
+            sources.Add(sourceFilename, source);
+        }
+        else
+        {
+            source = sources[sourceFilename];
+        }
+
         foreach (var file in result.Data.Values)
         {
-            yield return new BitMagicPrgFile(file.FileName.ToUpper(), file.ToArray(), file.IsMain, result);
+            var prgFile = new BitMagicPrgFile(file.FileName.ToUpper(), file.ToArray(), file.IsMain, result);
+            outputs.Add(prgFile);
+
+            prgFile.SourceFiles.Add(source);
+            source.Output.Add(prgFile);
         }
+
+        return outputs;
+
+        //foreach (var file in result.Data.Values)
+        //{
+        // //   yield return new BitMagicPrgFile(file.FileName.ToUpper(), file.ToArray(), file.IsMain, result);
+        //}
     }
 
     public string Filename { get; }
@@ -23,27 +56,35 @@ internal class BitMagicPrgFile : IPrgFile
     IEnumerable<IPrgSourceFile> IPrgFile.SourceFiles => SourceFiles;
     public List<IPrgSourceFile> SourceFiles { get; } = new();
 
-    public BitMagicPrgFile(string filename, byte[] data, bool isMain, CompileResult result)
+    internal BitMagicPrgFile(string filename, byte[] data, bool isMain, CompileResult result)
     {
         Filename = filename;
         Data = data;
         IsMain = isMain;
         Result = result;
-        SourceFiles.Add(new BitMagicPrgSourceFile((result.Project.Code.Parent ?? result.Project.Code).Path, this));
+        //SourceFiles.Add(new BitMagicPrgSourceFile((result.Project.Code.Parent ?? result.Project.Code).Path, this));
     }
 
+    /// <summary>
+    /// Load debugger info for this file
+    /// </summary>
+    /// <param name="address">Debugger address where the file is loaded</param>
+    /// <param name="hasHeader">To indicate if there is a header, so the correct length can be calculated</param>
+    /// <param name="sourceMapManager">SourceMap Manager</param>
+    /// <param name="breakpointManager">Breakpoint Manager</param>
+    /// <returns>Breakpoints to return to VsCode</returns>
     public List<Breakpoint> LoadDebuggerInfo(int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager)
     {
         // need to load debugger symbols and maps
         var toReturn = breakpointManager.ClearBreakpoints(address, Data.Length - (hasHeader ? 2 : 0)); // unload any breakpoints
 
-        sourceMapManager.ConstructSourceMap(Result);
-        foreach(var source in SourceFiles.Where(i => i.Breakpoints.Any()))
+        sourceMapManager.ConstructSourceMap(Result, Filename);
+        foreach(var source in SourceFiles)
         {
             if (source is not IBitMagicPrgSourceFile bmSource)
                 continue;
 
-            breakpointManager.SetBitmagicBreakpoints(bmSource);
+            breakpointManager.SetBitmagicBreakpoints(bmSource, Filename);
             toReturn.AddRange(bmSource.Breakpoints);
         }
         Loaded = true;

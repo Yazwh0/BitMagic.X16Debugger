@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BitMagic.X16Emulator;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +16,8 @@ internal static class AddressFunctions
             ( >= 0xa000, _, _) => ((ramBank & 0xff) << 16) + (address & 0xffff),
             _ => address
         };
+    internal static int GetDebuggerAddress(int address, Emulator emulator) => 
+        GetDebuggerAddress(address, (int)emulator.RamBankAct, (int)emulator.RomBankAct);
 
     internal static (int Address, int RamBank, int RomBank) GetAddress(int debuggerAddress) =>
         (debuggerAddress) switch
@@ -72,7 +75,18 @@ internal static class AddressFunctions
         (bank, address) switch
         {
             (_, < 0xa000) => (address, 0),
-            (_, < 0xc000) => (address, bank * 0x2000 + address - 0xa000),
+            (_, < 0xc000) => (address, 0x10000 + bank * 0x2000 + address - 0xa000),
             _ => (address, 0x210000 + (bank * 0x4000) + address - 0xc000)
         };
+
+    internal static (int address, int secondAddress) GetMemoryLocations(int debuggerAddress) =>
+        (debuggerAddress & 0xffff) switch
+        {
+            < 0xa000 => (debuggerAddress, 0),
+            < 0xc000 => (debuggerAddress & 0xffff, 0x10000 + (debuggerAddress & 0xffff) - 0xa000 + ((debuggerAddress & 0xff0000) >> 16) * 0x2000), // Ram
+            _ => (debuggerAddress & 0xffff, 0x210000 + (debuggerAddress & 0xffff) - 0xc000 + ((debuggerAddress & 0xff0000) >> 16) * 0x4000), // Rom
+        };
+
+    internal static (int address, int secondAddress) GetMemoryLocations(int address, Emulator emulator) =>
+        GetMemoryLocations(GetDebuggerAddress(address, emulator));
 }

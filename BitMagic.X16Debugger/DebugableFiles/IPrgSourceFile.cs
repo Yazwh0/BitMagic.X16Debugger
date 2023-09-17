@@ -2,10 +2,10 @@
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
-// source code that generated a second file
+// source code that generated a file
 internal interface IPrgSourceFile
 {
-    IPrgFile Parent { get; }
+    IEnumerable<IPrgFile> Output { get; }
     string Filename { get; }
     public IEnumerable<Breakpoint> Breakpoints { get; }
 }

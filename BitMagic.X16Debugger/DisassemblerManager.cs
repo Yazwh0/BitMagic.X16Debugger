@@ -172,7 +172,7 @@ internal class DisassemblerManager
                 continue;
             }
 
-            if (idx > actItems.Length)
+            if (idx >= actItems.Length)
                 break;
 
             var thisLine = actItems[idx];

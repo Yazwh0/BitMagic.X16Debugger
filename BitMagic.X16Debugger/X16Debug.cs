@@ -4,7 +4,6 @@ using BigMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
-using BitMagic.Compiler.Extensions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
 using BitMagic.X16Debugger.CustomMessage;
@@ -15,8 +14,6 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
-using System.Diagnostics;
-using System.IO;
 using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 
@@ -921,7 +918,7 @@ public class X16Debug : DebugAdapterBase
             }
 
             var loadAddress = 0;
-            if (_setlfs_secondaryaddress == 0)
+            if (_setlfs_secondaryaddress == 0 || _setlfs_secondaryaddress == 2)
             {
                 loadAddress = _emulator.X + (_emulator.Y << 8);
                 Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (parameters)");
@@ -936,7 +933,10 @@ public class X16Debug : DebugAdapterBase
             if (debugableFile != null)
             {
                 Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
-                var breakpoints = debugableFile.LoadDebuggerInfo(loadAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+
+                var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
+
+                var breakpoints = debugableFile.LoadDebuggerInfo(actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)

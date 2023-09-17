@@ -1,5 +1,7 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.X16Emulator;
+using System.Diagnostics;
 
 namespace BitMagic.X16Debugger;
 
@@ -7,17 +9,19 @@ internal class SourceMapManager
 {
     // Address to line lookup
     public Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
-    // filename to codemap
+    // source filename to codemap
     public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
+    // prg file to codemap
+    public Dictionary<string, HashSet<CodeMap>> OutputToMemoryMap { get; } = new();
 
     // packed debugger address
     public Dictionary<int, string> Symbols { get; } = new();
 
-    private readonly IdManager _idManager;
+    private readonly Emulator _emulator;
 
-    public SourceMapManager(IdManager idManager)
+    public SourceMapManager(Emulator emulator)
     {
-        _idManager = idManager;
+        _emulator = emulator;
     }
 
     public SourceMapLine? GetSourceMap(int debuggerAddress)
@@ -51,6 +55,14 @@ internal class SourceMapManager
         return SourceToMemoryMap[filePath];
     }
 
+    public HashSet<CodeMap>? GetOutputFileMap(string outputFilename)
+    {
+        if (!OutputToMemoryMap.ContainsKey(outputFilename))
+            return null;
+
+        return OutputToMemoryMap[outputFilename];
+    }
+
     public string GetSymbol(int machineAddress)
     {
         if (!Symbols.ContainsKey(machineAddress))
@@ -66,16 +78,20 @@ internal class SourceMapManager
         SourceToMemoryMap.Clear();
     }
 
-    // Construct the source map for the debugger.
-    public void ConstructSourceMap(CompileResult result)
+    /// <summary>
+    /// Construct the source map for a given file and add it to the current debugging state
+    /// </summary>
+    /// <param name="result">Compile result for the BM prg file</param>
+    /// <param name="outputFilename">Filename to be constructed</param>
+    public void ConstructSourceMap(CompileResult result, string outputFilename)
     {
         var state = result.State;
 
-        foreach (var segment in state.Segments.Values)
+        foreach (var segment in state.Segments.Values.Where(i => string.Equals(i.Filename, outputFilename, StringComparison.InvariantCultureIgnoreCase)))
         {
             foreach (var defaultProc in segment.DefaultProcedure.Values)
             {
-                MapProc(defaultProc);
+                MapProc(defaultProc, outputFilename);
             }
         }
 
@@ -86,36 +102,54 @@ internal class SourceMapManager
         }
     }
 
-    // todo: this doesn't handle banks
-    private void MapProc(Procedure proc)
+    private void MapProc(Procedure proc, string outputFilename)
     {
+        HashSet<CodeMap> outputMap;
+        if (!OutputToMemoryMap.ContainsKey(outputFilename))
+        {
+            outputMap = new HashSet<CodeMap>();
+            OutputToMemoryMap.Add(outputFilename, outputMap);
+        }
+        else
+        {
+            outputMap = OutputToMemoryMap[outputFilename];
+        }
+
         foreach (var line in proc.Data)
         {
             var toAdd = new SourceMapLine(line, proc);
 
-            if (MemoryToSourceMap.ContainsKey(toAdd.DebuggerAddress))
-                throw new Exception("Could add line, as it was already in the hashset.");
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(toAdd.Address, _emulator);
 
-            MemoryToSourceMap.Add(toAdd.DebuggerAddress, toAdd);
+            if (MemoryToSourceMap.ContainsKey(debuggerAddress))
+                MemoryToSourceMap.Remove(debuggerAddress);      // we're overwriting something in memory
+                //throw new Exception("Couldn't add line, as it was already in the hashset.");
 
+            MemoryToSourceMap.Add(debuggerAddress, toAdd);
+
+            // Add to source filemap
             HashSet<CodeMap> lineMap;
-            var fileName = PathFunctions.FixPath(line.Source.Name);
-            if (!SourceToMemoryMap.ContainsKey(fileName))
+            var sourceFilename = PathFunctions.FixPath(line.Source.Name);
+            if (!SourceToMemoryMap.ContainsKey(sourceFilename))
             {
                 lineMap = new HashSet<CodeMap>();
-                SourceToMemoryMap.Add(fileName, lineMap);
+                SourceToMemoryMap.Add(sourceFilename, lineMap);
             }
             else
             {
-                lineMap = SourceToMemoryMap[fileName];
+                lineMap = SourceToMemoryMap[sourceFilename];
             }
 
-            lineMap.Add(new CodeMap(line.Source.LineNumber, line.Address, 0, line));
+            var codemap = new CodeMap(line.Source.LineNumber, debuggerAddress, line);
+            lineMap.Add(codemap);
+
+            // Add to output filemap
+            outputMap.Add(codemap);
         }
 
         foreach (var p in proc.Procedures)
         {
-            MapProc(p);
+            MapProc(p, outputFilename);
         }
     }
 
@@ -198,18 +232,20 @@ internal class SourceMapManager
     }
 }
 
+[DebuggerDisplay("{LineNumber} -> {AddressDisplay}")]
 public class CodeMap
 {
+    private string AddressDisplay => $"0x{Address:X6}";
     public int LineNumber { get; }
     public int Address { get; }
-    public int Bank { get; }
+    //public int Bank { get; }
     public IOutputData Line { get; }
 
-    public CodeMap(int lineNumber, int address, int bank, IOutputData line)
+    public CodeMap(int lineNumber, int address, IOutputData line)
     {
         LineNumber = lineNumber;
         Address = address;
-        Bank = bank;
+        //Bank = bank;
         Line = line;
     }
 
@@ -232,7 +268,7 @@ public class SourceMapLine
     public Procedure Procedure { get; }
     public IOutputData Line { get; }
 
-    public int DebuggerAddress => Line.Address;
+    public int Address => Line.Address;
     public SourceMapLine(IOutputData line, Procedure proc)
     {
         Line = line;

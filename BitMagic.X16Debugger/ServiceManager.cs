@@ -38,12 +38,13 @@ internal class ServiceManager
     public Emulator Reset()
     {
         Emulator = _getNewEmulatorInstance();
+        Emulator.Brk_Causes_Stop = true; // todo: make this an option??
 
         IdManager = new();
 
         DebugableFileManager = new();
 
-        SourceMapManager = new(IdManager);
+        SourceMapManager = new(Emulator);
         ScopeManager = new(IdManager);
 
         CodeGeneratorManager = new(IdManager);
