@@ -118,6 +118,7 @@ internal class VariableManager
 
         scope.Clear();
 
+        var timing = new List<ISnapshotChange>();
         var register = new List<ISnapshotChange>();
         var flags = new List<ISnapshotChange>();
         var ram = new List<ISnapshotChange>();
@@ -147,9 +148,19 @@ internal class VariableManager
                     MemoryAreas.Vram => vram,
                     _ => throw new Exception($"Unknwn area {m.MemoryArea}"),
                 },
+                ValueChange v => v.Name switch
+                {
+                    "Clock" => timing,
+                    _ => throw new Exception($"Unknown ValueChange {v.Name}")
+                },
                 _ => throw new Exception("Unknown change")
             }).Add(change);
         }
+
+        // add cpu clock as top level
+        var clock = timing.FirstOrDefault() as ValueChange;
+        if (clock != null)
+            scope.AddVariable(new VariableMap("Clock", "int", () => (clock.NewValue - clock.OriginalValue).ToString()));
 
         AddSnapshot("Registers", scope, register);
         AddSnapshot("Flags", scope, flags);
