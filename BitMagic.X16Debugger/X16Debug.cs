@@ -429,13 +429,10 @@ public class X16Debug : DebugAdapterBase
             var sourceFile = e.Line.Source.SourceFile;
             var lineNumber = e.Line.Source.LineNumber;
 
-            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr)
+            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr && pr != null)
             {
-                if (pr != null)
-                {
-                    lineNumber = pr.Source.Map[lineNumber - 1];
-                    sourceFile = pr.Parent;
-                }
+                sourceFile = new ProjectTextFile(pr.Source.Map[lineNumber - 1].SourceFilename);
+                lineNumber = pr.Source.Map[lineNumber - 1].Line;
             }
 
             var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
@@ -451,13 +448,10 @@ public class X16Debug : DebugAdapterBase
             var sourceFile = e.SourceFile.SourceFile;
             var lineNumber = e.SourceFile.LineNumber;
 
-            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr)
+            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr && pr != null)
             {
-                if (pr != null)
-                {
-                    lineNumber = pr.Source.Map[lineNumber - 1];
-                    sourceFile = pr.Parent;
-                }
+                sourceFile = new ProjectTextFile(pr.Source.Map[lineNumber - 1].SourceFilename);
+                lineNumber = pr.Source.Map[lineNumber - 1].Line;
             }
 
             var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
@@ -485,6 +479,14 @@ public class X16Debug : DebugAdapterBase
                 var source = new ProjectTextFile(e.Filename);
                 Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
             }
+
+            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
+
+            return new LaunchResponse();
+        }
+        catch (TemplateException e)
+        {
+            Logger.LogError($"ERROR: {e.Message}");
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 

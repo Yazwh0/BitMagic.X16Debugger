@@ -1,18 +1,9 @@
 ﻿using BitMagic.Common;
-using BitMagic.Cpu;
 using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Emulator;
-using Microsoft.CodeAnalysis;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Reflection.Metadata.Ecma335;
-using System.Security.AccessControl;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BitMagic.X16Debugger;
 
@@ -108,7 +99,7 @@ internal class BreakpointManager
     }
 
     // Called when a debugable file is loaded
-    public void SetBitmagicBreakpoints(IBitMagicPrgSourceFile sourceFile, string prgFilename)
+    public void SetBitmagicBreakpoints(IBitMagicPrgSourceFile sourceFile, string prgFilename, string sourceFilename)
     {
         var prgFile = sourceFile.Output.FirstOrDefault(i => string.Equals(i.Filename, prgFilename, StringComparison.InvariantCultureIgnoreCase));
 
@@ -144,75 +135,78 @@ internal class BreakpointManager
         //    _bitMagicBreakpoints.Add(sourceFile.Filename, new List<BitMagicBreakpointMap>());
         //}
 
-        if (!_bitMagicBreakpoints.ContainsKey(sourceFile.Filename))
-        {
-            _bitMagicBreakpoints.Add(sourceFile.Filename, new List<BitMagicBreakpointMap>());
-        }
+        //foreach (var sourceFilename in sourceFile.GetFixedSourceFilenames())
+        //{
+            if (!_bitMagicBreakpoints.ContainsKey(sourceFilename))
+                _bitMagicBreakpoints.Add(sourceFilename, new List<BitMagicBreakpointMap>());
 
-        var bitMagicBreakpoints = _bitMagicBreakpoints[sourceFile.Filename];
-        bitMagicBreakpoints.Clear();
+            var bitMagicBreakpoints = _bitMagicBreakpoints[sourceFilename];
+            bitMagicBreakpoints.Clear();
 
-        // Add breakpoints to the source file
-        foreach (var bps in sourceFile.SourceBreakpoints)
-        {
-          
-            // get id of generated file
-            var template = _codeGeneratorManager.Get(sourceFile.Filename);
+            if (!sourceFile.SourceBreakpoints.ContainsKey(sourceFilename))
+                return;
 
-            // get the map to the generated file.
-            var filemap = _sourceMapManager.GetSourceFileMap(template.Template.Name);
-            if (filemap == null) // we dont recognise the file
-                continue;
-
-            var prgMap = _sourceMapManager.GetOutputFileMap(prgFilename);
-            if (prgMap == null)
-                continue;
-
-            // now we need to find all the instances in filemap were the line matches in the template.
-            // as one line in the template can produce multiple items in the filemap.
-            var map = template.Template.Source.Map;
-            for (var i = 0; i < map.Length; i++)
+            // Add breakpoints to the source file
+            foreach (var bps in sourceFile.SourceBreakpoints[sourceFilename])
             {
-                if (map[i] == bps.SourceBreakpoint.Line)
+                // get id of generated file
+                var template = _codeGeneratorManager.Get(sourceFile.Filename);
+
+                // get the map to the generated file.
+                var filemap = _sourceMapManager.GetSourceFileMap(template.Template.Name);
+                if (filemap == null) // we dont recognise the file
+                    continue;
+
+                var prgMap = _sourceMapManager.GetOutputFileMap(prgFilename);
+                if (prgMap == null)
+                    continue;
+
+                // now we need to find all the instances in filemap were the line matches in the template.
+                // as one line in the template can produce multiple items in the filemap.
+                var map = template.Template.Source.Map;
+                for (var i = 0; i < map.Length; i++)
                 {
-                    // add breakpoint.
-                    var lineNumber = i + 1;
-                    var source = prgMap.FirstOrDefault(i => i.LineNumber == lineNumber);
+                    if (map[i].Line == bps.SourceBreakpoint.Line)
+                    {
+                        // add breakpoint.
+                        var lineNumber = i + 1;
+                        var source = prgMap.FirstOrDefault(i => i.LineNumber == lineNumber);
 
-                    var breakpoint = bps.Breakpoint;
+                        var breakpoint = bps.Breakpoint;
 
-                    if (source == null) // dont recognise the line
-                        continue;
+                        if (source == null) // dont recognise the line
+                            continue;
 
-                    breakpoint.Verified = true;
+                        breakpoint.Verified = true;
 
-                    // set system bit
-                    var breakpointValue = _debuggerBreakpoints.Contains(source.Address) ? (byte)0x81 : (byte)0x01;
+                        // set system bit
+                        var breakpointValue = _debuggerBreakpoints.Contains(source.Address) ? (byte)0x81 : (byte)0x01;
 
 
-                    //var x = bitMagicBreakpoints.FirstOrDefault(i => i.Source == source.Line);
+                        //var x = bitMagicBreakpoints.FirstOrDefault(i => i.Source == source.Line);
 
-                    var toAdd = new BitMagicBreakpointMap(breakpoint, source!.Line);
+                        var toAdd = new BitMagicBreakpointMap(breakpoint, source!.Line);
 
-                    bitMagicBreakpoints.Add(toAdd);
+                        bitMagicBreakpoints.Add(toAdd);
 
-                    var (_, bank) = AddressFunctions.GetAddressBank(source.Address);
+                        var (_, bank) = AddressFunctions.GetAddressBank(source.Address);
 
-                    var (address, secondAddress) = AddressFunctions.GetMemoryLocations(source.Address);
-                    var currentBank = address >= 0xc000 ? _emulator.RomBankAct : _emulator.RamBankAct;
+                        var (address, secondAddress) = AddressFunctions.GetMemoryLocations(source.Address);
+                        var currentBank = address >= 0xc000 ? _emulator.RomBankAct : _emulator.RamBankAct;
 
-                    if (address < 0xa000 || bank == currentBank)
-                        _emulator.Breakpoints[address] = breakpointValue;
+                        if (address < 0xa000 || bank == currentBank)
+                            _emulator.Breakpoints[address] = breakpointValue;
 
-                    if (secondAddress != 0)
-                        _emulator.Breakpoints[secondAddress] = breakpointValue;
+                        if (secondAddress != 0)
+                            _emulator.Breakpoints[secondAddress] = breakpointValue;
 
-                    //var thisAddress = secondAddress == 0 ? address : secondAddress;
-                    if (!_breakpoints.ContainsKey(source.Address))
-                        _breakpoints.Add(source.Address, bps);
+                        //var thisAddress = secondAddress == 0 ? address : secondAddress;
+                        if (!_breakpoints.ContainsKey(source.Address))
+                            _breakpoints.Add(source.Address, bps);
+                    }
                 }
             }
-        }
+        //}
     }
 
     public SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
@@ -316,10 +310,18 @@ internal class BreakpointManager
     internal SetBreakpointsResponse HandleSetBreakpointsRequestBitMagic(SetBreakpointsArguments arguments, BitMagicPrgSourceFile debugableFile)
     {
         var toReturn = new SetBreakpointsResponse();
+        if (debugableFile.SourceBreakpoints.ContainsKey(arguments.Source.Path))
+        {
+            debugableFile.SourceBreakpoints[arguments.Source.Path].Clear();
+        }
+        else
+        {
+            debugableFile.SourceBreakpoints.Add(arguments.Source.Path, new List<(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)>());
+        }
 
-        debugableFile.SourceBreakpoints.Clear();
-        debugableFile.SourceBreakpoints.AddRange(
-                arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
+        debugableFile.SourceBreakpoints[arguments.Source.Path].AddRange(arguments.Breakpoints.Select(i => (ConvertBreakpoint(i, arguments.Source, false), i)));
+
+        //var map = _sourceMapManager.GetSourceFileMap(debugableFile.GeneratedFilename);
 
         foreach(var output in debugableFile.Output)
         {
@@ -328,21 +330,10 @@ internal class BreakpointManager
             if (codemap == null)
                 continue;
 
-            foreach(var (breakpoint, sourceBreakpoint) in debugableFile.SourceBreakpoints)
-            {
-                if (sourceBreakpoint == null || breakpoint == null)
-                    continue;
-
-                if (codemap.Any(i => i.LineNumber == sourceBreakpoint.Line))
-                {
-                    breakpoint.Verified = output.Loaded;
-                }
-            }
-
-            SetBitmagicBreakpoints(debugableFile, output.Filename);
+            SetBitmagicBreakpoints(debugableFile, output.Filename, arguments.Source.Path);
         }
 
-        toReturn.Breakpoints.AddRange(debugableFile.Breakpoints);
+        toReturn.Breakpoints.AddRange(debugableFile.Breakpoints[arguments.Source.Path]);
         return toReturn;
     }
 

@@ -33,6 +33,12 @@ internal class DebugableFileManager
             var filename = FixFilename(source.Filename);
             if (!SourceFiles.ContainsKey(filename))
                 SourceFiles.Add(filename, source);
+            
+            foreach(var referencedFilename in source.ReferencedFilenames.Select(i => FixFilename(i)))
+            {
+                if (!SourceFiles.ContainsKey(referencedFilename))
+                    SourceFiles.Add(referencedFilename, source);
+            }
 
             //if (!SourceFiles.ContainsKey(filename))
             //    SourceFiles.Add(filename, new List<IPrgSourceFile> { source });

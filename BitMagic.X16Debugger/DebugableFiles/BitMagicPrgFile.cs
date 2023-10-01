@@ -19,11 +19,15 @@ internal class BitMagicPrgFile : IPrgFile
         Dictionary<string, BitMagicPrgSourceFile> sources = new();
 
         var sourceFilename = (result.Project.Code.Parent ?? result.Project.Code).Path;
+        var generatedFilename = result.Project.Code.Path;
+
+        if (generatedFilename == sourceFilename)
+            generatedFilename = "";
 
         BitMagicPrgSourceFile source;
         if (!sources.ContainsKey(sourceFilename))
         {
-            source = new BitMagicPrgSourceFile(sourceFilename);
+            source = new BitMagicPrgSourceFile(sourceFilename, generatedFilename);
             sources.Add(sourceFilename, source);
         }
         else
@@ -38,14 +42,21 @@ internal class BitMagicPrgFile : IPrgFile
 
             prgFile.SourceFiles.Add(source);
             source.Output.Add(prgFile);
+
+            var processResult = result.Project.Code as BigMagic.TemplateEngine.Compiler.MacroAssembler.ProcessResult;
+
+            if (processResult != null)
+            {
+                source.ReferencedFilenames.AddRange(
+                    processResult.Source.Map.Select(i => i.SourceFilename)
+                                            .Where(i => i != source.Filename && !string.IsNullOrWhiteSpace(i))
+                                            .Distinct()
+                                            .Where(i => !source.ReferencedFilenames.Contains(i)));
+            }
+
         }
 
         return outputs;
-
-        //foreach (var file in result.Data.Values)
-        //{
-        // //   yield return new BitMagicPrgFile(file.FileName.ToUpper(), file.ToArray(), file.IsMain, result);
-        //}
     }
 
     public string Filename { get; }
@@ -79,14 +90,18 @@ internal class BitMagicPrgFile : IPrgFile
         var toReturn = breakpointManager.ClearBreakpoints(address, Data.Length - (hasHeader ? 2 : 0)); // unload any breakpoints
 
         sourceMapManager.ConstructSourceMap(Result, Filename);
-        foreach(var source in SourceFiles)
+        foreach (var source in SourceFiles)
         {
             if (source is not IBitMagicPrgSourceFile bmSource)
                 continue;
 
-            breakpointManager.SetBitmagicBreakpoints(bmSource, Filename);
-            toReturn.AddRange(bmSource.Breakpoints);
+            foreach (var sourceFilename in bmSource.GetFixedSourceFilenames())
+            {
+                breakpointManager.SetBitmagicBreakpoints(bmSource, Filename, sourceFilename);
+                toReturn.AddRange(bmSource.Breakpoints[sourceFilename]);
+            }
         }
+
         Loaded = true;
         return toReturn;
     }

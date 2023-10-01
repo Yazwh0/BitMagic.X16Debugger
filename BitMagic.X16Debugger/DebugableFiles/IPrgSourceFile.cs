@@ -7,10 +7,12 @@ internal interface IPrgSourceFile
 {
     IEnumerable<IPrgFile> Output { get; }
     string Filename { get; }
-    public IEnumerable<Breakpoint> Breakpoints { get; }
+    public Dictionary<string, IEnumerable<Breakpoint>> Breakpoints { get; }
+    public IEnumerable<string> ReferencedFilenames { get; }
 }
 
 internal interface IBitMagicPrgSourceFile : IPrgSourceFile
 {
-    public IEnumerable<(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> SourceBreakpoints { get; }
+    public Dictionary<string, IEnumerable<(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)>> SourceBreakpoints { get; }
+    public string GeneratedFilename { get; }
 }

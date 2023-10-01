@@ -1,6 +1,7 @@
 ﻿using BigMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.TemplateEngine.Compiler;
 using BitMagic.TemplateEngine.X16;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
@@ -21,7 +22,7 @@ internal class BitmagicBuilder
     public IList<BitMagicPrgFile> Build(X16DebugProject debugProject)
     {
         var project = new Project();
-        _logger.Log($"Compiling {debugProject.Source} ");
+        _logger.LogLine($"Compiling {debugProject.Source} ");
 
         //if (!string.IsNullOrWhiteSpace(debugProject.SourcePrg))
         //{
@@ -39,7 +40,7 @@ internal class BitmagicBuilder
 
         if (!string.IsNullOrWhiteSpace(content))
         {
-            var templateResult = engine.ProcessFile(content, "main.dll", debugProject.Source).GetAwaiter().GetResult();
+            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();            
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm";
@@ -64,7 +65,7 @@ internal class BitmagicBuilder
         }
         else
         {
-            _logger.LogLine("Done.");
+            _logger.LogLine("... Done.");
         }
 
         var toReturn = new List<BitMagicPrgFile>();
@@ -79,4 +80,13 @@ internal class BitmagicBuilder
 
         return toReturn;
     }
+}
+
+internal static class CompileOptionsExtension
+{
+    public static TemplateOptions AsTemplateOptions(this CompileOptions options) => new TemplateOptions
+    {
+        BinFolder = options.BinFolder,
+        Rebuild = options.Rebuild
+    };
 }

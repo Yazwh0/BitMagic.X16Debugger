@@ -179,9 +179,8 @@ internal class StackManager
             if (line.Source.SourceFile != null && source is ProcessResult)
             {   // we're in a mapped file, find the actual line in the source
                 var mapedSource = source as ProcessResult;
-                lineNumber = mapedSource.Source.Map[lineNumber-1];
-
-                source = mapedSource.Parent;
+                source = new ProjectTextFile(mapedSource.Source.Map[lineNumber - 1].SourceFilename);
+                lineNumber = mapedSource.Source.Map[lineNumber-1].Line;
             }
 
             frame.Line = lineNumber;
