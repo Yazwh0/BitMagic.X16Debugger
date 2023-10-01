@@ -166,7 +166,12 @@ internal class StackManager
             var line = instruction.Line as Line;
             if (line == null)
             {
-                frame.Name = $"{prefix}??? {addressString} (Data?)";
+                frame.Name = $"{prefix}??? {addressString} (Data)";
+                var (memorySource, memorylineNumber) = GetSource(address, ramBank, romBank);
+
+                frame.Source = memorySource;
+                frame.Line = memorylineNumber;
+                return toReturn;
             }
             else
             {
@@ -231,6 +236,11 @@ internal class StackManager
             if (sourceFile != null)
             {
                 var lineNumber = 0;
+                if (!sourceFile.Items.Any())
+                {
+                    sourceFile.GetContent(); // force disassembly
+                }
+
                 foreach (var i in sourceFile.Items.Where(i => i.Value.HasInstruction))
                 {
                     if (i.Value.Address >= address)
