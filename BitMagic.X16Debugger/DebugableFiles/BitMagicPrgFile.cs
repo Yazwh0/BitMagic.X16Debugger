@@ -98,7 +98,8 @@ internal class BitMagicPrgFile : IPrgFile
             foreach (var sourceFilename in bmSource.GetFixedSourceFilenames())
             {
                 breakpointManager.SetBitmagicBreakpoints(bmSource, Filename, sourceFilename);
-                toReturn.AddRange(bmSource.Breakpoints[sourceFilename]);
+                if (bmSource.Breakpoints.ContainsKey(sourceFilename))
+                    toReturn.AddRange(bmSource.Breakpoints[sourceFilename]);
             }
         }
 
