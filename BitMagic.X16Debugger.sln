@@ -68,7 +68,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplateEngine", "
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplateEngine.Compiler", "..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Compiler\BitMagic.TemplateEngine.Compiler.csproj", "{D701E288-1834-43B1-93B3-3B38F8BD37A9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplageEngine.Objects", "..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Objects\BitMagic.TemplageEngine.Objects.csproj", "{FA8396D6-9D67-4036-9B22-84B9EE41CB94}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.TemplateEngine.Objects", "..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Objects\BitMagic.TemplateEngine.Objects.csproj", "{FA8396D6-9D67-4036-9B22-84B9EE41CB94}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.X16Emulator.Serializer", "..\BitMagic.X16Emulator\BitMagic.X16Emulator.Serializer\BitMagic.X16Emulator.Serializer.csproj", "{FB3F6407-BA7C-42F6-ADB4-4FEF0F409A6A}"
 EndProject
