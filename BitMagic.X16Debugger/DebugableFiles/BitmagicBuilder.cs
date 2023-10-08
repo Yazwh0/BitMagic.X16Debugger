@@ -51,7 +51,7 @@ internal class BitmagicBuilder
             project.Code = templateResult;
         }
 
-        var compiler = new Compiler.Compiler(project);
+        var compiler = new Compiler.Compiler(project, _logger);
 
         var compileResult = compiler.Compile().GetAwaiter().GetResult();
 

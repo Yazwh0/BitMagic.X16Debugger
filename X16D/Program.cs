@@ -86,7 +86,8 @@ static class Program
             var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom);
             try
             {
-                debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
+                //debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
+                debugger.Logger.LogLine("Starting");
                 debugger.Run();
                 debugger.Logger.LogLine("Finished. (Normally)");
             }

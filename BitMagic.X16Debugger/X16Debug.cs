@@ -350,44 +350,6 @@ public class X16Debug : DebugAdapterBase
             {
                 var results = _serviceManager.BitmagicBuilder.Build(_debugProject);
 
-                //var project = new Project();
-                //Logger.Log($"Compiling {_debugProject.Source}");
-
-                //project.Code = new ProjectTextFile(_debugProject.Source);
-                //project.Code.Generate();
-
-                //var engine = CsasmEngine.CreateEngine();
-                //var content = project.Code.GetContent();
-
-                //if (!string.IsNullOrWhiteSpace(content))
-                //{
-                //    var templateResult = engine.ProcessFile(content, "main.dll").GetAwaiter().GetResult();
-
-                //    templateResult.ReferenceId = _serviceManager.CodeGeneratorManager.Register(_debugProject.Source, templateResult);
-                //    var filename = Path.GetFileNameWithoutExtension(_debugProject.Source) + ".generated.bmasm";
-                //    templateResult.Name = filename;
-                //    templateResult.Path = filename;
-
-                //    templateResult.Parent = project.Code;
-                //    project.Code = templateResult;
-                //}
-
-                //var compiler = new Compiler.Compiler(project);
-
-                //var compileResult = compiler.Compile().GetAwaiter().GetResult();
-
-                //_serviceManager.SourceMapManager.ConstructSourceMap(compileResult);
-
-                //if (compileResult.Warnings.Any())
-                //{
-                //    Logger.LogLine(" Warnings:");
-                //    foreach (var warning in compileResult.Warnings)
-                //    {
-                //        Logger.LogLine(warning);
-                //    }
-                //}
-
-                //var prg = compileResult.Data["Main"].ToArray();
                 var prg = results.First(i => i.IsMain);
 
                 if (_debugProject.RunSource)
