@@ -39,6 +39,11 @@ internal class DisassemblerManager
     // This way we can use the correct symbols.
     public DisassembleResponse HandleDisassembleRequest(DisassembleArguments arguments)
     {
+        if (string.IsNullOrWhiteSpace(arguments.MemoryReference)) // not sure why this happens...?
+        {
+            return new DisassembleResponse();
+        }
+
         // assume this address the debugger address, so convert it to the machine address
         var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(Convert.ToInt32(arguments.MemoryReference, 16));
 
