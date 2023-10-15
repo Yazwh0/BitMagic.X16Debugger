@@ -29,7 +29,7 @@ static class Program
     {
         Console.WriteLine("BitMagic - X16D");
 
-        ParserResult<Options>? argumentsResult  = null;
+        ParserResult<Options>? argumentsResult = null;
         try
         {
             argumentsResult = Parser.Default.ParseArguments<Options>(args);
@@ -72,28 +72,41 @@ static class Program
             return emulator;
         };
 
-        if (options.ServerPort != 0)
-            RunAsServer(getEmulator, options.ServerPort, rom);
-        else
+        try
         {
-            Console.WriteLine(@"Running using stdin\stdout.");
-            
-            var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom);
-            try
+            if (options.ServerPort != 0)
+                RunAsServer(getEmulator, options.ServerPort, rom);
+            else
             {
-                //debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
-                debugger.Logger.LogLine("Starting");
-                debugger.Run();
-                debugger.Logger.LogLine("Finished. (Normally)");
-            }
-            catch (Exception e)
-            {
-                debugger.Logger.LogError(e.Message);
-                debugger.Logger.LogLine("Finished. (Error)");
+                Console.WriteLine(@"Running using stdin\stdout.");
+
+                var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom);
+                try
+                {
+                    //debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
+                    debugger.Logger.LogLine("Starting");
+                    debugger.Run();
+                    debugger.Logger.LogLine("Finished. (Normally)");
+                }
+                catch (Exception e)
+                {
+                    debugger.Logger.LogError(e.Message);
+                    debugger.Logger.LogLine("Finished. (Error)");
+
+                    throw;
+                }
             }
         }
+        catch (Exception e)
+        {
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), $"bitmagic_crash_{DateTime.Now:yyyyMMdd_HHmmss}.txt"),
+                e.Message + Environment.NewLine + e.StackTrace);
 
-        Console.WriteLine(@"Exiting.");
+            return 1;
+        }
+
+
+        Console.WriteLine("Exiting.");
         return 0;
     }
 
@@ -125,7 +138,7 @@ static class Program
                             Console.Error.WriteLine(e.Exception.Message);
                         };
                         debugger.Run();
-                        
+
 
                         debugger = null;
                     }
