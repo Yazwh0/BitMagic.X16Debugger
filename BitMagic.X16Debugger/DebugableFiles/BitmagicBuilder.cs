@@ -1,7 +1,6 @@
 ﻿using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
-using BitMagic.TemplateEngine.Compiler;
 using BitMagic.TemplateEngine.X16;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
@@ -32,6 +31,8 @@ internal class BitmagicBuilder
         if (debugProject.CompileOptions != null)
             project.CompileOptions = debugProject.CompileOptions;
 
+        debugProject.Source = debugProject.Source.FixFilename();
+
         project.Code = new ProjectTextFile(debugProject.Source);
         project.Code.Generate();
 
@@ -43,7 +44,7 @@ internal class BitmagicBuilder
             var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
-            var filename = Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm";
+            var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm").FixFilename();
             templateResult.Name = filename;
             templateResult.Path = filename;
 

@@ -166,7 +166,7 @@ internal class BreakpointManager
                 var map = template.Template.Source.Map;
                 for (var i = 0; i < map.Length; i++)
                 {
-                    if (map[i].Line == bps.SourceBreakpoint.Line)
+                    if (map[i].Line == bps.SourceBreakpoint.Line && map[i].SourceFilename == sourceFilename)
                     {
                         // add breakpoint.
                         var lineNumber = i + 1;

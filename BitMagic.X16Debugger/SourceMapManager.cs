@@ -238,14 +238,12 @@ public class CodeMap
     private string AddressDisplay => $"0x{Address:X6}";
     public int LineNumber { get; }
     public int Address { get; }
-    //public int Bank { get; }
     public IOutputData Line { get; }
 
     public CodeMap(int lineNumber, int address, IOutputData line)
     {
         LineNumber = lineNumber;
         Address = address;
-        //Bank = bank;
         Line = line;
     }
 
