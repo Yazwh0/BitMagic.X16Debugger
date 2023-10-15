@@ -1,4 +1,4 @@
-﻿using BigMagic.TemplateEngine.Compiler;
+﻿using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 
 namespace BitMagic.X16Debugger;

@@ -3,7 +3,7 @@ using BitMagic.Compiler;
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
+using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
 
 namespace BitMagic.X16Debugger;
 

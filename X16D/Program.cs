@@ -1,13 +1,8 @@
-﻿using BitMagic.Common;
-using BitMagic.X16Debugger;
+﻿using BitMagic.X16Debugger;
 using BitMagic.X16Emulator;
 using CommandLine;
-using Newtonsoft.Json;
-using System.Diagnostics;
 using System.Net.Sockets;
 using System.Net;
-using static X16D.Program;
-using System.Text;
 
 namespace X16D;
 

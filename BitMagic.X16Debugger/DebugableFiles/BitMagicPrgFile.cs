@@ -43,7 +43,7 @@ internal class BitMagicPrgFile : IPrgFile
             prgFile.SourceFiles.Add(source);
             source.Output.Add(prgFile);
 
-            var processResult = result.Project.Code as BigMagic.TemplateEngine.Compiler.MacroAssembler.ProcessResult;
+            var processResult = result.Project.Code as BitMagic.TemplateEngine.Compiler.MacroAssembler.ProcessResult;
 
             if (processResult != null)
             {

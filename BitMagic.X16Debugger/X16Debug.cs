@@ -1,6 +1,6 @@
 ﻿//#define SHOWDAP
 
-using BigMagic.TemplateEngine.Compiler;
+using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
@@ -14,7 +14,7 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
-using static BigMagic.TemplateEngine.Compiler.MacroAssembler;
+using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 
 namespace BitMagic.X16Debugger;

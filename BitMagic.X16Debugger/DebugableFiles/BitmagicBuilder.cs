@@ -1,4 +1,4 @@
-﻿using BigMagic.TemplateEngine.Compiler;
+﻿using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.Compiler;
@@ -40,7 +40,7 @@ internal class BitmagicBuilder
 
         if (!string.IsNullOrWhiteSpace(content))
         {
-            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();            
+            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm";
