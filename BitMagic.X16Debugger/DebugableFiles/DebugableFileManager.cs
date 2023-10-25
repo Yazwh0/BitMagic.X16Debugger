@@ -1,4 +1,6 @@
-﻿using BitMagic.X16Emulator;
+﻿using BitMagic.Common;
+using BitMagic.X16Emulator;
+using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -8,6 +10,60 @@ internal class DebugableFileManager
     private readonly Dictionary<string, IPrgFile> Files = new();
     // Keyd on source filename
     private readonly Dictionary<string, IPrgSourceFile> SourceFiles = new();
+
+
+    private readonly Dictionary<string, DebugWrapper> AllFiles = new ();
+
+    private readonly IdManager _idManager;
+    internal DebugableFileManager(IdManager idManager)
+    {
+        _idManager = idManager;
+    }
+
+    public void AddFiles(ISourceFile file)
+    {
+        if (AllFiles.ContainsKey(file.Path))
+            return;
+
+        var wrapper = new DebugWrapper(file);
+
+        if (wrapper.ReferenceId == null && !wrapper.Source.ActualFile) // do not create Ids for real files
+            wrapper.ReferenceId = _idManager.AddObject(wrapper, ObjectType.DecompiledData);
+
+        AllFiles.Add(wrapper.Path, wrapper);
+
+        foreach (var p in file.Parents)
+            AddFiles(p);
+
+        foreach(var c in file.Children)
+            AddFiles(c);
+    }
+
+    public DebugWrapper? GetFile_New(string filename)
+    {
+        if (AllFiles.ContainsKey(filename))
+            return AllFiles[filename];
+
+        return null;
+    }
+
+    public DebugWrapper? GetFileSource(Source source)
+    {
+        if (source.SourceReference != null)
+        {
+            var wrapper = _idManager.GetObject<DebugWrapper>(source.SourceReference.Value);
+
+            if (wrapper != null)
+                return wrapper;
+        }
+
+        return GetFile_New(source.Path);
+    }
+
+    public DebugWrapper? GetWrapper(ISourceFile sourceFile)
+    {
+        return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
+    }
 
     public IPrgFile? GetFile(string filename)
     {
@@ -30,20 +86,15 @@ internal class DebugableFileManager
         Files.Add(file.Filename, file);
         foreach(var source in file.SourceFiles)
         {
-            var filename = FixFilename(source.Filename);
+            var filename = source.Filename.FixFilename();
             if (!SourceFiles.ContainsKey(filename))
                 SourceFiles.Add(filename, source);
-            
-            foreach(var referencedFilename in source.ReferencedFilenames.Select(i => FixFilename(i)))
+
+            foreach(var referencedFilename in source.ReferencedFilenames.Select(i => i.FixFilename()))
             {
                 if (!SourceFiles.ContainsKey(referencedFilename))
                     SourceFiles.Add(referencedFilename, source);
             }
-
-            //if (!SourceFiles.ContainsKey(filename))
-            //    SourceFiles.Add(filename, new List<IPrgSourceFile> { source });
-            //else
-            //    SourceFiles[filename].Add(source);
         }
     }
 
@@ -56,15 +107,5 @@ internal class DebugableFileManager
 
             sdCard.AddCompiledFile(bmPrg.Filename, bmPrg.Data);
         }
-    }
-
-    private static string FixFilename(string path)
-    {
-#if OS_WINDOWS
-        return char.ToLower(path[0]) + path[1..];
-#endif
-#if OS_LINUX
-        return path;
-#endif
     }
 }

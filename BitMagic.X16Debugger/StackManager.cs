@@ -1,6 +1,8 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.Compiler.Files;
 using BitMagic.Decompiler;
+using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
@@ -22,13 +24,15 @@ internal class StackManager
 
     private readonly SourceMapManager _sourceMapManager;
     private readonly DisassemblerManager _dissassemblerManager;
+    private readonly DebugableFileManager _debugableFileManager;
 
-    public StackManager(Emulator emulator, IdManager idManager, SourceMapManager sourceMapManager, DisassemblerManager disassemblerManager)
+    public StackManager(Emulator emulator, IdManager idManager, SourceMapManager sourceMapManager, DisassemblerManager disassemblerManager, DebugableFileManager debugableFileManager)
     {
         _emulator = emulator;
         _idManager = idManager;
         _sourceMapManager = sourceMapManager;
         _dissassemblerManager = disassemblerManager;
+        _debugableFileManager = debugableFileManager;
     }
 
     public (string Value, ICollection<Variable> Variables) GetStack()
@@ -76,7 +80,7 @@ internal class StackManager
         _invalid = true;
     }
 
-    public IEnumerable<StackFrameState> GetCallStack => _callStack;
+    public IEnumerable<StackFrameState> CallStack => _callStack;
 
     // data stored in the stack info has the ram\rom bank switched to how the debugger address.
     public void GenerateCallStack()
@@ -155,50 +159,95 @@ internal class StackManager
 
         var frame = new StackFrame();
         var toReturn = new StackFrameState(frame);
-        frame.Id = _idManager.GetId();
+        frame.Id = _idManager.GetId(); // ???
         frame.InstructionPointerReference = AddressFunctions.GetDebuggerAddressString(address, ramBank, romBank);
 
         var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, ramBank, romBank);
 
         var instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
-        if (instruction != null)
+
+        ///// NEW
+        if (instruction != null) // this is a bitmagic procedure, instruction is from the generated bmasm.
         {
-            var line = instruction.Line as Line;
-            if (line == null)
+            var sourceFile = _sourceMapManager.GetSourceFile(debuggerAddress);
+            if (sourceFile != null)
             {
-                frame.Name = $"{prefix}??? {addressString} (Data)";
-                var (memorySource, memorylineNumber) = GetSource(address, ramBank, romBank);
+                // need to find the intermediary file, not the end file so we can pull the procedure name
+                var wrapper = _debugableFileManager.GetWrapper(sourceFile);
 
-                frame.Source = memorySource;
-                frame.Line = memorylineNumber;
-                return toReturn;
-            }
-            else
-            {
-                frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
-                toReturn.Line = line;
-            }
+                if (wrapper != null)
+                {
+                    var binaryFile = wrapper.Source as IBinaryFile;
 
-            var source = line.Source.SourceFile;
-            var lineNumber = instruction.Line.Source.LineNumber;
-            if (line.Source.SourceFile != null && source is ProcessResult)
-            {   // we're in a mapped file, find the actual line in the source
-                var mapedSource = source as ProcessResult;
-                source = new ProjectTextFile(mapedSource.Source.Map[lineNumber - 1].SourceFilename);
-                lineNumber = mapedSource.Source.Map[lineNumber-1].Line;
-            }
+                    // this is the correct line
+                    if (instruction.Line is not Line line)
+                    {
+                        frame.Name = $"{prefix}??? {addressString} (Data)";
 
-            frame.Line = lineNumber;
-            frame.Source = new Source()
-            {
-                Name = Path.GetFileName(source.Name),
-                Path = source.Path,
-                SourceReference = source.ReferenceId,
-                Origin = source.Origin.ToString()
-            };
+                        // set the source to memory
+                        var (memorySource, memorylineNumber) = GetSource(address, ramBank, romBank);
+
+                        frame.Source = memorySource;
+                        frame.Line = memorylineNumber;
+                        return toReturn;
+                    }
+
+                    frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
+                    toReturn.Line = line;
+
+                    var (source, lineNumber) = wrapper.FindUltimateSource(debuggerAddress - binaryFile.BaseAddress, _debugableFileManager);
+
+                    if (source != null)
+                    {
+                        frame.Source = source.AsSource();
+                        frame.Line = lineNumber + 1;
+                        return toReturn;
+                    }
+                }
+            }
         }
         else
         {
+            /////
+
+            //if (instruction != null)
+            //{
+            //    var line = instruction.Line as Line; // this is the correct line
+            //    if (line == null)
+            //    {
+            //        frame.Name = $"{prefix}??? {addressString} (Data)";
+            //        var (memorySource, memorylineNumber) = GetSource(address, ramBank, romBank);
+
+            //        frame.Source = memorySource;
+            //        frame.Line = memorylineNumber;
+            //        return toReturn;
+            //    }
+            //    else
+            //    {
+            //        frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
+            //        toReturn.Line = line;
+            //    }
+
+            //    var source = line.Source.SourceFile;
+            //    var lineNumber = instruction.Line.Source.LineNumber - 1; // what comes out of bitmagic is 1 based.
+            //    if (line.Source.SourceFile != null && source is ProcessResult)
+            //    {   // we're in a mapped file, find the actual line in the source
+            //        var mappedSource = source as ProcessResult; // process result appears to be out by 1 for libraries
+            //        source = new BitMagicProjectFile(mappedSource.Source.Map[lineNumber].SourceFilename);
+            //        lineNumber = mappedSource.Source.Map[lineNumber].Line + 1;
+            //    }
+
+            //    frame.Line = lineNumber;
+            //    frame.Source = new Source()
+            //    {
+            //        Name = Path.GetFileName(source.Name),
+            //        Path = source.Path,
+            //        SourceReference = source.ReferenceId,
+            //        Origin = source.Origin.ToString()
+            //    };
+            //}
+            //else
+            //{
             //// hunt backward for a symbol6
             var thisAddress = debuggerAddress;
             string? huntSymbol = null;
@@ -222,6 +271,7 @@ internal class StackManager
             var (source, lineNumber) = GetSource(address, ramBank, romBank);
             frame.Source = source;
             frame.Line = lineNumber;
+            //}
         }
 
         return toReturn;

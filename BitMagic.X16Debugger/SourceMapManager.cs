@@ -1,5 +1,6 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using System.Diagnostics;
 
@@ -7,12 +8,15 @@ namespace BitMagic.X16Debugger;
 
 internal class SourceMapManager
 {
+    private Dictionary<int, IBinaryFile> MemoryToSourceFile { get; } = new();
+
+
     // Address to line lookup
-    public Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
+    private Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
     // source filename to codemap
-    public Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
+    private Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
     // prg file to codemap
-    public Dictionary<string, HashSet<CodeMap>> OutputToMemoryMap { get; } = new();
+    private Dictionary<string, HashSet<CodeMap>> OutputToMemoryMap { get; } = new();
 
     // packed debugger address
     public Dictionary<int, string> Symbols { get; } = new();
@@ -22,6 +26,31 @@ internal class SourceMapManager
     public SourceMapManager(Emulator emulator)
     {
         _emulator = emulator;
+    }
+
+    public IBinaryFile? GetSourceFile(int debuggerAddress)
+    {
+        if (MemoryToSourceFile.ContainsKey(debuggerAddress))
+            return MemoryToSourceFile[debuggerAddress];
+
+        return null;
+    }
+
+    public void ClearSourceMap(int startAddress, int length)
+    {
+        for(var i = 0; i < length; i++)
+        {
+            if (MemoryToSourceMap.ContainsKey(startAddress + i))
+                MemoryToSourceMap.Remove(startAddress + i);
+        }
+    }
+
+    public void AddSourceMap(int debuggerAddress, SourceMapLine map)
+    {
+        if (MemoryToSourceMap.ContainsKey(debuggerAddress))
+            MemoryToSourceMap[debuggerAddress] = map;
+        else
+            MemoryToSourceMap.Add(debuggerAddress, map);
     }
 
     public SourceMapLine? GetSourceMap(int debuggerAddress)
@@ -76,6 +105,30 @@ internal class SourceMapManager
         Symbols.Clear();
         MemoryToSourceMap.Clear();
         SourceToMemoryMap.Clear();
+        OutputToMemoryMap.Clear();
+
+        MemoryToSourceFile.Clear();
+    }
+
+
+    /// <summary>
+    /// Load IBinaryFile into memory
+    /// </summary>
+    /// <param name="source"></param>
+    public void ConstructNewSourceMap(IBinaryFile source)
+    {
+        var debuggerAddress = AddressFunctions.GetDebuggerAddress(source.BaseAddress, _emulator);
+
+        for (var i = 0; i < source.Data.Count; i++)
+        {
+            if (MemoryToSourceFile.ContainsKey(debuggerAddress))
+            {
+                MemoryToSourceFile.Remove(debuggerAddress);
+            }
+
+            MemoryToSourceFile[debuggerAddress] = source;
+            debuggerAddress++;
+        }
     }
 
     /// <summary>
@@ -123,7 +176,7 @@ internal class SourceMapManager
 
             if (MemoryToSourceMap.ContainsKey(debuggerAddress))
                 MemoryToSourceMap.Remove(debuggerAddress);      // we're overwriting something in memory
-                //throw new Exception("Couldn't add line, as it was already in the hashset.");
+                                                                //throw new Exception("Couldn't add line, as it was already in the hashset.");
 
             MemoryToSourceMap.Add(debuggerAddress, toAdd);
 

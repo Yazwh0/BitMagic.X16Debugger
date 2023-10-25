@@ -18,8 +18,11 @@ internal class BitMagicPrgFile : IPrgFile
         List<BitMagicPrgFile> outputs = new();
         Dictionary<string, BitMagicPrgSourceFile> sources = new();
 
-        var sourceFilename = (result.Project.Code.Parent ?? result.Project.Code).Path;
-        var generatedFilename = result.Project.Code.Path;
+        string sourceFilename;
+        string generatedFilename;
+
+        sourceFilename = (result.Project.Code.Parents.FirstOrDefault() ?? result.Project.Code).Path;
+        generatedFilename = result.Project.Code.Path;
 
         if (generatedFilename == sourceFilename)
             generatedFilename = "";

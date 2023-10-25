@@ -42,7 +42,7 @@ internal class ServiceManager
 
         IdManager = new();
 
-        DebugableFileManager = new();
+        DebugableFileManager = new(IdManager);
 
         SourceMapManager = new(Emulator);
         ScopeManager = new(IdManager);
@@ -50,7 +50,7 @@ internal class ServiceManager
         CodeGeneratorManager = new(IdManager);
         DisassemblerManager = new(SourceMapManager, Emulator, IdManager);
         BreakpointManager = new(Emulator, SourceMapManager, IdManager, DisassemblerManager, CodeGeneratorManager, DebugableFileManager);
-        StackManager = new(Emulator, IdManager, SourceMapManager, DisassemblerManager);
+        StackManager = new(Emulator, IdManager, SourceMapManager, DisassemblerManager, DebugableFileManager);
         SpriteManager = new(Emulator);
         PaletteManager = new(Emulator);
         PsgManager = new(Emulator);

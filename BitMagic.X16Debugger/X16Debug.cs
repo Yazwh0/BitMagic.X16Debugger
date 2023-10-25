@@ -16,6 +16,9 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
 using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
+using BitMagic.Compiler.Files;
+using BitMagic.Compiler.Extensions;
+using BitMagic.X16Debugger.DebugableFiles;
 
 namespace BitMagic.X16Debugger;
 
@@ -137,7 +140,7 @@ public class X16Debug : DebugAdapterBase
     {
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
-        var stopOnEntry = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
+        var stopOnEntry = false; // arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
 
         if (!File.Exists(toCompile))
         {
@@ -348,16 +351,18 @@ public class X16Debug : DebugAdapterBase
         {
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                var results = _serviceManager.BitmagicBuilder.Build(_debugProject);
+                var result = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
+                var prg = result.Source as IBinaryFile;
 
-                var prg = results.First(i => i.IsMain);
+                //var prg = results.First(i => i.IsMain);
 
-                if (_debugProject.RunSource)
+                if (_debugProject.RunSource && result != null)
                 {
-                    prg.LoadIntoMemory(_emulator, 0x801);
-                    prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+                    result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager, _serviceManager.DebugableFileManager);
+                    
+                    //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
-                    Logger.LogLine($"Injecting {prg.Data.Length:#,##0} bytes. Starting at 0x801");
+                    Logger.LogLine($"Injecting {prg!.Data.Count:#,##0} bytes. Starting at 0x801");
                 }
                 else
                 {
@@ -376,7 +381,7 @@ public class X16Debug : DebugAdapterBase
                 if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
                 {
                     Logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
-                    File.WriteAllBytes(_debugProject.SourcePrg, prg.Data);
+                    File.WriteAllBytes(_debugProject.SourcePrg, prg!.Data.ToArray());
                     Logger.LogLine("Done.");
                 }
             }
@@ -391,9 +396,9 @@ public class X16Debug : DebugAdapterBase
             var sourceFile = e.Line.Source.SourceFile;
             var lineNumber = e.Line.Source.LineNumber;
 
-            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr && pr != null)
+            if (sourceFile.Origin == SourceFileType.Intermediary && sourceFile is ProcessResult pr && pr != null)
             {
-                sourceFile = new ProjectTextFile(pr.Source.Map[lineNumber - 1].SourceFilename);
+                sourceFile = new BitMagicProjectFile(pr.Source.Map[lineNumber - 1].SourceFilename);
                 lineNumber = pr.Source.Map[lineNumber - 1].Line;
             }
 
@@ -410,9 +415,9 @@ public class X16Debug : DebugAdapterBase
             var sourceFile = e.SourceFile.SourceFile;
             var lineNumber = e.SourceFile.LineNumber;
 
-            if (sourceFile.Origin == SourceFileOrigin.Intermediary && sourceFile is ProcessResult pr && pr != null)
+            if (sourceFile.Origin == SourceFileType.Intermediary && sourceFile is ProcessResult pr && pr != null)
             {
-                sourceFile = new ProjectTextFile(pr.Source.Map[lineNumber - 1].SourceFilename);
+                sourceFile = new BitMagicProjectFile(pr.Source.Map[lineNumber - 1].SourceFilename);
                 lineNumber = pr.Source.Map[lineNumber - 1].Line;
             }
 
@@ -438,7 +443,7 @@ public class X16Debug : DebugAdapterBase
             foreach (var error in e.Errors)
             {
                 var path = e.Filename != null ? Path.GetRelativePath(workspaceFolder, e.Filename) : "";
-                var source = new ProjectTextFile(e.Filename);
+                var source = new BitMagicProjectFile(e.Filename);
                 Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
             }
 
@@ -716,7 +721,7 @@ public class X16Debug : DebugAdapterBase
             {
                 foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
                 {
-                    if (i.Volatile)
+                    if (i is DecompileReturn)
                     {
                         Protocol.SendEvent(new LoadedSourceEvent()
                         {
@@ -1021,7 +1026,7 @@ public class X16Debug : DebugAdapterBase
         var toReturn = new StackTraceResponse();
 
         _serviceManager.StackManager.GenerateCallStack();
-        toReturn.StackFrames.AddRange(_serviceManager.StackManager.GetCallStack.Select(i => i.StackFrame));
+        toReturn.StackFrames.AddRange(_serviceManager.StackManager.CallStack.Select(i => i.StackFrame));
         return toReturn;
     }
 
@@ -1030,7 +1035,7 @@ public class X16Debug : DebugAdapterBase
         var toReturn = new ScopesResponse();
 
         Console.WriteLine($"Setting scope {arguments.FrameId}");
-        var current = _serviceManager.StackManager.GetCallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
+        var current = _serviceManager.StackManager.CallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
 
         _serviceManager.VariableManager.SetScope(current);
 
@@ -1120,7 +1125,7 @@ public class X16Debug : DebugAdapterBase
         if (data == null)
             return toReturn;
 
-        toReturn.Content = data.GetContent();
+        toReturn.Content = string.Join(Environment.NewLine, data.Content);
         return toReturn;
     }
 

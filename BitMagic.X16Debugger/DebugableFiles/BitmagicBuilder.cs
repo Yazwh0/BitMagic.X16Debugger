@@ -2,6 +2,7 @@
 using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
+using BitMagic.Compiler.Files;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -18,7 +19,12 @@ internal class BitmagicBuilder
         _codeGeneratorManager = codeGeneratorManager;
     }
 
-    public IList<BitMagicPrgFile> Build(X16DebugProject debugProject)
+    /// <summary>
+    /// Build project and return the main binary file
+    /// </summary>
+    /// <param name="debugProject"></param>
+    /// <returns>Binary file for the main segment</returns>
+    public async Task<DebugWrapper?> Build(X16DebugProject debugProject)
     {
         var project = new Project();
         _logger.LogLine($"Compiling {debugProject.Source} ");
@@ -32,29 +38,42 @@ internal class BitmagicBuilder
             project.CompileOptions = debugProject.CompileOptions;
 
         debugProject.Source = debugProject.Source.FixFilename();
-
-        project.Code = new ProjectTextFile(debugProject.Source);
-        project.Code.Generate();
+        var codeFile = new BitMagicProjectFile(debugProject.Source);
+        project.Code = codeFile;
+        await codeFile.Load();
 
         var engine = CsasmEngine.CreateEngine();
-        var content = project.Code.GetContent();
+        var content = project.Code.Content;
 
-        if (!string.IsNullOrWhiteSpace(content))
+        if (content.Any()) // ??
         {
             var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm").FixFilename();
-            templateResult.Name = filename;
-            templateResult.Path = filename;
 
-            templateResult.Parent = project.Code;
+            templateResult.SetName(filename);
+            templateResult.SetParentAndMap(project.Code);
+
             project.Code = templateResult;
         }
 
         var compiler = new Compiler.Compiler(project, _logger);
 
-        var compileResult = compiler.Compile().GetAwaiter().GetResult();
+        var compileResult = await compiler.Compile();
+
+        compileResult.CreateBinarySourceFiles();
+        project.Code.MapChildren();
+
+        _fileManager.AddFiles(project.Code); // loads whole family and sets their ID
+
+        var mainFile = compileResult.Data.Values.FirstOrDefault(i => i.IsMain);
+
+        DebugWrapper? toReturn = null;
+        if (mainFile != null)
+        {
+            toReturn = _fileManager.GetFile_New(mainFile.FileName.ToUpper());
+        }
 
         if (compileResult.Warnings.Any())
         {
@@ -69,14 +88,15 @@ internal class BitmagicBuilder
             _logger.LogLine("... Done.");
         }
 
-        var toReturn = new List<BitMagicPrgFile>();
+
+        var toReturnOld = new List<BitMagicPrgFile>();
         foreach(var bitmagicPrg in BitMagicPrgFile.ProcessCompileResult(compileResult))
         {
             if (bitmagicPrg.Filename.StartsWith(':')) // ignore files with no code.
                 continue;
 
             _fileManager.Addfile(bitmagicPrg);
-            toReturn.Add(bitmagicPrg);
+            toReturnOld.Add(bitmagicPrg);
         }
 
         return toReturn;

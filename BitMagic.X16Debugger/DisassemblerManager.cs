@@ -1,5 +1,4 @@
-﻿using BitMagic.Common;
-using BitMagic.Decompiler;
+﻿using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
@@ -30,8 +29,8 @@ internal class DisassemblerManager
         {
             var id = BankToId[(i, NotSet)];
             var data = _idManager.GetObject<DecompileReturn>(id);
-            data.Name = $"{_project.RamBankNames[i]}.bmasm";
-            data.Path = $"Ram/{data.Name}";
+            var name = $"{_project.RamBankNames[i]}.bmasm";
+            data.SetName(name, $"Ram/{name}");
         }
     }
 
@@ -98,19 +97,16 @@ internal class DisassemblerManager
         var decompileReturn = new DecompileReturn();
         decompileReturn.ReferenceId = _idManager.AddObject(decompileReturn, ObjectType.DecompiledData);
         var name = $"z_Bank_0x{ramBank:X2}.bmasm"; // name in the project changess this when the project is set
-        decompileReturn.Name = name;
-        decompileReturn.Path = $"Ram/{name}";
-        decompileReturn.Origin = SourceFileOrigin.Decompiled;
-        decompileReturn.Volatile = true;
+        decompileReturn.SetName(name, $"Ram/{name}");
         decompileReturn.RamBank = ramBank;
-        decompileReturn.Generate = () =>
+        decompileReturn.SetGenerate(() =>
         {
             var item = decompileReturn;
             var decompiler = new Decompiler.Decompiler();
             var data = _emulator.RamBank.Slice(ramBank * 0x2000, 0x2000);
             var result = decompiler.Decompile(data, 0xa000, 0xbfff, ramBank, _sourceMapManager.Symbols, null);
             item.Items = result.Items;
-        };
+        });
 
         BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId ?? 0);
 
@@ -126,11 +122,8 @@ internal class DisassemblerManager
         var decompileReturn = new DecompileReturn();
         decompileReturn.ReferenceId = _idManager.AddObject(decompileReturn, ObjectType.DecompiledData);
         var name = $"MainRam.bmasm";
-        decompileReturn.Name = name;
-        decompileReturn.Path = name;
-        decompileReturn.Origin = SourceFileOrigin.Decompiled;
-        decompileReturn.Volatile = true;
-        decompileReturn.Generate = () =>
+        decompileReturn.SetName(name, name);
+        decompileReturn.SetGenerate(() =>
         {
             var additionalSymbols = new Dictionary<int, string>
             {
@@ -144,7 +137,7 @@ internal class DisassemblerManager
             var data = _emulator.Memory.Slice(0, 0xa000);
             var result = decompiler.Decompile(data, 0x0000, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
             item.Items = result.Items;
-        };
+        });
         DecompiledData.Add(decompileReturn.Path, decompileReturn);
 
         BankToId.Add((NotSet, NotSet), decompileReturn.ReferenceId ?? 0);
@@ -243,12 +236,12 @@ internal class DisassemblerManager
         var name = _project?.RomBankNames.Length >= bank ? _project.RomBankNames[bank] : "";
 
         if (string.IsNullOrWhiteSpace(name))
-            result.Name = $"RomBank_{bank}.bmasm";
+            name = $"RomBank_{bank}.bmasm";
         else
-            result.Name = name + ".bmasm";
+            name += ".bmasm";
 
-        result.Path = $"Rom/{result.Name}";
-        result.Origin = SourceFileOrigin.Decompiled;
+        result.SetName(name, $"Rom/{name}");
+
         result.ReferenceId = id;
         result.RomBank = bank;
 
