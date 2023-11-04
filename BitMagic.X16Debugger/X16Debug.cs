@@ -1,4 +1,4 @@
-﻿#define SHOWDAP
+﻿//#define SHOWDAP
 
 using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;

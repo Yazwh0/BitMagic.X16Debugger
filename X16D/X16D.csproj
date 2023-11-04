@@ -12,6 +12,10 @@
     <Version>0.0.0.1</Version>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>False</Optimize>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Remove="icon\butterfly.jpg" />
     <None Remove="icon\icon.ico" />
