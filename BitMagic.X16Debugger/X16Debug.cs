@@ -1,8 +1,7 @@
-﻿//#define SHOWDAP
+﻿#define SHOWDAP
 
 using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
-using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
@@ -17,8 +16,8 @@ using Newtonsoft.Json;
 using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 using BitMagic.Compiler.Files;
-using BitMagic.Compiler.Extensions;
 using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.Common.Address;
 
 namespace BitMagic.X16Debugger;
 

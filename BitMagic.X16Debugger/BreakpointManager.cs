@@ -1,4 +1,5 @@
 ﻿using BitMagic.Common;
+using BitMagic.Common.Address;
 using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
@@ -234,9 +235,9 @@ internal class BreakpointManager
         // There are two types of breakpoint, those on BitMagic code, and those on Rom\Ram. They have to be handled slightly differently.
         var debugableFile = _debugableFileManager.GetSourceFile(arguments.Source.Path);
 
-        if (debugableFile is BitMagicPrgSourceFile)
+        if (debugableFile is BitMagicPrgSourceFile bitMagicdebugableFile)
         {
-            return HandleSetBreakpointsRequestBitMagic(arguments, debugableFile as BitMagicPrgSourceFile);
+            return HandleSetBreakpointsRequestBitMagic(arguments, bitMagicdebugableFile);
         }
 
         // -----------------------------------------------------------------------------------------------------------

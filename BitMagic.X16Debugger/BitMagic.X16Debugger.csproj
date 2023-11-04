@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\BitMagic.Libraries\BitMagic.Common.Address\BitMagic.Common.Address.csproj" />
     <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Compiler\BitMagic.TemplateEngine.Compiler.csproj" />
     <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.X16\BitMagic.TemplateEngine.X16.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Compiler\BitMagic.Compiler\BitMagic.Compiler.csproj" />

@@ -1,4 +1,5 @@
-﻿using BitMagic.Decompiler;
+﻿using BitMagic.Common.Address;
+using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 

@@ -74,6 +74,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.DiscUtils.Streams"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.DiscUtils.Vdi", "..\External\DiscUtils\Library\DiscUtils.Vdi\BitMagic.DiscUtils.Vdi.csproj", "{04F40E45-1811-4DDE-8E52-E63E897A5042}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.Common.Address", "..\BitMagic.Libraries\BitMagic.Common.Address\BitMagic.Common.Address.csproj", "{15E97647-98E9-44F4-9C44-496E0E321EF7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -348,6 +350,18 @@ Global
 		{04F40E45-1811-4DDE-8E52-E63E897A5042}.Release|x64.Build.0 = Release|Any CPU
 		{04F40E45-1811-4DDE-8E52-E63E897A5042}.Release|x86.ActiveCfg = Release|Any CPU
 		{04F40E45-1811-4DDE-8E52-E63E897A5042}.Release|x86.Build.0 = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|x64.Build.0 = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Debug|x86.Build.0 = Debug|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|x64.ActiveCfg = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|x64.Build.0 = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|x86.ActiveCfg = Release|Any CPU
+		{15E97647-98E9-44F4-9C44-496E0E321EF7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -373,6 +387,7 @@ Global
 		{DA354242-0894-4D85-BA4E-6C36BE4E4FF8} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{BE55C0DB-AD09-430E-A149-A680FB4992D9} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{04F40E45-1811-4DDE-8E52-E63E897A5042} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
+		{15E97647-98E9-44F4-9C44-496E0E321EF7} = {2E856C46-D027-481F-BCFC-44C64225F9FF}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {DFCB7DF5-52B3-4B9B-9814-3EC16549A76F}

@@ -1,4 +1,5 @@
 ﻿using BitMagic.Common;
+using BitMagic.Common.Address;
 using BitMagic.Compiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
