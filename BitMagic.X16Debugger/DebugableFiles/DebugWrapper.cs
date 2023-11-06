@@ -7,7 +7,9 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal class DebugWrapper : ISourceFile
 {
+    private static int instanceCounter = 0;
     private readonly ISourceFile _sourceFile;
+    private int _instance = instanceCounter++;
 
     public bool Loaded { get; internal set; } = false;
     public List<BreakpointPair> Breakpoints { get; } = new();
@@ -58,11 +60,47 @@ internal class DebugWrapper : ISourceFile
         return breakpoints;
     }
 
+    /// <summary>
+    /// Called after a file is loaded into memory
+    /// </summary>
+    /// <param name="emulator"></param>
+    /// <param name="address"></param>
+    /// <param name="hasHeader"></param>
+    /// <param name="sourceMapManager"></param>
+    /// <param name="breakpointManager"></param>
+    /// <param name="fileManager"></param>
+    /// <returns></returns>
+    public List<Breakpoint> FileLoaded(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager, DebugableFileManager fileManager)
+    {
+        Loaded = true;
+
+        var file = _sourceFile as IBinaryFile;
+
+        if (file == null)
+            throw new DebugWrapperFileNotBinaryException(_sourceFile);
+
+        var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, emulator);
+
+        sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
+        breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
+
+        sourceMapManager.ConstructNewSourceMap(file);
+
+        var breakpoints = breakpointManager.SetBitmagicBreakpointsNew(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
+
+        if (file is BitMagicBinaryFile bitmagicFile)
+        {
+            bitmagicFile.MapProcToMemory(emulator, sourceMapManager); // map bitmagic lines to the sourecmap for the stack
+        }
+
+        return breakpoints;
+    }
+
     internal IEnumerable<Breakpoint> FindParentBreakpoints(int lineNumber, DebugableFileManager fileManager)
     {
-        foreach(var bps in Breakpoints)
+        foreach (var bps in Breakpoints)
         {
-            if (bps.SourceBreakpoint.Line == lineNumber)
+            if (bps.SourceBreakpoint.Line == lineNumber + 1) // VSC line numbers are not 0 based
                 yield return bps.Breakpoint;
         }
 
@@ -84,15 +122,17 @@ internal class DebugWrapper : ISourceFile
         }
     }
 
-    internal List<Breakpoint> SetBreakpoints(SetBreakpointsArguments arguments, Emulator emulator, HashSet<int> debuggerBreakpoints, DebugableFileManager fileManager, IdManager idManager)
+    public List<Breakpoint> SetBreakpoints(SetBreakpointsArguments arguments, Emulator emulator, HashSet<int> debuggerBreakpoints, DebugableFileManager fileManager, IdManager idManager)
     {
         var toReturn = new List<Breakpoint>();
 
+        Breakpoints.Clear();
+
         // need to work from the source file (this) down the children to the address in memory
-        foreach(var sbp in arguments.Breakpoints)
+        foreach (var sbp in arguments.Breakpoints)
         {
             var added = false;
-            foreach(var (debuggerAddress, loaded) in FindUltimateAddresses(sbp.Line - 1, fileManager))
+            foreach (var (debuggerAddress, loaded) in FindUltimateAddresses(sbp.Line - 1, fileManager))
             {
                 var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, idManager);
 
@@ -140,7 +180,7 @@ internal class DebugWrapper : ISourceFile
             yield break;
         }
 
-        foreach(var cl in ChildrenMap.Where(i => i.contentLineNumber == lineNumber))
+        foreach (var cl in ChildrenMap.Where(i => i.contentLineNumber == lineNumber))
         {
             var child = fileManager.GetWrapper(Children[cl.relativeId]);
 
@@ -213,7 +253,8 @@ internal class DebugWrapperAlreadyLoadedException : Exception
     }
 }
 
-internal class DebugWrapperFileNotBinaryException : Exception {
+internal class DebugWrapperFileNotBinaryException : Exception
+{
     public ISourceFile File { get; }
     public DebugWrapperFileNotBinaryException(ISourceFile file) : base("File is not IBinaryFile")
     {

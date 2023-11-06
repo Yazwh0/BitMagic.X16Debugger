@@ -358,7 +358,7 @@ public class X16Debug : DebugAdapterBase
                 if (_debugProject.RunSource && result != null)
                 {
                     result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager, _serviceManager.DebugableFileManager);
-                    
+
                     //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
                     Logger.LogLine($"Injecting {prg!.Data.Count:#,##0} bytes. Starting at 0x801");
@@ -473,7 +473,8 @@ public class X16Debug : DebugAdapterBase
         _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
-        _windowThread = new SysThread(() => {
+        _windowThread = new SysThread(() =>
+        {
             try
             {
                 EmulatorWindow.Run(_emulator);
@@ -897,14 +898,14 @@ public class X16Debug : DebugAdapterBase
                 Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
             }
 
-            var debugableFile = _serviceManager.DebugableFileManager.GetFile(_setnam_value);
-            if (debugableFile != null)
+            var debugableFilenew = _serviceManager.DebugableFileManager.GetFile_New(_setnam_value);
+            if (debugableFilenew != null)
             {
                 Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
 
                 var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
 
-                var breakpoints = debugableFile.LoadDebuggerInfo(actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+                var breakpoints = debugableFilenew.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager, _serviceManager.DebugableFileManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)
@@ -921,6 +922,31 @@ public class X16Debug : DebugAdapterBase
                 Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
                 _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
             }
+
+            //var debugableFile = _serviceManager.DebugableFileManager.GetFile(_setnam_value);
+            //if (debugableFile != null)
+            //{
+            //    Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
+
+            //    var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
+
+            //    var breakpoints = debugableFile.LoadDebuggerInfo(actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+            //    Logger.LogLine("Done");
+
+            //    foreach (var breakpoint in breakpoints)
+            //    {
+            //        Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
+            //    }
+            //}
+            //else
+            //{
+            //    var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
+            //    if (_setlfs_secondaryaddress < 2)
+            //        fileLength = -2;
+
+            //    Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
+            //    _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
+            //}
 
             return;
         }
