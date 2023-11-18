@@ -232,13 +232,14 @@ internal class BreakpointManager
 
         /// END
 
+        // old code, no longer used
         // There are two types of breakpoint, those on BitMagic code, and those on Rom\Ram. They have to be handled slightly differently.
-        var debugableFile = _debugableFileManager.GetSourceFile(arguments.Source.Path);
+        //var debugableFile = _debugableFileManager.GetSourceFile(arguments.Source.Path);
 
-        if (debugableFile is BitMagicPrgSourceFile bitMagicdebugableFile)
-        {
-            return HandleSetBreakpointsRequestBitMagic(arguments, bitMagicdebugableFile);
-        }
+        //if (debugableFile is BitMagicPrgSourceFile bitMagicdebugableFile)
+        //{
+        //    return HandleSetBreakpointsRequestBitMagic(arguments, bitMagicdebugableFile);
+        //}
 
         // -----------------------------------------------------------------------------------------------------------
         // this isn't a BitMagic breakpoint, so set on the decompiled memory source.
