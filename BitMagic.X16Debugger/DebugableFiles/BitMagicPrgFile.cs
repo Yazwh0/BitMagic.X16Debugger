@@ -5,6 +5,7 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
+[Obsolete]
 internal class BitMagicPrgFile : IPrgFile
 {
     /// <summary>
@@ -110,5 +111,5 @@ internal class BitMagicPrgFile : IPrgFile
         return toReturn;
     }
 
-    public void LoadIntoMemory(Emulator emulator, int address) => emulator.LoadIntoMemory(Data, address);
+    public void LoadIntoMemory(Emulator emulator, int address) => emulator.LoadIntoMemory(Data, address, true);
 }

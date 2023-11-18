@@ -136,6 +136,7 @@ internal class BreakpointManager
     }
 
     // Called when a debugable file is loaded
+    [Obsolete]
     public void SetBitmagicBreakpoints(IBitMagicPrgSourceFile sourceFile, string prgFilename, string sourceFilename)
     {
         var prgFile = sourceFile.Output.FirstOrDefault(i => string.Equals(i.Filename, prgFilename, StringComparison.InvariantCultureIgnoreCase));
@@ -329,6 +330,7 @@ internal class BreakpointManager
         return toReturn;
     }
 
+    [Obsolete]
     internal SetBreakpointsResponse HandleSetBreakpointsRequestBitMagic(SetBreakpointsArguments arguments, BitMagicPrgSourceFile debugableFile)
     {
         var toReturn = new SetBreakpointsResponse();

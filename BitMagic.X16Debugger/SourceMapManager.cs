@@ -116,11 +116,11 @@ internal class SourceMapManager
     /// Load IBinaryFile into memory
     /// </summary>
     /// <param name="source"></param>
-    public void ConstructNewSourceMap(IBinaryFile source)
+    public void ConstructNewSourceMap(IBinaryFile source, bool hasHeader)
     {
         var debuggerAddress = AddressFunctions.GetDebuggerAddress(source.BaseAddress, _emulator);
 
-        for (var i = 0; i < source.Data.Count; i++)
+        for (var i = hasHeader ? 2 : 0; i < source.Data.Count; i++)
         {
             if (MemoryToSourceFile.ContainsKey(debuggerAddress))
             {
@@ -137,6 +137,7 @@ internal class SourceMapManager
     /// </summary>
     /// <param name="result">Compile result for the BM prg file</param>
     /// <param name="outputFilename">Filename to be constructed</param>
+    [Obsolete]
     public void ConstructSourceMap(CompileResult result, string outputFilename)
     {
         var state = result.State;

@@ -7,9 +7,11 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal class DebugWrapper : ISourceFile
 {
-    private static int instanceCounter = 0;
     private readonly ISourceFile _sourceFile;
-    private int _instance = instanceCounter++;
+#if DEBUG
+    private static int instanceCounter = 0;
+    private readonly int _instance = instanceCounter++;
+#endif
 
     public bool Loaded { get; internal set; } = false;
     public List<BreakpointPair> Breakpoints { get; } = new();
@@ -29,6 +31,7 @@ internal class DebugWrapper : ISourceFile
     /// <param name="breakpointManager"></param>
     /// <exception cref="DebugWrapperAlreadyLoadedException"></exception>
     /// <exception cref="DebugWrapperFileNotBinaryException"></exception>
+    [Obsolete]
     public List<Breakpoint> Load(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager, DebugableFileManager fileManager)
     {
         if (Loaded)
@@ -48,7 +51,7 @@ internal class DebugWrapper : ISourceFile
         sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
         breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
-        sourceMapManager.ConstructNewSourceMap(file);
+        sourceMapManager.ConstructNewSourceMap(file, hasHeader);
 
         var breakpoints = breakpointManager.SetBitmagicBreakpointsNew(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
@@ -84,7 +87,7 @@ internal class DebugWrapper : ISourceFile
         sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
         breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
-        sourceMapManager.ConstructNewSourceMap(file);
+        sourceMapManager.ConstructNewSourceMap(file, hasHeader);
 
         var breakpoints = breakpointManager.SetBitmagicBreakpointsNew(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
