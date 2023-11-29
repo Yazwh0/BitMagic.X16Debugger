@@ -393,17 +393,18 @@ public class X16Debug : DebugAdapterBase
         catch (CompilerLineException e)
         {
             var sourceFile = e.Line.Source.SourceFile;
-            var lineNumber = e.Line.Source.LineNumber;
+            var lineNumber = e.Line.Source.LineNumber - 1;
 
-            if (sourceFile.Origin == SourceFileType.Intermediary && sourceFile is ProcessResult pr && pr != null)
-            {
-                sourceFile = new BitMagicProjectFile(pr.Source.Map[lineNumber - 1].SourceFilename);
-                lineNumber = pr.Source.Map[lineNumber - 1].Line;
-            }
+            // its very possible the source hasn't been registered, so we need to do it.
+            _serviceManager.DebugableFileManager.AddFiles(sourceFile);
+
+            var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
+            
+            var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
 
             var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
 
-            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({lineNumber}) \"{e.Message}\"", sourceFile, lineNumber);
+            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber+1);
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -412,17 +413,17 @@ public class X16Debug : DebugAdapterBase
         catch (CompilerSourceException e)
         {
             var sourceFile = e.SourceFile.SourceFile;
-            var lineNumber = e.SourceFile.LineNumber;
+            var lineNumber = e.SourceFile.LineNumber - 1;
 
-            if (sourceFile.Origin == SourceFileType.Intermediary && sourceFile is ProcessResult pr && pr != null)
-            {
-                sourceFile = new BitMagicProjectFile(pr.Source.Map[lineNumber - 1].SourceFilename);
-                lineNumber = pr.Source.Map[lineNumber - 1].Line;
-            }
+            _serviceManager.DebugableFileManager.AddFiles(sourceFile);
+
+            var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
+
+            var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
 
             var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
 
-            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({lineNumber}) \"{e.Message}\"", sourceFile, lineNumber);
+            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -1064,7 +1065,9 @@ public class X16Debug : DebugAdapterBase
 
         _serviceManager.VariableManager.SetScope(current);
 
-        toReturn.Scopes.AddRange(_serviceManager.ScopeManager.AllScopes);
+        var scopes = _serviceManager.ScopeManager.AllScopes;
+
+        toReturn.Scopes.AddRange(scopes);
 
         return toReturn;
     }
