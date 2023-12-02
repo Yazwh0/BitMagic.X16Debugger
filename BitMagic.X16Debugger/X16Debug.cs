@@ -168,6 +168,10 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
+        // Clear Ram
+        if (_debugProject.MemoryFillValue != 0)
+            _emulator.FillMemory(_debugProject.MemoryFillValue);
+
         // Load ROM
         var rom = _defaultRomFile;
         if (!string.IsNullOrWhiteSpace(_debugProject.RomFile))
@@ -805,6 +809,12 @@ public class X16Debug : DebugAdapterBase
                 case Emulator.EmulatorResult.UnknownOpCode:
                     this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Unknown OpCode hit", 0, null, true));
                     _emulator.Stepping = true;
+                    break;
+                case Emulator.EmulatorResult.BrkHit:
+                    Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4}");
+                    this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
+                    this.Protocol.SendEvent(new TerminatedEvent());
+                    _running = false;
                     break;
                 default:
                     Logger.LogLine($"Stopping. Result : {returnCode}");

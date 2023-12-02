@@ -1,4 +1,5 @@
-﻿using BitMagic.X16Debugger.DebugableFiles;
+﻿using BitMagic.Compiler;
+using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 
 namespace BitMagic.X16Debugger;
@@ -38,6 +39,7 @@ internal class ServiceManager
     public Emulator Reset()
     {
         Emulator = _getNewEmulatorInstance();
+
         Emulator.Brk_Causes_Stop = true; // todo: make this an option??
 
         IdManager = new();

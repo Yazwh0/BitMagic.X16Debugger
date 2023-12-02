@@ -105,6 +105,12 @@ public class X16DebugProject
     /// </summary>
     [JsonProperty("compileOptions", DefaultValueHandling = DefaultValueHandling.Ignore)]
     public CompileOptions? CompileOptions { get; set; } = null;
+
+    /// <summary>
+    /// Value to fill CPU RAM and VRAM with at startup.
+    /// </summary>
+    [JsonProperty("memoryFillValue", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public byte MemoryFillValue { get; set; } = 0;
 }
 
 public class RtcNvram
