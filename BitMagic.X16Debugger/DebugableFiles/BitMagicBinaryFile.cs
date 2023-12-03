@@ -162,7 +162,7 @@ internal static class CompileResultExtensions
         {
             var hasAddedHeader = i.Value.FileName.EndsWith(".PRG", StringComparison.InvariantCultureIgnoreCase);
 
-            toReturn.Add(new BitMagicBinaryFile(result.Project.Code, i.Value, result, hasAddedHeader ? FileHeader.HeaderNotInCode : FileHeader.HeaderInCode));
+            toReturn.Add(new BitMagicBinaryFile(result.Project.Code, i.Value, result, hasAddedHeader ? FileHeader.HeaderNotInCode : FileHeader.NoHeader ));
         }
 
         return toReturn;

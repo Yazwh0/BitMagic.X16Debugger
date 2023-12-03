@@ -194,7 +194,7 @@ internal class StackManager
                     frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
                     toReturn.Line = line;
 
-                    var (source, lineNumber) = wrapper.FindUltimateSource(debuggerAddress - binaryFile.BaseAddress, _debugableFileManager);
+                    var (source, lineNumber) = wrapper.FindUltimateSource(address - binaryFile.BaseAddress, _debugableFileManager);
 
                     if (source != null)
                     {
