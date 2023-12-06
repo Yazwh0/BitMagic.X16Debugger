@@ -2,6 +2,7 @@
 using BitMagic.Common.Address;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using System.Net;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -129,6 +130,14 @@ internal class DebugWrapper : ISourceFile
     {
         var toReturn = new List<Breakpoint>();
 
+        foreach (var bp in Breakpoints)
+        {
+            if (bp.PrimaryAddress != 0)
+                emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
+            if (bp.SecondaryAddress != 0)
+                emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
+        }
+
         Breakpoints.Clear();
 
         // need to work from the source file (this) down the children to the address in memory
@@ -154,14 +163,14 @@ internal class DebugWrapper : ISourceFile
                     emulator.Breakpoints[secondAddress] = breakpointValue;
 
                 added = true;
-                Breakpoints.Add(new BreakpointPair(breakpoint, sbp));
+                Breakpoints.Add(new BreakpointPair(breakpoint, sbp, address, secondAddress));
                 toReturn.Add(breakpoint);
             }
 
             if (!added)
             {
                 var breakpoint = sbp.ConvertBreakpoint(arguments.Source, false, idManager);
-                Breakpoints.Add(new BreakpointPair(breakpoint, sbp));
+                Breakpoints.Add(new BreakpointPair(breakpoint, sbp, 0, 0));
                 toReturn.Add(breakpoint);
             }
         }
@@ -244,7 +253,7 @@ internal class DebugWrapper : ISourceFile
     #endregion
 }
 
-internal record class BreakpointPair(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint);
+internal record class BreakpointPair(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint, int PrimaryAddress, int SecondaryAddress);
 
 internal class DebugWrapperAlreadyLoadedException : Exception
 {
