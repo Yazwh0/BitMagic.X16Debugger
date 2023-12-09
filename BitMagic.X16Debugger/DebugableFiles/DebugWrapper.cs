@@ -2,7 +2,6 @@
 using BitMagic.Common.Address;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System.Net;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -15,10 +14,14 @@ internal class DebugWrapper : ISourceFile
 #endif
 
     public bool Loaded { get; internal set; } = false;
+    public int LoadedDebuggerAddress { get; internal set; } 
     public List<BreakpointPair> Breakpoints { get; } = new();
-    public DebugWrapper(ISourceFile sourceFile)
+
+    private readonly BreakpointManager _breakpointManager;
+    public DebugWrapper(ISourceFile sourceFile, BreakpointManager breakpointManager)
     {
         _sourceFile = sourceFile;
+        _breakpointManager = breakpointManager;
     }
 
     /// <summary>
@@ -29,11 +32,10 @@ internal class DebugWrapper : ISourceFile
     /// <param name="address">Actual address to load into.</param>
     /// <param name="hasHeader">Are we including the header or not?</param>
     /// <param name="sourceMapManager"></param>
-    /// <param name="breakpointManager"></param>
     /// <exception cref="DebugWrapperAlreadyLoadedException"></exception>
     /// <exception cref="DebugWrapperFileNotBinaryException"></exception>
     [Obsolete]
-    public List<Breakpoint> Load(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager, DebugableFileManager fileManager)
+    public List<Breakpoint> Load(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, DebugableFileManager fileManager)
     {
         if (Loaded)
             throw new DebugWrapperAlreadyLoadedException(this);
@@ -46,15 +48,16 @@ internal class DebugWrapper : ISourceFile
         file.LoadIntoMemory(emulator, address);
 
         Loaded = true;
+        LoadedDebuggerAddress = address;
 
         var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, emulator);
 
         sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
-        breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
+        _breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
         sourceMapManager.ConstructNewSourceMap(file, hasHeader);
 
-        var breakpoints = breakpointManager.SetBitmagicBreakpointsNew(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
+        var breakpoints = _breakpointManager.CreateBitMagicBreakpoints(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
         if (file is BitMagicBinaryFile bitmagicFile)
         {
@@ -68,13 +71,12 @@ internal class DebugWrapper : ISourceFile
     /// Called after a file is loaded into memory
     /// </summary>
     /// <param name="emulator"></param>
-    /// <param name="address"></param>
+    /// <param name="debuggerAddress"></param>
     /// <param name="hasHeader"></param>
     /// <param name="sourceMapManager"></param>
-    /// <param name="breakpointManager"></param>
     /// <param name="fileManager"></param>
     /// <returns></returns>
-    public List<Breakpoint> FileLoaded(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, BreakpointManager breakpointManager, DebugableFileManager fileManager)
+    public List<Breakpoint> FileLoaded(Emulator emulator, int debuggerAddress, bool hasHeader, SourceMapManager sourceMapManager, DebugableFileManager fileManager)
     {
         Loaded = true;
 
@@ -83,14 +85,14 @@ internal class DebugWrapper : ISourceFile
         if (file == null)
             throw new DebugWrapperFileNotBinaryException(_sourceFile);
 
-        var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, emulator);
+        LoadedDebuggerAddress = debuggerAddress;
 
         sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
-        breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
+        _breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
         sourceMapManager.ConstructNewSourceMap(file, hasHeader);
 
-        var breakpoints = breakpointManager.SetBitmagicBreakpointsNew(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
+        var breakpoints = _breakpointManager.CreateBitMagicBreakpoints(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
         if (file is BitMagicBinaryFile bitmagicFile)
         {
@@ -100,12 +102,12 @@ internal class DebugWrapper : ISourceFile
         return breakpoints;
     }
 
-    internal IEnumerable<Breakpoint> FindParentBreakpoints(int lineNumber, DebugableFileManager fileManager)
+    internal IEnumerable<BreakpointPair> FindParentBreakpoints(int lineNumber, DebugableFileManager fileManager)
     {
         foreach (var bps in Breakpoints)
         {
             if (bps.SourceBreakpoint.Line == lineNumber + 1) // VSC line numbers are not 0 based
-                yield return bps.Breakpoint;
+                yield return bps;
         }
 
         if (Parents.Count == 0) // all done
@@ -126,57 +128,63 @@ internal class DebugWrapper : ISourceFile
         }
     }
 
-    public List<Breakpoint> SetBreakpoints(SetBreakpointsArguments arguments, Emulator emulator, HashSet<int> debuggerBreakpoints, DebugableFileManager fileManager, IdManager idManager)
-    {
-        var toReturn = new List<Breakpoint>();
+    // This needs to call into the breakpoint manager
+    //public List<Breakpoint> SetBreakpoints(SetBreakpointsArguments arguments, Emulator emulator, HashSet<int> debuggerBreakpoints, DebugableFileManager fileManager, IdManager idManager)
+    //{
+    //    var toReturn = new List<Breakpoint>();
 
-        foreach (var bp in Breakpoints)
-        {
-            if (bp.PrimaryAddress != 0)
-                emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
-            if (bp.SecondaryAddress != 0)
-                emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
-        }
+    //    _breakpointManager.ClearBreakpoints(this);
 
-        Breakpoints.Clear();
+    //    //foreach (var bp in Breakpoints)
+    //    //{
+    //    //    if (bp.PrimaryAddress != 0)
+    //    //        emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
+    //    //    if (bp.SecondaryAddress != 0)
+    //    //        emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
+    //    //}
 
-        // need to work from the source file (this) down the children to the address in memory
-        foreach (var sbp in arguments.Breakpoints)
-        {
-            var added = false;
-            foreach (var (debuggerAddress, loaded) in FindUltimateAddresses(sbp.Line - 1, fileManager))
-            {
-                var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, idManager);
+    //    Breakpoints.Clear();
 
-                // set system bit
-                var breakpointValue = debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)0x01;
+    //    // need to work from the source file (this) down the children to the address in memory
+    //    foreach (var sbp in arguments.Breakpoints)
+    //    {
+    //        var added = false;
+    //        foreach (var (debuggerAddress, loaded) in FindUltimateAddresses(sbp.Line - 1, fileManager))
+    //        {
+    //            if (!loaded)
+    //                continue;
 
-                var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
+    //            var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, idManager);
 
-                var (address, secondAddress) = AddressFunctions.GetMemoryLocations(debuggerAddress);
-                var currentBank = address >= 0xc000 ? emulator.RomBankAct : emulator.RamBankAct;
+    //            // set system bit
+    //            var breakpointValue = debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)0x01;
 
-                if (address < 0xa000 || bank == currentBank)
-                    emulator.Breakpoints[address] = breakpointValue;
+    //            var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
 
-                if (secondAddress != 0)
-                    emulator.Breakpoints[secondAddress] = breakpointValue;
+    //            var (address, secondAddress) = AddressFunctions.GetMemoryLocations(debuggerAddress);
+    //            var currentBank = address >= 0xc000 ? emulator.RomBankAct : emulator.RamBankAct;
 
-                added = true;
-                Breakpoints.Add(new BreakpointPair(breakpoint, sbp, address, secondAddress));
-                toReturn.Add(breakpoint);
-            }
+    //            if (address < 0xa000 || bank == currentBank)
+    //                emulator.Breakpoints[address] = breakpointValue;
 
-            if (!added)
-            {
-                var breakpoint = sbp.ConvertBreakpoint(arguments.Source, false, idManager);
-                Breakpoints.Add(new BreakpointPair(breakpoint, sbp, 0, 0));
-                toReturn.Add(breakpoint);
-            }
-        }
+    //            if (secondAddress != 0)
+    //                emulator.Breakpoints[secondAddress] = breakpointValue;
 
-        return toReturn;
-    }
+    //            added = true;
+    //            Breakpoints.Add(new BreakpointPair(breakpoint, sbp, address, secondAddress));
+    //            toReturn.Add(breakpoint);
+    //        }
+
+    //        if (!added)
+    //        {
+    //            var breakpoint = sbp.ConvertBreakpoint(arguments.Source, false, idManager);
+    //            Breakpoints.Add(new BreakpointPair(breakpoint, sbp, 0, 0));
+    //            toReturn.Add(breakpoint);
+    //        }
+    //    }
+
+    //    return toReturn;
+    //}
 
     internal IEnumerable<(int DebuggerAddress, bool Loaded)> FindUltimateAddresses(int lineNumber, DebugableFileManager fileManager)
     {
@@ -187,7 +195,7 @@ internal class DebugWrapper : ISourceFile
             if (binary == null)
                 yield break;
 
-            yield return (binary.BaseAddress + lineNumber, Loaded);
+            yield return (LoadedDebuggerAddress + lineNumber, Loaded);// (binary.BaseAddress + lineNumber, Loaded);
 
             yield break;
         }

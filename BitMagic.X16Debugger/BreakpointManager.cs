@@ -4,14 +4,19 @@ using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using System.Net;
 
 namespace BitMagic.X16Debugger;
 
 internal class BreakpointManager
 {
     // breakpoints for bmasm files
+    [Obsolete]
     private readonly Dictionary<string, List<BitMagicBreakpointMap>> _bitMagicBreakpoints = new();
+    [Obsolete]
     private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new();
+
+
     private readonly Dictionary<int, (Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> _breakpoints = new();
     private readonly Dictionary<int, int> _breakpointHitCount = new();
     private readonly Emulator _emulator;
@@ -98,7 +103,24 @@ internal class BreakpointManager
         return toReturn;
     }
 
-    public List<Breakpoint> SetBitmagicBreakpointsNew(int debuggerAddress, DebugWrapper wrapper, DebugableFileManager fileManager)
+    public void ClearBreakpoints(DebugWrapper wrapper)
+    {
+        foreach (var bp in wrapper.Breakpoints)
+        {
+            if (bp.PrimaryAddress != 0)
+                _emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
+            if (bp.SecondaryAddress != 0)
+                _emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
+
+            var thisAddress = bp.SecondaryAddress == 0 ? bp.PrimaryAddress : bp.SecondaryAddress;
+            if (_breakpoints.ContainsKey(thisAddress))
+                _breakpoints.Remove(thisAddress);
+        }
+    }
+
+    // Called when a file is loaded, this is used by the wrapper to construct its Breakpoint list.
+    // todo: load needs to add breakpoints to the _breakpoints collection
+    public List<Breakpoint> CreateBitMagicBreakpoints(int debuggerAddress, DebugWrapper wrapper, DebugableFileManager fileManager)
     {
         var toReturn = new List<Breakpoint>();
         // Breakpoints are placed in code, but we need to find where those places map to.
@@ -113,8 +135,8 @@ internal class BreakpointManager
             {
                 foreach (var b in wrapper.FindParentBreakpoints(i, fileManager))
                 {
-                    toReturn.Add(b);
-                    b.Verified = true;
+                    toReturn.Add(b.Breakpoint);
+                    b.Breakpoint.Verified = true;
 
                     // set breakpoint in memory
                     var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress + i) ? (byte)0x81 : (byte)0x01;
@@ -129,9 +151,66 @@ internal class BreakpointManager
 
                     if (secondAddress != 0)
                         _emulator.Breakpoints[secondAddress] = breakpointValue;
+
+                    var thisAddress = secondAddress == 0 ? address : secondAddress;
+                    if (!_breakpoints.ContainsKey(thisAddress))
+                        _breakpoints.Add(thisAddress, (b.Breakpoint, b.SourceBreakpoint));
                 }
             }
         }
+        return toReturn;
+    }
+
+    // Called when VSCode sets a breakpoint
+    public List<Breakpoint> HandleSetBreakpointsBitmagic(SetBreakpointsArguments arguments, DebugWrapper wrapper)
+    {
+        ClearBreakpoints(wrapper);
+        wrapper.Breakpoints.Clear();
+
+        var toReturn = new List<Breakpoint>();
+
+        foreach (var sbp in arguments.Breakpoints)
+        {
+            var added = false;
+            foreach (var (debuggerAddress, loaded) in wrapper.FindUltimateAddresses(sbp.Line - 1, _debugableFileManager))
+            {
+                var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, _idManager);
+
+                // set system bit
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)0x01;
+
+                var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
+
+                var (address, secondAddress) = AddressFunctions.GetMemoryLocations(debuggerAddress);
+
+                if (loaded)
+                {
+                    var currentBank = address >= 0xc000 ? _emulator.RomBankAct : _emulator.RamBankAct;
+
+                    if (address < 0xa000 || bank == currentBank)
+                        _emulator.Breakpoints[address] = breakpointValue;
+
+                    if (secondAddress != 0)
+                        _emulator.Breakpoints[secondAddress] = breakpointValue;
+
+                    var thisAddress = secondAddress == 0 ? address : secondAddress;
+                    if (!_breakpoints.ContainsKey(thisAddress))
+                        _breakpoints.Add(thisAddress, (breakpoint, sbp));
+                }
+
+                added = true;
+                wrapper.Breakpoints.Add(new BreakpointPair(breakpoint, sbp, address, secondAddress));
+                toReturn.Add(breakpoint);
+            }
+
+            if (!added)
+            {
+                var breakpoint = sbp.ConvertBreakpoint(arguments.Source, false, _idManager);
+                wrapper.Breakpoints.Add(new BreakpointPair(breakpoint, sbp, 0, 0));
+                toReturn.Add(breakpoint);
+            }
+        }
+
         return toReturn;
     }
 
@@ -226,7 +305,13 @@ internal class BreakpointManager
 
         if (f != null) // can have files with breakpoints that are not part of the project
         {
-            var bps = f.SetBreakpoints(arguments, _emulator, _debuggerBreakpoints, _debugableFileManager, _idManager);
+            //var breakpoints = SetBitmagicBreakpointsNew(f.LoadedDebuggerAddress, f, _debugableFileManager); // set breakpoints as verified (loade)
+
+            //return new SetBreakpointsResponse() { Breakpoints = breakpoints };
+
+            //var bps = f.SetBreakpoints(arguments, _emulator, _debuggerBreakpoints, _debugableFileManager, _idManager);
+
+            var bps = HandleSetBreakpointsBitmagic(arguments, f);
 
             return new SetBreakpointsResponse(bps) { Breakpoints = bps };
         }

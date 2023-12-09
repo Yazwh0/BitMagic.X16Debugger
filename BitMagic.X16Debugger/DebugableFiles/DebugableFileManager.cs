@@ -15,9 +15,16 @@ internal class DebugableFileManager
     private readonly Dictionary<string, DebugWrapper> AllFiles = new ();
 
     private readonly IdManager _idManager;
+    private BreakpointManager? _breakpointManager;
+
     internal DebugableFileManager(IdManager idManager)
     {
         _idManager = idManager;
+    }
+
+    internal void SetBreakpointManager(BreakpointManager breakpointManager)
+    {
+        _breakpointManager = breakpointManager;
     }
 
     public void AddFiles(ISourceFile file)
@@ -25,7 +32,7 @@ internal class DebugableFileManager
         if (AllFiles.ContainsKey(file.Path))
             return;
 
-        var wrapper = new DebugWrapper(file);
+        var wrapper = new DebugWrapper(file, _breakpointManager ?? throw new Exception());
 
         if (wrapper.ReferenceId == null && !wrapper.Source.ActualFile) // do not create Ids for real files
             wrapper.ReferenceId = _idManager.AddObject(wrapper, ObjectType.DecompiledData);

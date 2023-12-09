@@ -361,7 +361,7 @@ public class X16Debug : DebugAdapterBase
 
                 if (_debugProject.RunSource && result != null)
                 {
-                    result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager, _serviceManager.DebugableFileManager);
+                    result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
 
                     //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
                     _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
@@ -916,7 +916,7 @@ public class X16Debug : DebugAdapterBase
 
                 var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
 
-                var breakpoints = debugableFilenew.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager, _serviceManager.DebugableFileManager);
+                var breakpoints = debugableFilenew.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)
