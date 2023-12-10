@@ -3,6 +3,7 @@ using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
+using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -24,7 +25,7 @@ internal class BitmagicBuilder
     /// </summary>
     /// <param name="debugProject"></param>
     /// <returns>Binary file for the main segment</returns>
-    public async Task<DebugWrapper?> Build(X16DebugProject debugProject)
+    public async Task<(DebugWrapper?, CompileState)> Build(X16DebugProject debugProject)
     {
         var project = new Project();
         _logger.LogLine($"Compiling {debugProject.Source} ");
@@ -99,7 +100,7 @@ internal class BitmagicBuilder
             toReturnOld.Add(bitmagicPrg);
         }
 
-        return toReturn;
+        return (toReturn, compileResult.State);
     }
 }
 

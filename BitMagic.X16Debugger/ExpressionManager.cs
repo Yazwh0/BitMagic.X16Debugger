@@ -1,8 +1,9 @@
-﻿using BitMagic.Compiler.CodingSeb;
+﻿using BitMagic.Compiler;
+using BitMagic.Compiler.CodingSeb;
+using BitMagic.X16Debugger.DebugableFiles;
 using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System.Text.RegularExpressions;
-
+using System.Xml.Linq;
 
 namespace BitMagic.X16Debugger;
 
@@ -10,23 +11,57 @@ internal class ExpressionManager
 {
     private readonly Asm6502ExpressionEvaluator _evaluator;
     private readonly VariableManager _variableManager;
+    private CompileState? _state = null;
 
     internal ExpressionManager(VariableManager variableManager)
     {
         _evaluator = new Asm6502ExpressionEvaluator();
+        _evaluator.StringifyFunction = Stringify;
         _variableManager = variableManager;
 
         _evaluator.EvaluateVariable += _evaluator_EvaluateVariable;
+    }
+
+    public void SetState(CompileState state)
+    {
+        _state = state;
+    }
+
+    private string Stringify(object obj)
+    {
+        if (obj == null)
+            return "";
+
+        if (obj is ushort)
+            return "0x" + ((ushort)obj).ToString("X4");
+
+        if (obj is byte)
+            return "0x" + ((byte)obj).ToString("X2");
+
+        if (obj is uint)
+            return "0x" + ((uint)obj).ToString("X8");
+
+        return obj.ToString();
     }
 
     private void _evaluator_EvaluateVariable(object? sender, VariableEvaluationEventArg e)
     {
         var tree = _variableManager.ObjectTree;
 
-        if (!tree.ContainsKey(e.Name))
+        if (tree.ContainsKey(e.Name))
+        {
+            e.Value = tree[e.Name];
+            return;
+        }
+
+        if (_state == null)
             return;
 
-        e.Value = tree[e.Name];
+        var asmValue = _state.Evaluator.Evaluate(e.Name, new Common.SourceFilePosition(), _state.Procedure.Variables, 0, false);
+
+        if (!asmValue.RequiresRecalc)
+            e.Value = asmValue.Result;
+
     }
 
     public EvaluateResponse Evaluate(EvaluateArguments arguments)
@@ -37,6 +72,7 @@ internal class ExpressionManager
         try
         {
             result = _evaluator.Evaluate(arguments.Expression);
+            result = Stringify(result);
         }
         catch (Exception e)
         {
@@ -56,10 +92,8 @@ internal class ExpressionManager
         try
         {
             var r = _evaluator.Evaluate(test);
-            if (r == null)
-                return "";
 
-            return r.ToString() ?? "";
+            return Stringify(r);
         }
         catch (Exception e)
         {

@@ -354,7 +354,9 @@ public class X16Debug : DebugAdapterBase
         {
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                var result = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
+                var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
+                _serviceManager.ExpressionManager.SetState(state);
+                
                 var prg = result.Source as IBinaryFile;
 
                 //var prg = results.First(i => i.IsMain);
@@ -788,7 +790,8 @@ public class X16Debug : DebugAdapterBase
                             if (condition)
                             {
                                 var message = _serviceManager.ExpressionManager.FormatMessage(breakpoint.LogMessage);
-                                Logger.LogLine(message);
+                                if (!string.IsNullOrEmpty(message)) // only send actual messages, allows for simpler conditional logpoints
+                                    Logger.LogLine(message);
                             }
                             _emulator.Stepping = false;
                             wait = false;
