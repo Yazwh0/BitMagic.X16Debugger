@@ -1,13 +1,7 @@
 ﻿using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Newtonsoft.Json.Linq;
-using Silk.NET.OpenGL;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using static Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.VariablePresentationHint;
 
 namespace BitMagic.X16Debugger;
@@ -15,7 +9,6 @@ namespace BitMagic.X16Debugger;
 internal class VariableManager
 {
     private readonly Dictionary<int, IVariableItem> _variablesById = new();
-    //private readonly Dictionary<string, IVariableItem> _variables = new();
     private readonly Dictionary<string, object> _variableObjectTree = new();
 
     private readonly IdManager _idManager;
@@ -193,23 +186,23 @@ internal class VariableManager
                 new VariableChildren("Flags",
                 () => $"[{(_emulator.Negative ? "N" : " ")}{(_emulator.Overflow ? "V" : " ")} {(_emulator.BreakFlag ? "B" : " ")}{(_emulator.Decimal ? "D" : " ")}{(_emulator.InterruptDisable ? "I" : " ")}{(_emulator.Zero ? "Z" : " ")}{(_emulator.Carry ? "C" : " ")}]",
                 new[] {
-                    new VariableMap("Negative", "Bool", () => _emulator.Negative.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Overflow", "Bool", () => _emulator.Overflow.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Break", "Bool", () => _emulator.BreakFlag.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Decimal", "Bool", () => _emulator.Decimal.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Interupt", "Bool", () => _emulator.InterruptDisable.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Zero", "Bool", () => _emulator.Zero.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Carry", "Bool", () => _emulator.Carry.ToString(), attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Negative", "Bool", () => _emulator.Negative, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Overflow", "Bool", () => _emulator.Overflow, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Break", "Bool", () => _emulator.BreakFlag, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Decimal", "Bool", () => _emulator.Decimal, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Interupt", "Bool", () => _emulator.InterruptDisable, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Zero", "Bool", () => _emulator.Zero, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Carry", "Bool", () => _emulator.Carry, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
                 })));
-        scope.AddVariable(new VariableMap("A", "Byte", () => $"0x{_emulator.A:X2}", () => _emulator.A));
-        scope.AddVariable(new VariableMap("X", "Byte", () => $"0x{_emulator.X:X2}", () => _emulator.X));
-        scope.AddVariable(new VariableMap("Y", "Byte", () => $"0x{_emulator.Y:X2}", () => _emulator.Y));
-        scope.AddVariable(new VariableMap("PC", "Word", () => $"0x{_emulator.Pc:X4}", () => _emulator.Pc));
-        scope.AddVariable(new VariableMap("SP", "Byte", () => $"0x{_emulator.StackPointer:X2}", () => _emulator.StackPointer));
+        scope.AddVariable(new VariableMap("A", "Byte", () => _emulator.A, () => _emulator.A));
+        scope.AddVariable(new VariableMap("X", "Byte", () => _emulator.X, () => _emulator.X));
+        scope.AddVariable(new VariableMap("Y", "Byte", () => _emulator.Y, () => _emulator.Y));
+        scope.AddVariable(new VariableMap("PC", "Word", () => _emulator.Pc, () => _emulator.Pc));
+        scope.AddVariable(new VariableMap("SP", "Byte", () => $"0x{_emulator.StackPointer:X3}", () => _emulator.StackPointer));
 
-        scope.AddVariable(new VariableMap("Ram Bank", "Byte", () => $"0x{_emulator.Memory[0]:X2}", () => _emulator.Memory[0]));
-        scope.AddVariable(new VariableMap("Rom Bank (Act)", "int", () => $"0x{_emulator.RomBankAct:X2}", () => _emulator.RomBankAct));
-        scope.AddVariable(new VariableMap("Rom Bank (Memory)", "Byte", () => $"0x{_emulator.Memory[1]:X2}", () => _emulator.Memory[1]));
+        scope.AddVariable(new VariableMap("Ram Bank", "Byte", () => _emulator.Memory[0], () => _emulator.Memory[0]));
+        scope.AddVariable(new VariableMap("Rom Bank (Act)", "int", () => (byte)_emulator.RomBankAct, () => (byte)_emulator.RomBankAct));
+        scope.AddVariable(new VariableMap("Rom Bank (Memory)", "Byte", () => _emulator.Memory[1], () => _emulator.Memory[1]));
         scope.AddVariable(new VariableMemory("Ram", () => "CPU Visible Ram", "main", () => _emulator.Memory.ToArray()));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
 
@@ -553,7 +546,7 @@ public interface IVariableItem
     int Id { get; }
     string Name { get; }
     Variable GetVariable(); // Get the Variable from a variable request
-    Func<string>? GetValue { get; } // Get value for Variables
+    Func<object>? GetValue { get; } // Get value for Variables
     Action<string>? SetValue { get; } // Set value from a call to SetVariable
     void SetVariable(SetVariableArguments value); // From a variable edit
     Func<object>? GetExpressionValue { get; }  // used by the Watches
@@ -570,7 +563,7 @@ public abstract class VariableItem : IVariableItem
     internal AttributesValue Attributes { get; set; }
     internal string? MemoryReference { get; set; }
 
-    public Func<string>? GetValue { get; protected set; }
+    public Func<object>? GetValue { get; protected set; }
     public Action<string>? SetValue { get; protected set; }
     public abstract void SetVariable(SetVariableArguments value);
 
@@ -598,7 +591,7 @@ public abstract class VariableItem : IVariableItem
     {
         Name = Name,
         Type = Type,
-        Value = GetValue == null ? "" : GetValue(),
+        Value = GetValue == null ? "" : ExpressionManager.Stringify(GetValue()),
         PresentationHint = new VariablePresentationHint() { Kind = Kind, Attributes = Attributes },
         MemoryReference = MemoryReference
     };
@@ -630,7 +623,7 @@ public class VariableChildren : VariableItem
     {
         Name = Name,
         Type = Type,
-        Value = GetValue == null ? "" : GetValue(),
+        Value = GetValue == null ? "" : ExpressionManager.Stringify(GetValue()),
         PresentationHint = new VariablePresentationHint() { Kind = Kind, Attributes = Attributes },
         MemoryReference = MemoryReference,
         NamedVariables = _children.Count,
@@ -771,20 +764,20 @@ internal class VariableMap : IVariableItem
     public string Name => _variable.Name;
     public int Id => 0;
 
-    public Func<string> GetValue { get; }
+    public Func<object> GetValue { get; }
 
     public Action<string>? SetValue => throw new NotImplementedException();
 
     public Func<object>? GetExpressionValue { get; }
 
-    public VariableMap(string name, string type, Func<string> getFunction,
+    public VariableMap(string name, string type, Func<object> getFunction,
         VariablePresentationHint.KindValue kindValue = VariablePresentationHint.KindValue.Property,
         VariablePresentationHint.AttributesValue attribute = AttributesValue.None
         ) : this(name, type, getFunction, getFunction, kindValue, attribute)
     {
     }
 
-    public VariableMap(string name, string type, Func<string> getFunction, Func<object> getExpression,
+    public VariableMap(string name, string type, Func<object> getFunction, Func<object> getExpression,
         VariablePresentationHint.KindValue kindValue = VariablePresentationHint.KindValue.Property,
         VariablePresentationHint.AttributesValue attribute = AttributesValue.None
     )
@@ -802,7 +795,7 @@ internal class VariableMap : IVariableItem
 
     public Variable GetVariable()
     {
-        _variable.Value = GetValue();
+        _variable.Value = ExpressionManager.Stringify(GetValue());
         return _variable;
     }
 

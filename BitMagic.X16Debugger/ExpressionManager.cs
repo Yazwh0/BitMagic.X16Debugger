@@ -1,9 +1,7 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.Compiler.CodingSeb;
-using BitMagic.X16Debugger.DebugableFiles;
 using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System.Xml.Linq;
 
 namespace BitMagic.X16Debugger;
 
@@ -27,7 +25,7 @@ internal class ExpressionManager
         _state = state;
     }
 
-    private string Stringify(object obj)
+    internal static string Stringify(object obj)
     {
         if (obj == null)
             return "";
