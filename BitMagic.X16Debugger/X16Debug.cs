@@ -1166,6 +1166,8 @@ public class X16Debug : DebugAdapterBase
         if (data == null)
             return toReturn;
 
+        data.UpdateContent(); // will only update if requird.
+
         toReturn.Content = string.Join(Environment.NewLine, data.Content);
         return toReturn;
     }
