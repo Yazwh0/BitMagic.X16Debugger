@@ -774,6 +774,7 @@ public class X16Debug : DebugAdapterBase
 
                     if (breakpoint != null)
                     {
+                        var stepping = _emulator.Stepping;
                         var condition = true;
                         if (!string.IsNullOrWhiteSpace(breakpoint.Condition))
                         {
@@ -793,13 +794,13 @@ public class X16Debug : DebugAdapterBase
                                 if (!string.IsNullOrEmpty(message)) // only send actual messages, allows for simpler conditional logpoints
                                     Logger.LogLine(message);
                             }
-                            _emulator.Stepping = false;
+                            _emulator.Stepping = stepping;
                             wait = false;
                             break;
                         }
                         else if (!condition)
                         {
-                            _emulator.Stepping = false;
+                            _emulator.Stepping = stepping;
                             wait = false;
                             break;
                         }
