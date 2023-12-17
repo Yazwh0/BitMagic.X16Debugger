@@ -1082,7 +1082,7 @@ public class X16Debug : DebugAdapterBase
         var scopes = _serviceManager.ScopeManager.AllScopes;
 
         toReturn.Scopes.AddRange(scopes);
-
+        
         return toReturn;
     }
 

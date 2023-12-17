@@ -82,8 +82,8 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
 
         foreach (var (name, value) in _result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
         {
-            if (!Symbols.ContainsKey(value))
-                _symbols.Add(value, name);
+            if (!Symbols.ContainsKey(value.Value))
+                _symbols.Add(value.Value, name);
         }
     }
 

@@ -1,6 +1,9 @@
 ﻿using BitMagic.Common;
+using BitMagic.Compiler;
 using BitMagic.X16Emulator;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Scope = Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.Scope;
 
 namespace BitMagic.X16Debugger;
 
@@ -134,37 +137,102 @@ internal class DebuggerLocalVariables : IScopeMap
                 continue;
 
             var j = i;
-            Func<string> getter = j.Value.VariableType switch
-            {
-                VariableType.Byte => () => $"0x{memory[j.Value.Value].Byte:X2}",
-                VariableType.Sbyte => () => $"{memory[j.Value.Value].Sbyte:0}",
-                VariableType.Short => () => $"{memory[j.Value.Value].Short:0}",
-                VariableType.Ushort => () => $"0x{memory[j.Value.Value].Ushort:X4}",
-                VariableType.Int => () => $"{memory[j.Value.Value].Int:0}",
-                VariableType.Uint => () => $"0x{memory[j.Value.Value].Uint:X8}",
-                VariableType.Long => () => $"{memory[j.Value.Value].Long:0}",
-                VariableType.Ulong => () => $"0x{memory[j.Value.Value].Ulong:X16}",
-                VariableType.String => () => memory[j.Value.Value].String,
-                VariableType.FixedStrings => () => memory[j.Value.Value].FixedString(j.Value.Length),
-                _ => () => "Unhandled"
-            };
+            Func<string> getter = j.Value.ToStringFunction(memory);
 
-            var type = j.Value.VariableType switch
-            {
-                VariableType.Byte => "int",
-                VariableType.Sbyte => "int",
-                VariableType.Short => "int",
-                VariableType.Ushort => "int",
-                VariableType.Int => "int",
-                VariableType.Uint => "int",
-                VariableType.Long => "int",
-                VariableType.Ulong => "int",
-                VariableType.String => "string",
-                VariableType.FixedStrings => "string",
-                _ => "string"
-            };
+
+            //    j.Value.VariableType switch
+            //{
+            //    VariableType.Byte => () => $"0x{memory[j.Value.Value].Byte:X2}",
+            //    VariableType.Sbyte => () => $"{memory[j.Value.Value].Sbyte:0}",
+            //    VariableType.Short => () => $"{memory[j.Value.Value].Short:0}",
+            //    VariableType.Ushort => () => $"0x{memory[j.Value.Value].Ushort:X4}",
+            //    VariableType.Int => () => $"{memory[j.Value.Value].Int:0}",
+            //    VariableType.Uint => () => $"0x{memory[j.Value.Value].Uint:X8}",
+            //    VariableType.Long => () => $"{memory[j.Value.Value].Long:0}",
+            //    VariableType.Ulong => () => $"0x{memory[j.Value.Value].Ulong:X16}",
+            //    VariableType.String => () => memory[j.Value.Value].String,
+            //    VariableType.FixedStrings => () => memory[j.Value.Value].FixedString(j.Value.Length),
+            //    _ => () => "Unhandled"
+            //};
+
+            var type = j.Value.VariableTypeText();
+            //var type = j.Value.VariableType switch
+            //{
+            //    VariableType.Byte => "int",
+            //    VariableType.Sbyte => "int",
+            //    VariableType.Short => "int",
+            //    VariableType.Ushort => "int",
+            //    VariableType.Int => "int",
+            //    VariableType.Uint => "int",
+            //    VariableType.Long => "int",
+            //    VariableType.Ulong => "int",
+            //    VariableType.String => "string",
+            //    VariableType.FixedStrings => "string",
+            //    _ => "string"
+            //};
 
             _variables.Add(new VariableMap(i.Value.Name, type, getter));
         }
     }
+}
+
+internal static class IAsmVariableExtensions
+{
+    internal static Func<string> ToStringFunction(this IAsmVariable variable, MemoryWrapper memory) =>
+        variable.VariableType switch
+        {
+            VariableType.Constant => () => $"{variable.Value}",
+            VariableType.ProcStart => () => $"0x{variable.Value:X4}",
+            VariableType.ProcEnd => () => $"0x{variable.Value:X4}",
+            VariableType.SegmentStart => () => $"0x{variable.Value:X4}",
+            VariableType.LabelPointer => () => $"0x{variable.Value:X4}",
+            VariableType.Byte => () => $"0x{memory[variable.Value].Byte:X2}",
+            VariableType.Sbyte => () => $"{memory[variable.Value].Sbyte:0}",
+            VariableType.Short => () => $"{memory[variable.Value].Short:0}",
+            VariableType.Ushort => () => $"0x{memory[variable.Value].Ushort:X4}",
+            VariableType.Int => () => $"{memory[variable.Value].Int:0}",
+            VariableType.Uint => () => $"0x{memory[variable.Value].Uint:X8}",
+            VariableType.Long => () => $"{memory[variable.Value].Long:0}",
+            VariableType.Ulong => () => $"0x{memory[variable.Value].Ulong:X16}",
+            VariableType.String => () => memory[variable.Value].String,
+            VariableType.FixedStrings => () => memory[variable.Value].FixedString(variable.Length),
+            _ => () => "Unhandled"
+        };
+
+    internal static object GetActualValue(this IAsmVariable variable, MemoryWrapper memory) =>
+        variable.VariableType switch
+        {
+            VariableType.Constant => (int)variable.Value,
+            VariableType.ProcStart => (ushort)variable.Value,
+            VariableType.ProcEnd =>  (ushort)variable.Value,
+            VariableType.SegmentStart => (ushort)variable.Value,
+            VariableType.LabelPointer => (ushort)variable.Value,
+            VariableType.Byte => memory[variable.Value].Byte,
+            VariableType.Sbyte => memory[variable.Value].Sbyte,
+            VariableType.Short => memory[variable.Value].Short,
+            VariableType.Ushort => memory[variable.Value].Ushort,
+            VariableType.Int => memory[variable.Value].Int,
+            VariableType.Uint => memory[variable.Value].Uint,
+            VariableType.Long => memory[variable.Value].Long,
+            VariableType.Ulong => memory[variable.Value].Ulong,
+            VariableType.String => memory[variable.Value].String,
+            VariableType.FixedStrings => memory[variable.Value].FixedString(variable.Length),
+            _ => "Unhandled"
+        };
+
+    internal static string VariableTypeText(this IAsmVariable variable) =>
+         variable.VariableType switch
+         {
+             VariableType.Byte => "int",
+             VariableType.Sbyte => "int",
+             VariableType.Short => "int",
+             VariableType.Ushort => "int",
+             VariableType.Int => "int",
+             VariableType.Uint => "int",
+             VariableType.Long => "int",
+             VariableType.Ulong => "int",
+             VariableType.String => "string",
+             VariableType.FixedStrings => "string",
+             _ => "string"
+         };
 }

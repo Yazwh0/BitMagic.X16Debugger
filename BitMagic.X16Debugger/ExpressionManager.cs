@@ -1,5 +1,6 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.Compiler.CodingSeb;
+using BitMagic.X16Emulator;
 using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
@@ -10,12 +11,16 @@ internal class ExpressionManager
     private readonly Asm6502ExpressionEvaluator _evaluator;
     private readonly VariableManager _variableManager;
     private CompileState? _state = null;
+    private readonly Emulator _emulator;
+    private readonly MemoryWrapper _memoryWrapper;
 
-    internal ExpressionManager(VariableManager variableManager)
+    internal ExpressionManager(VariableManager variableManager, Emulator emulator)
     {
         _evaluator = new Asm6502ExpressionEvaluator();
         _evaluator.StringifyFunction = Stringify;
         _variableManager = variableManager;
+        _emulator = emulator;
+        _memoryWrapper = new MemoryWrapper(() => _emulator.Memory.ToArray());
 
         _evaluator.EvaluateVariable += _evaluator_EvaluateVariable;
     }
@@ -55,11 +60,17 @@ internal class ExpressionManager
         if (_state == null)
             return;
 
+        if (_state.Evaluator.Variables != null &&
+            _state.Evaluator.Variables.TryGetValue(e.Name, new Common.SourceFilePosition(), out var result))
+        {
+            e.Value = result.GetActualValue(_memoryWrapper);
+            return;
+        }
+
         var asmValue = _state.Evaluator.Evaluate(e.Name, new Common.SourceFilePosition(), _state.Procedure.Variables, 0, false);
 
         if (!asmValue.RequiresRecalc)
             e.Value = asmValue.Result;
-
     }
 
     public EvaluateResponse Evaluate(EvaluateArguments arguments)

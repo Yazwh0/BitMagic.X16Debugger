@@ -152,8 +152,8 @@ internal class SourceMapManager
 
         foreach (var (name, value) in result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
         {
-            if (!Symbols.ContainsKey(value))
-                Symbols.Add(value, name);
+            if (!Symbols.ContainsKey(value.Value))
+                Symbols.Add(value.Value, name);
         }
     }
 

@@ -58,7 +58,7 @@ internal class ServiceManager
         PaletteManager = new(Emulator);
         PsgManager = new(Emulator);
         VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
-        ExpressionManager = new(VariableManager);
+        ExpressionManager = new(VariableManager, Emulator);
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
 
         return Emulator;
