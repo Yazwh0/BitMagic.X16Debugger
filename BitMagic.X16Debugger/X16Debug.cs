@@ -459,7 +459,7 @@ public class X16Debug : DebugAdapterBase
         }
         catch (TemplateException e)
         {
-            Logger.LogError($"ERROR: {e.Message}");
+            Logger.LogLine($"ERROR: {e.Message}");
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -467,6 +467,8 @@ public class X16Debug : DebugAdapterBase
         }
         catch (Exception e)
         {
+            Logger.LogLine($"ERROR: {e.Message}");
+
             throw new ProtocolException(e.Message);
         }
 

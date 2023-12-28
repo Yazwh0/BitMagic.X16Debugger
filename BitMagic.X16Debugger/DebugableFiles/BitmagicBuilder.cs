@@ -3,7 +3,6 @@ using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
-using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
