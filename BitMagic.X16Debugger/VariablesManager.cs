@@ -229,7 +229,7 @@ internal class VariableManager
         scope.AddVariable(
             Register(
                 new VariableChildren("Layer 0", () => _emulator.Vera.Layer0Enable ?
-                    (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Tiles") :
+                    (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer0_T256C)}Tiles") :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}", () => _emulator.Vera.Layer0_MapAddress),
@@ -246,7 +246,7 @@ internal class VariableManager
         scope.AddVariable(
             Register(
                 new VariableChildren("Layer 1", () => _emulator.Vera.Layer1Enable ?
-                    (_emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Tiles") :
+                    (_emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer1_T256C)}Tiles") :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "DWord", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}", () => _emulator.Vera.Layer1_MapAddress),
@@ -493,6 +493,9 @@ internal class VariableManager
         3 => "8",
         _ => "??"
     };
+
+    private static string GetT256C(bool t256c) =>
+        t256c ? " T256C " : " ";
 }
 
 internal interface IScopeWrapper
