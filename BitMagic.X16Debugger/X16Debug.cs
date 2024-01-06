@@ -817,7 +817,7 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.BrkHit:
-                    Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4}");
+                    Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4} RAM Bank: ${_emulator.RamBankAct:X2} ROM Bank: ${_emulator.RomBankAct:X2}");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
                     this.Protocol.SendEvent(new TerminatedEvent());
                     _running = false;
