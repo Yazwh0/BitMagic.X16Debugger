@@ -119,7 +119,6 @@ internal class BreakpointManager
     }
 
     // Called when a file is loaded, this is used by the wrapper to construct its Breakpoint list.
-    // todo: load needs to add breakpoints to the _breakpoints collection
     public List<Breakpoint> CreateBitMagicBreakpoints(int debuggerAddress, DebugWrapper wrapper, DebugableFileManager fileManager)
     {
         var toReturn = new List<Breakpoint>();
@@ -145,6 +144,9 @@ internal class BreakpointManager
 
                     var (address, secondAddress) = AddressFunctions.GetMemoryLocations(debuggerAddress + i);
                     var currentBank = address >= 0xc000 ? _emulator.RomBankAct : _emulator.RamBankAct;
+
+                    b.PrimaryAddress = address;
+                    b.SecondaryAddress = secondAddress;
 
                     if (address < 0xa000 || bank == currentBank)
                         _emulator.Breakpoints[address] = breakpointValue;

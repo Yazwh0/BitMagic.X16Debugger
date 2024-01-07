@@ -14,7 +14,7 @@ internal class DebugWrapper : ISourceFile
 #endif
 
     public bool Loaded { get; internal set; } = false;
-    public int LoadedDebuggerAddress { get; internal set; } 
+    public int LoadedDebuggerAddress { get; internal set; }
     public List<BreakpointPair> Breakpoints { get; } = new();
 
     private readonly BreakpointManager _breakpointManager;
@@ -261,7 +261,22 @@ internal class DebugWrapper : ISourceFile
     #endregion
 }
 
-internal record class BreakpointPair(Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint, int PrimaryAddress, int SecondaryAddress);
+internal class BreakpointPair
+{
+    public Breakpoint Breakpoint { get; init; }
+    public SourceBreakpoint SourceBreakpoint { get; init; }
+    public int PrimaryAddress { get; set; }
+    public int SecondaryAddress { get; set; }
+
+    public BreakpointPair(Breakpoint breakpoint, SourceBreakpoint sourceBreakpoint, int primaryAddress, int secondaryAddress)
+    {
+        Breakpoint = breakpoint;
+        SourceBreakpoint = sourceBreakpoint;
+        PrimaryAddress = primaryAddress;
+        SecondaryAddress = secondaryAddress;
+    }
+
+}
 
 internal class DebugWrapperAlreadyLoadedException : Exception
 {
