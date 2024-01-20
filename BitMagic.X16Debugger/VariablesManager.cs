@@ -1,4 +1,5 @@
-﻿using BitMagic.X16Emulator;
+﻿using BitMagic.Compiler;
+using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
@@ -204,6 +205,7 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Rom Bank (Act)", "int", () => (byte)_emulator.RomBankAct, () => (byte)_emulator.RomBankAct));
         scope.AddVariable(new VariableMap("Rom Bank (Memory)", "Byte", () => _emulator.Memory[1], () => _emulator.Memory[1]));
         scope.AddVariable(new VariableMemory("Ram", () => "CPU Visible Ram", "main", () => _emulator.Memory.ToArray()));
+        scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
 
         scope = GetNewScope("VERA");
@@ -447,6 +449,14 @@ internal class VariableManager
         3 => 256,
         _ => throw new Exception("Invalid map size value")
     };
+
+    public IEnumerable<IVariableItem> GetRamBanks()
+    {
+        for (var i = 0; i < 256; i++)
+        {
+            yield return new VariableMemory($"Bank {i}", () => "", $"rambank_{i}", () => _emulator.RamBank.Slice(0x2000 * i, 0x2000).ToArray());
+        }
+    }
 
     public (string Name, ICollection<Variable> Variables) GetRtcnvRam()
     {

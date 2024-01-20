@@ -1000,16 +1000,25 @@ public class X16Debug : DebugAdapterBase
         var toReturn = new ReadMemoryResponse();
 
         Span<byte> data;
-        switch (arguments.MemoryReference)
+        if (arguments.MemoryReference.StartsWith("rambank"))
         {
-            case "main":
-                data = _emulator.Memory;
-                break;
-            case "vram":
-                data = _emulator.Vera.Vram;
-                break;
-            default:
-                throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
+            int.TryParse(arguments.MemoryReference.Substring(8), out var bank);
+
+            data = _emulator.RamBank.Slice(bank * 0x2000, 0x2000);
+        }
+        else
+        {
+            switch (arguments.MemoryReference)
+            {
+                case "main":
+                    data = _emulator.Memory;
+                    break;
+                case "vram":
+                    data = _emulator.Vera.Vram;
+                    break;
+                default:
+                    throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
+            }
         }
 
         toReturn.Address = $"0x{arguments.Offset:X4}";
