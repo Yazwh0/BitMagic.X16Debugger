@@ -1006,6 +1006,12 @@ public class X16Debug : DebugAdapterBase
 
             data = _emulator.RamBank.Slice(bank * 0x2000, 0x2000);
         }
+        else if (arguments.MemoryReference.StartsWith("rombank"))
+        {
+            int.TryParse(arguments.MemoryReference.Substring(8), out var bank);
+
+            data = _emulator.RomBank.Slice(bank * 0x4000, 0x4000);
+        }
         else
         {
             switch (arguments.MemoryReference)

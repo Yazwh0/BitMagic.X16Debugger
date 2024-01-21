@@ -206,6 +206,7 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Rom Bank (Memory)", "Byte", () => _emulator.Memory[1], () => _emulator.Memory[1]));
         scope.AddVariable(new VariableMemory("Ram", () => "CPU Visible Ram", "main", () => _emulator.Memory.ToArray()));
         scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
+        scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
 
         scope = GetNewScope("VERA");
@@ -454,7 +455,15 @@ internal class VariableManager
     {
         for (var i = 0; i < 256; i++)
         {
-            yield return new VariableMemory($"Bank {i}", () => "", $"rambank_{i}", () => _emulator.RamBank.Slice(0x2000 * i, 0x2000).ToArray());
+            yield return new VariableMemory($"Ram Bank {i}", () => "", $"rambank_{i}", () => _emulator.RamBank.Slice(0x2000 * i, 0x2000).ToArray());
+        }
+    }
+
+    public IEnumerable<IVariableItem> GetRomBanks()
+    {
+        for (var i = 0; i < 256; i++)
+        {
+            yield return new VariableMemory($"Rom Bank {i}", () => "", $"rombank_{i}", () => _emulator.RomBank.Slice(0x4000 * i, 0x4000).ToArray());
         }
     }
 

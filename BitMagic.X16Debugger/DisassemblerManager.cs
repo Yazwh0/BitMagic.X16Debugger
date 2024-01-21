@@ -2,6 +2,7 @@
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Silk.NET.Core.Native;
 
 namespace BitMagic.X16Debugger;
 
@@ -83,6 +84,8 @@ internal class DisassemblerManager
     private DisassembleResponse DisassembleRequestFromRam(DisassembleArguments arguments, int address, int ramBank)
     {
         DecompileReturn decompileReturn = GetDecompileReturn(ramBank, NotSet);
+
+        decompileReturn.Generate();
 
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, ramBank, 0);
     }

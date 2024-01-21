@@ -333,7 +333,7 @@ internal class StackManager
     }
 }
 
-internal record StackItem(string Prefix, int Address, int RamBank, int Rombank, int StackPointer, bool CheckReturnAddress);
+internal record StackItem(string Prefix, int Address, int RamBank, int RomBank, int StackPointer, bool CheckReturnAddress);
 
 public class StackFrameState
 {
