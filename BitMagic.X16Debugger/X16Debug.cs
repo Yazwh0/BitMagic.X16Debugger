@@ -383,11 +383,15 @@ public class X16Debug : DebugAdapterBase
 
                 _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
 
-                if (!string.IsNullOrWhiteSpace(_debugProject.SourcePrg))
+                if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
                 {
-                    Logger.Log($"Writing to local file '{_debugProject.SourcePrg}'... ");
-                    File.WriteAllBytes(_debugProject.SourcePrg, prg!.Data.ToArray());
-                    Logger.LogLine("Done.");
+                    foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
+                    {
+                        var path = Path.Combine(_debugProject.OutputFolder, f.Filename);
+                        Logger.Log($"Writing to '{path}'... ");
+                        File.WriteAllBytes(path, f.Data.ToArray());
+                        Logger.LogLine("Done.");
+                    }
                 }
             }
             else

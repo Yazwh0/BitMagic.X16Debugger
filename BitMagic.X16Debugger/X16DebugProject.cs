@@ -24,9 +24,9 @@ public class X16DebugProject
     public bool RunSource { get; set; } = false;
 
     /// <summary>
-    /// Location to save the .prg from the source file on the host. (Not on the sdcard.)
+    /// Location to save the .prg and other files from the source file on the host. (Not on the sdcard.)
     /// </summary>
-    public string SourcePrg { get; set; } = "";
+    public string OutputFolder { get; set; } = "";
 
     /// <summary>
     /// Start address. If omitted or -1, will start the ROM normally from the vector at $fffc.

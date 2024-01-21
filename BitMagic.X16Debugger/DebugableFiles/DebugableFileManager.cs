@@ -115,4 +115,15 @@ internal class DebugableFileManager
             sdCard.AddCompiledFile(bmPrg.Filename, bmPrg.Data);
         }
     }
+
+    public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
+    {
+        foreach (var file in Files.Values)
+        {
+            if (file is not BitMagicPrgFile bmPrg)
+                continue;
+
+            yield return (file.Filename, bmPrg.Data);
+        }
+    }
 }
