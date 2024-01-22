@@ -86,7 +86,7 @@ public class X16DebugProject
     /// Files to add to the root directory of the SDCard. Wildcards accepted.
     /// </summary>
     [JsonProperty("sdCardFiles", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public string[] SdCardFiles = new string[] { };
+    public string[] SdCardFiles { get; set; } = new string[] { };
 
     /// <summary>
     /// Capture changes between every time the emulator is paused. (Eg breakpoints or stepping)
