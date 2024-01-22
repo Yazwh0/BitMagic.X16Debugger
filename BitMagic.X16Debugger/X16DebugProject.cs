@@ -41,6 +41,14 @@ public class X16DebugProject
     public string RomFile { get; set; } = "";
 
     /// <summary>
+    /// Folder for the official X16 Emulator.
+    /// The rom.bin file from this directory will be used if not set by RomFile.
+    /// Symbols for the ROM banks will also be loaded from here, using the names from RomBankNames + .sym extension.
+    /// </summary>
+    [JsonProperty("emulatorDirectory", DefaultValueHandling = DefaultValueHandling.Ignore)]
+    public string EmulatorDirectory { get; set; } = "";
+
+    /// <summary>
     /// List of files that can be imported for symbols.
     /// </summary>
     [JsonProperty("symbols", DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -50,7 +58,7 @@ public class X16DebugProject
     /// Display names for the Rom banks.
     /// </summary>
     [JsonProperty("romBankNames", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public string[] RomBankNames { get; set; } = new string[] { "Kernel", "Keyboard", "Dos", "Geos", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio", "Util", "Bannex" };
+    public string[] RomBankNames { get; set; } = new string[] { "Kernal", "Keymap", "Dos", "Fat32", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio", "Util", "Bannex", "X16Edit1", "X16Edit2" };
 
     /// <summary>
     /// Display names for the Ram banks.

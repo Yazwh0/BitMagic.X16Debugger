@@ -18,6 +18,7 @@ using SysThread = System.Threading.Thread;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
+using System.Reflection.Metadata.Ecma335;
 
 namespace BitMagic.X16Debugger;
 
@@ -174,6 +175,14 @@ public class X16Debug : DebugAdapterBase
 
         // Load ROM
         var rom = _defaultRomFile;
+
+        var emulatorExists = !string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory) && Directory.Exists(_debugProject.EmulatorDirectory);
+
+        if (emulatorExists && File.Exists(Path.Combine(_debugProject.EmulatorDirectory, "rom.bin")))
+        {
+            rom = Path.Combine(_debugProject.EmulatorDirectory, "rom.bin");
+        }
+
         if (!string.IsNullOrWhiteSpace(_debugProject.RomFile))
         {
             if (File.Exists(_debugProject.RomFile))
@@ -248,6 +257,44 @@ public class X16Debug : DebugAdapterBase
             {
                 _serviceManager.SourceMapManager.AddSymbolsFromMachine(_machine);
             }
+        }
+
+        if (emulatorExists)
+        {
+            var symbolsList = _debugProject.Symbols.ToList();
+            for (var i = 0; i < _debugProject.RomBankNames.Length; i++) 
+            {
+                var filename = Path.Combine(_debugProject.EmulatorDirectory, _debugProject.RomBankNames[i].ToLower() + ".sym");
+                if (!File.Exists(filename))
+                {
+                    Logger.LogLine($"Default symbols file {filename} doesn't exist.");
+                    continue;
+                }
+
+                var symbols = _debugProject.Symbols.FirstOrDefault(b => b.RomBank != null && b.RomBank == i);
+
+                if (symbols != null && !string.IsNullOrWhiteSpace(symbols.Filename))
+                    continue;
+
+                if (symbols == null)
+                {
+                    symbols = new SymbolsFile() { RomBank = i };
+                    symbolsList.Add(symbols);
+
+                    if (i == 0)
+                    {
+                        symbols.RangeDefinitions = new[] { new RangeDefinition() { Type = "JumpTable", Start = "0xfebd", End = "0xff80" },
+                                                           new RangeDefinition() { Start = "0xff81", End = "0xfff6" }};
+                    }
+                    else if (i == 2)
+                    {
+                        symbols.RangeDefinitions = new[] { new RangeDefinition() { Type = "JumpTable", Start = "0xc000", End = "0xc036" } };
+                    }
+                }
+
+                symbols.Symbols = filename;
+            }
+            _debugProject.Symbols = symbolsList.ToArray();
         }
 
         foreach (var symbols in _debugProject!.Symbols)
@@ -396,8 +443,7 @@ public class X16Debug : DebugAdapterBase
             }
             else
             {
-                _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-                //_emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+                _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
             }
 
         }

@@ -229,6 +229,9 @@ internal class SourceMapManager
         const int addressLocation = 1;
         const int symbolLocation = 2;
 
+        if (string.IsNullOrWhiteSpace(file.Symbols))
+            return;
+
         if (!File.Exists(file.Symbols))
             throw new Exception($"File not found '{file.Symbols}'");
 
