@@ -1,6 +1,7 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
 using static Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.VariablePresentationHint;
@@ -208,12 +209,19 @@ internal class VariableManager
         scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
+        scope.AddVariable(Register(new VariableChildren("Interrupt", () => (_emulator.State.Interrupt != 0).ToString(), "bool", new[] { 
+                new VariableMap("Vsync", "bool", () => (_emulator.Memory[0x9F27] & 0b0001) != 0),
+                new VariableMap("Line", "bool", () => (_emulator.Memory[0x9F27] & 0b0010) != 0),
+                new VariableMap("SpCol", "bool", () => (_emulator.Memory[0x9F27] & 0b0100) != 0),
+                new VariableMap("Aflow", "bool", () => (_emulator.Memory[0x9F27] & 0b1000) != 0),
+                new VariableMap("YM", "bool", () => _emulator.State.Ym_Interrupt != 0),
+        })));
 
         scope = GetNewScope("VERA");
 
         scope.AddVariable(
             Register(
-                new VariableChildren("Data 0", () => $"0x{_emulator.Memory[0x9F23]:X2}",
+                new VariableChildren("Data 0", () => $"0x{_emulator.Memory[0x9F23]:X2}", "int",
                 new[] {
                     new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => _emulator.Vera.Data0_Address),
                     new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step)
@@ -222,7 +230,7 @@ internal class VariableManager
 
         scope.AddVariable(
             Register(
-                new VariableChildren("Data 1", () => $"0x{_emulator.Memory[0x9F24]:X2}",
+                new VariableChildren("Data 1", () => $"0x{_emulator.Memory[0x9F24]:X2}", "int",
                 new[] {
                     new VariableMap("Address", "DWord", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => _emulator.Vera.Data1_Address),
                     new VariableMap("Step", "Byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step)
@@ -623,12 +631,16 @@ public class VariableChildren : VariableItem
 {
     private readonly Dictionary<string, IVariableItem> _children;
 
-    public VariableChildren(string name, Func<string> getValue, IVariableItem[] children) : base(name, getValue)
+    public VariableChildren(string name, Func<string> getValue, string variableType, IVariableItem[] children) : base(name, getValue)
     {
         _children = children.ToDictionary(i => i.Name, i => i);
         GetExpressionValue = () => _children.ToDictionary(i => i.Key, i => (object?)i.Value.GetExpressionValue);
         Attributes = AttributesValue.ReadOnly;
-        Type = "string";
+        Type = variableType;
+    }
+
+    public VariableChildren(string name, Func<string> getValue, IVariableItem[] children) : this(name, getValue, "string", children)
+    {
     }
 
     public override void SetVariable(SetVariableArguments value)
