@@ -67,9 +67,6 @@ static class Program
             emulator.FrameControl = FrameControl.Synced;
             emulator.Stepping = true;
 
-            SdCard sdCard = new SdCard(16);
-            emulator.LoadSdCard(sdCard);
-
             return emulator;
         };
 

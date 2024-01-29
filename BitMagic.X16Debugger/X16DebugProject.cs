@@ -91,6 +91,11 @@ public class X16DebugProject
     public RtcNvram NvRam { get; set; } = new RtcNvram();
 
     /// <summary>
+    /// SD Card image to start with
+    /// </summary>
+    public string SdCard { get; set; } = "";
+
+    /// <summary>
     /// Files to add to the root directory of the SDCard. Wildcards accepted.
     /// </summary>
     [JsonProperty("sdCardFiles", DefaultValueHandling = DefaultValueHandling.Ignore)]

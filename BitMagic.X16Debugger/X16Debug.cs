@@ -126,13 +126,14 @@ public class X16Debug : DebugAdapterBase
             SupportsReadMemoryRequest = true,
             SupportsDisassembleRequest = true,
             SupportsWriteMemoryRequest = true,
-            SupportsInstructionBreakpoints = true,
+            //SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
             SupportsLoadedSourcesRequest = true,
             //SupportsSetVariable = true,
             SupportsLogPoints = true,
             SupportsConditionalBreakpoints = true,
             SupportsHitConditionalBreakpoints = true,
+            //SupportsDataBreakpoints = true,
         };
     }
 
@@ -396,6 +397,26 @@ public class X16Debug : DebugAdapterBase
         _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_Load);
         _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_SetLfs);
         _serviceManager.BreakpointManager.SetDebuggerBreakpoints();
+
+        if (!string.IsNullOrWhiteSpace(_debugProject.SdCard))
+        {
+            if (File.Exists(_debugProject.SdCard))
+            {
+                Logger.LogLine($"Loading SD Card '{_debugProject.SdCard}'...");
+                var sdCard = new SdCard(_debugProject.SdCard);
+                _emulator.LoadSdCard(sdCard);
+            }
+            else
+            {
+                Logger.LogLine($"Cannot find SD Card '{_debugProject.SdCard}'.");
+            }
+        }
+
+        if (_emulator.SdCard == null)
+        {
+            var sdCard = new SdCard(16);
+            _emulator.LoadSdCard(sdCard);
+        }
 
         try
         {
@@ -921,15 +942,23 @@ public class X16Debug : DebugAdapterBase
 
             _setnam_fileaddress = 0;
             _setnam_fileexists = false;
-            if (_emulator.SdCard!.FileSystem.FileExists(_setnam_value))
+
+            if (_setnam_value.Contains(":") || _setnam_value.Contains("/") || _setnam_value.Contains("$") || _setnam_value.Contains("="))
             {
-                using var data = _emulator.SdCard.FileSystem.OpenFile(_setnam_value, FileMode.Open);
+                _setnam_fileexists = false;
+            }
+            else
+            {
+                if (_emulator.SdCard!.FileSystem.FileExists(_setnam_value))
+                {
+                    using var data = _emulator.SdCard.FileSystem.OpenFile(_setnam_value, FileMode.Open);
 
-                _setnam_fileaddress = data.ReadByte();
-                _setnam_fileaddress += data.ReadByte() << 8;
+                    _setnam_fileaddress = data.ReadByte();
+                    _setnam_fileaddress += data.ReadByte() << 8;
 
-                data.Close();
-                _setnam_fileexists = true;
+                    data.Close();
+                    _setnam_fileexists = true;
+                }
             }
 
             if (_setnam_fileexists)
@@ -1263,6 +1292,16 @@ public class X16Debug : DebugAdapterBase
     {
         responder.SetResponse(HandlePaletteRequest());
     }
+
+    //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
+    //{
+    //    return new DataBreakpointInfoResponse();
+    //}
+
+    //protected override SetDataBreakpointsResponse HandleSetDataBreakpointsRequest(SetDataBreakpointsArguments arguments)
+    //{
+    //    return new SetDataBreakpointsResponse();
+    //}
 
     private PaletteRequestResponse HandlePaletteRequest()
     {
