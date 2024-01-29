@@ -356,6 +356,16 @@ internal class VariableManager
 
         scope.AddVariable(new VariableMap("PCM Read Position", "int", () => $"{_emulator.VeraAudio.PcmBufferRead}", () => _emulator.VeraAudio.PcmBufferRead));
         scope.AddVariable(new VariableMap("PCM Write Position", "int", () => $"{_emulator.VeraAudio.PcmBufferWrite}", () => _emulator.VeraAudio.PcmBufferWrite));
+        scope.AddVariable(new VariableMap("PCM Sample Rate", "int", () => $"{_emulator.VeraAudio.PcmSampleRate}", () => _emulator.VeraAudio.PcmSampleRate));
+        scope.AddVariable(new VariableMap("PCM Volume", "int", () => $"{_emulator.VeraAudio.PcmVolume}", () => _emulator.VeraAudio.PcmVolume));
+        scope.AddVariable(new VariableMap("PCM Mode", "int", () => _emulator.VeraAudio.PcmMode switch
+        {
+            0 => "8Bit Mono",
+            1 => "8Bit Stereo",
+            2 => "16Bit Mono",
+            3 => "16Bit Stereo",
+            _ => $"?? {_emulator.VeraAudio.PcmMode}"
+        }));
 
         scope.AddVariable(
             Register(

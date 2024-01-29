@@ -19,6 +19,7 @@ using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
 using System.Reflection.Metadata.Ecma335;
+using System.Linq;
 
 namespace BitMagic.X16Debugger;
 
@@ -923,6 +924,8 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
+    private static readonly byte[] InvalidBytes = "\"*+,./:;<=>?[\\]|"u8.ToArray();
+    private static bool Contains(byte[] array, byte val) => Array.IndexOf(array, val) >= 0;
     private void HandleDebuggerBreakpoint(int breakpointType)
     {
         if (_emulator.Pc == KERNEL_SetNam) // setnam
@@ -943,7 +946,7 @@ public class X16Debug : DebugAdapterBase
             _setnam_fileaddress = 0;
             _setnam_fileexists = false;
 
-            if (_setnam_value.Contains(":") || _setnam_value.Contains("/") || _setnam_value.Contains("$") || _setnam_value.Contains("="))
+            if (_setnam_value.Any(i => i < 0x20 || Contains(InvalidBytes, (byte)i)))
             {
                 _setnam_fileexists = false;
             }
