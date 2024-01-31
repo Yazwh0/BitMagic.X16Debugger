@@ -37,7 +37,7 @@ internal class BitmagicBuilder
         if (debugProject.CompileOptions != null)
             project.CompileOptions = debugProject.CompileOptions;
 
-        debugProject.Source = debugProject.Source.FixFilename();
+        debugProject.Source = Path.GetFullPath(debugProject.Source).FixFilename();
         var codeFile = new BitMagicProjectFile(debugProject.Source);
         project.Code = codeFile;
         await codeFile.Load();
@@ -47,7 +47,7 @@ internal class BitmagicBuilder
 
         if (content.Any()) // ??
         {
-            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(), _logger).GetAwaiter().GetResult();
+            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(debugProject.BasePath), _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm").FixFilename();
@@ -105,9 +105,9 @@ internal class BitmagicBuilder
 
 internal static class CompileOptionsExtension
 {
-    public static TemplateOptions AsTemplateOptions(this CompileOptions options) => new TemplateOptions
+    public static TemplateOptions AsTemplateOptions(this CompileOptions options, string basePath) => new TemplateOptions
     {
-        BinFolder = options.BinFolder,
+        BinFolder = Path.GetFullPath(Path.Join(basePath, options.BinFolder)),
         Rebuild = options.Rebuild
     };
 }

@@ -171,6 +171,12 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
+        if (string.IsNullOrWhiteSpace(_debugProject.BasePath))
+        {
+            _debugProject.BasePath = workspaceFolder;
+        }
+
+
         // Clear Ram
         if (_debugProject.MemoryFillValue != 0)
             _emulator.FillMemory(_debugProject.MemoryFillValue);
@@ -246,7 +252,7 @@ public class X16Debug : DebugAdapterBase
 
         if (!File.Exists(_debugProject.Source))
         {
-            var testSource = Path.Join(arguments.ConfigurationProperties.GetValueAsString("cwd"), _debugProject.Source);
+            var testSource = Path.Join(_debugProject.BasePath, _debugProject.Source);
             if (File.Exists(testSource))
                 _debugProject.Source = testSource;
         }
