@@ -13,13 +13,10 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
 using Newtonsoft.Json;
-using static BitMagic.TemplateEngine.Compiler.MacroAssembler;
 using SysThread = System.Threading.Thread;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
-using System.Reflection.Metadata.Ecma335;
-using System.Linq;
 
 namespace BitMagic.X16Debugger;
 
