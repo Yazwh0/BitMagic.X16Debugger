@@ -181,7 +181,18 @@ public class X16Debug : DebugAdapterBase
         // Load ROM
         var rom = _defaultRomFile;
 
-        var emulatorExists = !string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory) && Directory.Exists(_debugProject.EmulatorDirectory);
+        var emulatorExists = false;
+
+        if (!string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory))
+        {
+            if (Directory.Exists(_debugProject.EmulatorDirectory))
+            {
+                Logger.LogLine($"Using emulator directory '{_debugProject.EmulatorDirectory}'.");
+                emulatorExists = true;
+            }
+            else
+                Logger.LogLine($"Emulator directory '{_debugProject.EmulatorDirectory}' does not exist.");
+        }
 
         if (emulatorExists && File.Exists(Path.Combine(_debugProject.EmulatorDirectory, "rom.bin")))
         {
