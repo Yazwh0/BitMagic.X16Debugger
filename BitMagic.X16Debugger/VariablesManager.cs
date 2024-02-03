@@ -210,10 +210,11 @@ internal class VariableManager
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
         scope.AddVariable(Register(new VariableChildren("Interrupt", () => (_emulator.State.Interrupt != 0).ToString(), "bool", new[] { 
-                new VariableMap("Vsync", "bool", () => (_emulator.Memory[0x9F27] & 0b0001) != 0),
-                new VariableMap("Line", "bool", () => (_emulator.Memory[0x9F27] & 0b0010) != 0),
-                new VariableMap("SpCol", "bool", () => (_emulator.Memory[0x9F27] & 0b0100) != 0),
-                new VariableMap("Aflow", "bool", () => (_emulator.Memory[0x9F27] & 0b1000) != 0),
+                new VariableMap("Vsync", "bool", () => ((_emulator.Memory[0x9F26] & 0b0001) & (_emulator.Memory[0x9F27] & 0b0001)) != 0),
+                new VariableMap("Line", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
+                new VariableMap("SpCol", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
+                new VariableMap("Aflow", "bool", () => ((_emulator.Memory[0x9F26] & 0b1000) & (_emulator.Memory[0x9F27] & 0b1000)) != 0),
+                new VariableMap("Via", "bool", () => _emulator.State.Via_Interrupt != 0),
                 new VariableMap("YM", "bool", () => _emulator.State.Ym_Interrupt != 0),
         })));
 
