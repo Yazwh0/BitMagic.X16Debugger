@@ -438,43 +438,62 @@ public class X16Debug : DebugAdapterBase
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
                 var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
-                _serviceManager.ExpressionManager.SetState(state);
-                
-                var prg = result.Source as IBinaryFile;
-
-                //var prg = results.First(i => i.IsMain);
-
-                if (_debugProject.RunSource && result != null)
+                if (result != null)
                 {
-                    result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                    _serviceManager.ExpressionManager.SetState(state);
 
-                    //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
-                    _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
-                    Logger.LogLine($"Injecting {prg!.Data.Count:#,##0} bytes. Starting at 0x801");
+                    var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+
+                    if (_debugProject.AutobootRun)
+                    {
+                        Logger.Log("Adding AUTOBOOT.X16... ");
+                        if (_emulator.SdCard!.FileSystem.Exists("AUTOBOOT.X16"))
+                        {
+                            Logger.LogLine("Error. File already exists.");
+                        }
+                        else
+                        {
+                            _emulator.SdCard!.AddCompiledFile("AUTOBOOT.X16", AutobootCreator.GetAutoboot(prg.Name));
+                            Logger.LogLine("Done.");
+                        }
+                    }
+
+                    if (_debugProject.DirectRun && result != null)
+                    {
+                        result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+
+                        //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
+                        _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
+                        Logger.LogLine($"Injecting {prg!.Data.Count:#,##0} bytes. Starting at 0x801");
+                    }
+                    else
+                    {
+                        //var filename = Path.GetFileName(_debugProject.Source);
+                        //if (_emulator.SdCard == null)
+                        //    throw new Exception("SDCard is null");
+
+                        //filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
+                        //_emulator.SdCard.AddCompiledFile(filename, prg.Data);
+                        //Logger.LogLine($" Done. Created '{filename}' ({prg.Data.Length:#,##0} bytes.)");
+                        _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+                    }
+
+                    _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
+
+                    if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
+                    {
+                        foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
+                        {
+                            var path = Path.Combine(_debugProject.OutputFolder, f.Filename);
+                            Logger.Log($"Writing to '{path}'... ");
+                            File.WriteAllBytes(path, f.Data.ToArray());
+                            Logger.LogLine("Done.");
+                        }
+                    }
                 }
                 else
                 {
-                    //var filename = Path.GetFileName(_debugProject.Source);
-                    //if (_emulator.SdCard == null)
-                    //    throw new Exception("SDCard is null");
-
-                    //filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
-                    //_emulator.SdCard.AddCompiledFile(filename, prg.Data);
-                    //Logger.LogLine($" Done. Created '{filename}' ({prg.Data.Length:#,##0} bytes.)");
-                    _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-                }
-
-                _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
-
-                if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
-                {
-                    foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
-                    {
-                        var path = Path.Combine(_debugProject.OutputFolder, f.Filename);
-                        Logger.Log($"Writing to '{path}'... ");
-                        File.WriteAllBytes(path, f.Data.ToArray());
-                        Logger.LogLine("Done.");
-                    }
+                    Logger.LogLine("Build didn't result in a result.");
                 }
             }
             else
@@ -938,7 +957,7 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
-    private static readonly byte[] InvalidBytes = "\"*+,./:;<=>?[\\]|"u8.ToArray();
+    private static readonly byte[] InvalidBytes = "\"*+,/:;<=>?[\\]|"u8.ToArray();
     private static bool Contains(byte[] array, byte val) => Array.IndexOf(array, val) >= 0;
     private void HandleDebuggerBreakpoint(int breakpointType)
     {

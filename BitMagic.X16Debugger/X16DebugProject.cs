@@ -21,7 +21,13 @@ public class X16DebugProject
     /// <summary>
     /// Directly run the compiled code, or if false compile the source and add it as a file to the SDCard.
     /// </summary>
-    public bool RunSource { get; set; } = false;
+    public bool DirectRun { get; set; } = false;
+
+
+    /// <summary>
+    /// Run the main application by creating a AUTOBOOT.X16 file. This will not overwrite if the file already exists.
+    /// </summary>
+    public bool AutobootRun { get; set; } = true;
 
     /// <summary>
     /// Location to save the .prg and other files from the source file on the host. (Not on the sdcard.)
