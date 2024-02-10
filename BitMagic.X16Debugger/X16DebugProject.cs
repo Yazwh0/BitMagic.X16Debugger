@@ -108,12 +108,6 @@ public class X16DebugProject
     public string[] SdCardFiles { get; set; } = new string[] { };
 
     /// <summary>
-    /// Capture changes between every time the emulator is paused. (Eg breakpoints or stepping)
-    /// </summary>
-    [JsonProperty("captureChanges", DefaultValueHandling = DefaultValueHandling.Ignore)]
-    public bool CaptureChanges { get; set; } = false;
-
-    /// <summary>
     /// Cartridge file to load
     /// </summary>
     [JsonProperty("cartridge", DefaultValueHandling = DefaultValueHandling.Ignore)]

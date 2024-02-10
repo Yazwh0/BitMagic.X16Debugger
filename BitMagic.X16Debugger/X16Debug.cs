@@ -825,18 +825,33 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        Snapshot? snapshot = _debugProject.CaptureChanges ? _emulator.Snapshot() : null;
+        foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+        {
+            if (i is DecompileReturn)
+            {
+                Protocol.SendEvent(new LoadedSourceEvent()
+                {
+                    Reason = LoadedSourceEvent.ReasonValue.Changed,
+                    Source = new Source()
+                    {
+                        Name = i.Name,
+                        Path = i.Path,
+                        Origin = i.Origin.ToString(),
+                        SourceReference = i.ReferenceId
+                    }
+                });
+            }
+        }
+
+        Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
         {
             var returnCode = _emulator.Emulate();
 
-            if (_debugProject.CaptureChanges)
-            {
-                var changes = snapshot!.Compare();
+            var changes = snapshot!.Compare();
 
-                if (changes != null)
-                    _serviceManager.VariableManager.SetChanges(changes);
-            }
+            if (changes != null)
+                _serviceManager.VariableManager.SetChanges(changes);
 
             // invalidate any decompiled source
             if (_emulator.Stepping)
@@ -946,15 +961,42 @@ public class X16Debug : DebugAdapterBase
                     _running = false;
                     return;
             }
-            //var test = _emulator.Serialize();
-
 
             if (wait)
             {
                 EmulatorWindow.PauseAudio();
-                // todo: only send update events if something has changed.
-                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
-                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0x10000 });
+
+                if (changes != null)
+                {
+                    foreach (var i in changes.Changes)
+                    {
+                        if (i is MemoryChange memoryChange)
+                        {
+                            if (memoryChange.MemoryArea == MemoryAreas.Ram)
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryChange.Address, Count = 1 });
+                            else if (memoryChange.MemoryArea == MemoryAreas.Vram)
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryChange.Address, Count = 1 });
+                            else if (memoryChange.MemoryArea == MemoryAreas.BankedRam)
+                            {
+                                int bank = (memoryChange.Address & 0x1fe000) >> 13;
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryChange.Address - (bank * 0x2000), Count = 1 });
+                            }
+
+                        }
+                        else if (i is MemoryRangeChange memoryRangeChange)
+                        {
+                            if (memoryRangeChange.MemoryArea == MemoryAreas.Ram)
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            else if (memoryRangeChange.MemoryArea == MemoryAreas.Vram)
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            else if (memoryRangeChange.MemoryArea == MemoryAreas.BankedRam)
+                            {
+                                int bank = (memoryRangeChange.Start & 0x1fe000) >> 13;
+                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryRangeChange.Start - (bank * 0x2000), Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            }
+                        }
+                    }
+                }
 
                 _runEvent.WaitOne(); // wait for a signal to continue
                 lock (SyncObject)
@@ -1218,7 +1260,6 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new ScopesResponse();
 
-        Console.WriteLine($"Setting scope {arguments.FrameId}");
         var current = _serviceManager.StackManager.CallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
 
         _serviceManager.VariableManager.SetScope(current);
@@ -1238,15 +1279,11 @@ public class X16Debug : DebugAdapterBase
 
         if (scope != null)
         {
-            if (scope is DebuggerLocalVariables localVariables)
-            {
-                var a = 0;
-            }
-
             toReturn.Variables.AddRange(scope.Variables.Select(i => i.GetVariable()));
 
             return toReturn;
         }
+
         var variable = _serviceManager.VariableManager.Get(arguments.VariablesReference);
 
         if (variable == null)
