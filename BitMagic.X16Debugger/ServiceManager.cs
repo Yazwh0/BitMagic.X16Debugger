@@ -24,6 +24,7 @@ internal class ServiceManager
     public CodeGeneratorManager CodeGeneratorManager { get; private set; }
     public DebugableFileManager DebugableFileManager { get; private set; }
     public BitmagicBuilder BitmagicBuilder { get; private set; }
+    public ExceptionManager ExceptionManager { get; private set; }
 
     public IdManager IdManager { get; private set; }
 
@@ -40,14 +41,13 @@ internal class ServiceManager
     {
         Emulator = _getNewEmulatorInstance();
 
-        Emulator.Brk_Causes_Stop = true; // todo: make this an option??
-
         IdManager = new();
 
         DebugableFileManager = new(IdManager);
 
         SourceMapManager = new(Emulator);
         ScopeManager = new(IdManager);
+        ExceptionManager = new(Emulator, IdManager);
 
         CodeGeneratorManager = new(IdManager);
         DisassemblerManager = new(SourceMapManager, Emulator, IdManager);

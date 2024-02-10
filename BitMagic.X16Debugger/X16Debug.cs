@@ -132,6 +132,9 @@ public class X16Debug : DebugAdapterBase
             SupportsConditionalBreakpoints = true,
             SupportsHitConditionalBreakpoints = true,
             //SupportsDataBreakpoints = true,
+            SupportsExceptionInfoRequest = true,
+            SupportsExceptionOptions = true,
+            ExceptionBreakpointFilters = ExceptionManager.GetExceptionList()
         };
     }
 
@@ -643,11 +646,6 @@ public class X16Debug : DebugAdapterBase
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
         => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
 
-    protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
-    {
-        return new SetExceptionBreakpointsResponse();
-    }
-
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
     {
         var toReturn = new SetInstructionBreakpointsResponse();
@@ -776,6 +774,15 @@ public class X16Debug : DebugAdapterBase
 
         return toReturn;
     }
+
+    #endregion
+
+    #region Exceptions
+
+    protected override SetExceptionBreakpointsResponse HandleSetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments) =>
+        _serviceManager.ExceptionManager.SetExceptionBreakpointsRequest(arguments);
+    protected override ExceptionInfoResponse HandleExceptionInfoRequest(ExceptionInfoArguments arguments) =>
+        _serviceManager.ExceptionManager.ExceptionInfoRequest(arguments);
 
     #endregion
 
@@ -923,10 +930,14 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.BrkHit:
-                    Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4} RAM Bank: ${_emulator.RamBankAct:X2} ROM Bank: ${_emulator.RomBankAct:X2}");
-                    this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
-                    this.Protocol.SendEvent(new TerminatedEvent());
-                    _running = false;
+                    _serviceManager.ExceptionManager.LastException = "BRK";
+                    this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "BRK hit", 0, null, true));
+                    _emulator.Stepping = true;
+
+                    //Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4} RAM Bank: ${_emulator.RamBankAct:X2} ROM Bank: ${_emulator.RomBankAct:X2}");
+                    //this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
+                    //this.Protocol.SendEvent(new TerminatedEvent());
+                    //_running = false;
                     break;
                 default:
                     Logger.LogLine($"Stopping. Result : {returnCode}");

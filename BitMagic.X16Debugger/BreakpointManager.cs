@@ -16,7 +16,6 @@ internal class BreakpointManager
     [Obsolete]
     private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new();
 
-
     private readonly Dictionary<int, (Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> _breakpoints = new();
     private readonly Dictionary<int, int> _breakpointHitCount = new();
     private readonly Emulator _emulator;

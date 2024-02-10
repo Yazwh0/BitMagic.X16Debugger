@@ -63,7 +63,6 @@ static class Program
         {
             var emulator = new Emulator();
 
-            emulator.Brk_Causes_Stop = false;
             emulator.FrameControl = FrameControl.Synced;
             emulator.Stepping = true;
 
