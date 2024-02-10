@@ -62,7 +62,7 @@ internal class ExceptionManager
         return toReturn;
     }
 
-    public ExceptionInfoResponse ExceptionInfoRequest(ExceptionInfoArguments arguments) =>
+    public ExceptionInfoResponse ExceptionInfoRequest(ExceptionInfoArguments _) =>
         LastException switch
         {
             "BRK" => new ExceptionInfoResponse() { Description = "BRK has been hit.", ExceptionId = "BRK" },

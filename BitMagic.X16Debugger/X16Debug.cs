@@ -421,7 +421,7 @@ public class X16Debug : DebugAdapterBase
             if (File.Exists(_debugProject.SdCard))
             {
                 Logger.LogLine($"Loading SD Card '{_debugProject.SdCard}'...");
-                var sdCard = new SdCard(_debugProject.SdCard);
+                var sdCard = new SdCard(_debugProject.SdCard, Logger);
                 _emulator.LoadSdCard(sdCard);
             }
             else
@@ -432,7 +432,7 @@ public class X16Debug : DebugAdapterBase
 
         if (_emulator.SdCard == null)
         {
-            var sdCard = new SdCard(16);
+            var sdCard = new SdCard(16, Logger);
             _emulator.LoadSdCard(sdCard);
         }
 
