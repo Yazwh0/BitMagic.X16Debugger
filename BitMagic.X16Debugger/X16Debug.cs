@@ -827,20 +827,17 @@ public class X16Debug : DebugAdapterBase
 
         foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
         {
-            if (i is DecompileReturn)
+            Protocol.SendEvent(new LoadedSourceEvent()
             {
-                Protocol.SendEvent(new LoadedSourceEvent()
+                Reason = LoadedSourceEvent.ReasonValue.Changed,
+                Source = new Source()
                 {
-                    Reason = LoadedSourceEvent.ReasonValue.Changed,
-                    Source = new Source()
-                    {
-                        Name = i.Name,
-                        Path = i.Path,
-                        Origin = i.Origin.ToString(),
-                        SourceReference = i.ReferenceId
-                    }
-                });
-            }
+                    Name = i.Name,
+                    Path = i.Path,
+                    Origin = i.Origin.ToString(),
+                    SourceReference = i.ReferenceId
+                }
+            });
         }
 
         Snapshot? snapshot = _emulator.Snapshot();
@@ -852,28 +849,6 @@ public class X16Debug : DebugAdapterBase
 
             if (changes != null)
                 _serviceManager.VariableManager.SetChanges(changes);
-
-            // invalidate any decompiled source
-            if (_emulator.Stepping)
-            {
-                foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
-                {
-                    if (i is DecompileReturn)
-                    {
-                        Protocol.SendEvent(new LoadedSourceEvent()
-                        {
-                            Reason = LoadedSourceEvent.ReasonValue.Changed,
-                            Source = new Source()
-                            {
-                                Name = i.Name,
-                                Path = i.Path,
-                                Origin = i.Origin.ToString(),
-                                SourceReference = i.ReferenceId
-                            }
-                        });
-                    }
-                }
-            }
 
             bool wait = true;
             switch (returnCode)
@@ -968,32 +943,67 @@ public class X16Debug : DebugAdapterBase
 
                 if (changes != null)
                 {
+                    var toFlag = new HashSet<string>();
+
                     foreach (var i in changes.Changes)
                     {
                         if (i is MemoryChange memoryChange)
                         {
-                            if (memoryChange.MemoryArea == MemoryAreas.Ram)
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryChange.Address, Count = 1 });
+                            if (memoryChange.MemoryArea == MemoryAreas.Ram && memoryChange.Address < 0x9f00)
+                            {
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryChange.Address, Count = 1 });
+                                toFlag.Add("MainRam.bmasm");
+                            }
                             else if (memoryChange.MemoryArea == MemoryAreas.Vram)
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryChange.Address, Count = 1 });
+                            {
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryChange.Address, Count = 1 });
+                            }
                             else if (memoryChange.MemoryArea == MemoryAreas.BankedRam)
                             {
                                 int bank = (memoryChange.Address & 0x1fe000) >> 13;
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryChange.Address - (bank * 0x2000), Count = 1 });
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryChange.Address - (bank * 0x2000), Count = 1 });
+                                toFlag.Add($"z_Bank_0x{bank:X2}.bmasm");
                             }
 
                         }
                         else if (i is MemoryRangeChange memoryRangeChange)
                         {
-                            if (memoryRangeChange.MemoryArea == MemoryAreas.Ram)
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            if (memoryRangeChange.MemoryArea == MemoryAreas.Ram && memoryRangeChange.Start < 0x9f00)
+                            {
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                                toFlag.Add("MainRam.bmasm");
+                            }
                             else if (memoryRangeChange.MemoryArea == MemoryAreas.Vram)
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            {
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
+                            }
                             else if (memoryRangeChange.MemoryArea == MemoryAreas.BankedRam)
                             {
                                 int bank = (memoryRangeChange.Start & 0x1fe000) >> 13;
-                                this.Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryRangeChange.Start - (bank * 0x2000), Count = memoryRangeChange.End - memoryRangeChange.Start });
+                                Protocol.SendEvent(new MemoryEvent() { MemoryReference = $"rambank_{bank}", Offset = memoryRangeChange.Start - (bank * 0x2000), Count = memoryRangeChange.End - memoryRangeChange.Start });
+                                toFlag.Add($"z_Bank_0x{bank:X2}.bmasm");
                             }
+                        }
+                    }
+
+                    if (toFlag.Any())
+                    {
+                        foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+                        {
+                            if (!toFlag.Contains(i.Name))
+                                continue;
+
+                            Protocol.SendEvent(new LoadedSourceEvent()
+                            {
+                                Reason = LoadedSourceEvent.ReasonValue.Changed,
+                                Source = new Source()
+                                {
+                                    Name = i.Name,
+                                    Path = i.Path,
+                                    Origin = i.Origin.ToString(),
+                                    SourceReference = i.ReferenceId
+                                }
+                            });
                         }
                     }
                 }
