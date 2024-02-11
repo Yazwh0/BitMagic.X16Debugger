@@ -22,6 +22,9 @@ static class Program
 
         [Option("stepOnEnter", Default = false, Required = false)]
         public bool StepOnEnter { get; set; }
+
+        [Option("officialEmulator", Default = "", Required = false)]
+        public string OfficialEmulatorLocation { get; set; } = "";
     }
 
     private const string RomEnvironmentVariable = "BITMAGIC_ROM";
@@ -59,6 +62,14 @@ static class Program
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(options.OfficialEmulatorLocation))
+        {
+            if (Directory.Exists(options.OfficialEmulatorLocation))
+                Console.WriteLine($"Emulator: {options.OfficialEmulatorLocation}");
+            else
+                Console.WriteLine($"Emulator does not exist: {options.OfficialEmulatorLocation}");
+        }
+
         Func<Emulator> getEmulator = () =>
         {
             var emulator = new Emulator();
@@ -72,12 +83,12 @@ static class Program
         try
         {
             if (options.ServerPort != 0)
-                RunAsServer(getEmulator, options.ServerPort, rom);
+                RunAsServer(getEmulator, options.ServerPort, rom, options.OfficialEmulatorLocation);
             else
             {
                 Console.WriteLine(@"Running using stdin\stdout.");
 
-                var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom);
+                var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom, options.OfficialEmulatorLocation);
                 try
                 {
                     //debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
@@ -107,7 +118,7 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Func<Emulator> getEmulator, int port, string rom)
+    private static void RunAsServer(Func<Emulator> getEmulator, int port, string rom, string emulatorLocation)
     {
         Console.WriteLine($"Listening on port {port}.");
         X16Debug? debugger;
@@ -127,7 +138,7 @@ static class Program
                     using (Stream stream = new NetworkStream(clientSocket))
                     {
                         var logger = new ConsoleLogger();
-                        debugger = new X16Debug(getEmulator, stream, stream, rom, logger);
+                        debugger = new X16Debug(getEmulator, stream, stream, rom, emulatorLocation, logger);
                         logger.AddSecondaryLogger(new DebugLogger(debugger));
 
                         debugger.Protocol.DispatcherError += (sender, e) =>

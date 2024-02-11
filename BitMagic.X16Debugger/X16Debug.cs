@@ -50,13 +50,15 @@ public class X16Debug : DebugAdapterBase
     private int _setnam_fileaddress = 0;
     private bool _setnam_fileexists = false;
 
+    private readonly string _officialEmulatorLocation;
+
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, IEmulatorLogger? logger = null)
+    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, IEmulatorLogger? logger = null)
     {
         Logger = logger ?? new DebugLogger(this);
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
         _emulator = _serviceManager.Emulator;
-
+        _officialEmulatorLocation = officialEmulatorLocation;
         _defaultRomFile = romFile;
 
         InitializeProtocolClient(stdIn, stdOut);
@@ -185,6 +187,11 @@ public class X16Debug : DebugAdapterBase
         var rom = _defaultRomFile;
 
         var emulatorExists = false;
+
+        if (string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory))
+        {
+            _debugProject.EmulatorDirectory = _officialEmulatorLocation;
+        }
 
         if (!string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory))
         {
