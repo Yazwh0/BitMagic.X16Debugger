@@ -566,7 +566,10 @@ public class X16Debug : DebugAdapterBase
             {
                 var path = e.Filename != null ? Path.GetRelativePath(workspaceFolder, e.Filename) : "";
                 var source = new BitMagicProjectFile(e.Filename);
-                Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
+                if (error.LineNumber >= 0)
+                    Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
+                else
+                    Logger.LogLine($"ERROR: \"{path ?? "??"}\" \"{error.ErrorText}\"");
             }
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });

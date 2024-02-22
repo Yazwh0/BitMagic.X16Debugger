@@ -3,7 +3,6 @@ using BitMagic.X16Emulator;
 using CommandLine;
 using System.Net.Sockets;
 using System.Net;
-using System.Diagnostics;
 
 namespace X16D;
 
