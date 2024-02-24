@@ -126,12 +126,12 @@ internal class DebuggerLocalVariables : IScopeMap
     public void SetLocalScope(StackFrameState? state, Emulator emulator)
     {
         _variables.Clear();
-        if (state == null || state.Line == null)
+        if (state == null || state.Scope == null)
             return;
 
         var memory = new MemoryWrapper(() => emulator.Memory.ToArray());
 
-        foreach (var i in state.Line.Procedure.Variables.Values)
+        foreach (var i in state.Scope.Variables.Values)
         {
             if (i.Value.VariableType is VariableType.Constant or VariableType.ProcStart or VariableType.ProcEnd or VariableType.SegmentStart or VariableType.LabelPointer)
                 continue;

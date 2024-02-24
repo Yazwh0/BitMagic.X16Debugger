@@ -258,6 +258,16 @@ internal class DebugWrapper : ISourceFile
     public Task UpdateContent() => _sourceFile.UpdateContent();
 
     public void MapChildren() => _sourceFile.MapChildren();
+
+    public int AddParent(ISourceFile parent)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void SetParentMap(int lineNumber, int parentLineNumber, int parentId)
+    {
+        throw new NotImplementedException();
+    }
     #endregion
 }
 

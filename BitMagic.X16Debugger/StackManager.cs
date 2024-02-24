@@ -1,4 +1,5 @@
-﻿using BitMagic.Common.Address;
+﻿using BitMagic.Common;
+using BitMagic.Common.Address;
 using BitMagic.Compiler;
 using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
@@ -179,7 +180,8 @@ internal class StackManager
                     var binaryFile = wrapper.Source as IBinaryFile;
 
                     // this is the correct line
-                    if (instruction.Line is not Line line)
+                    
+                    if (!instruction.Line.CanStep)
                     {
                         frame.Name = $"{prefix}??? {addressString} (Data)";
 
@@ -191,8 +193,8 @@ internal class StackManager
                         return toReturn;
                     }
 
-                    frame.Name = $"{prefix}{line.Procedure.Name} {addressString}";
-                    toReturn.Line = line;
+                    frame.Name = $"{prefix}{instruction.Line.Scope.Name} {addressString}";
+                    toReturn.Scope = instruction.Line.Scope;
 
                     var (source, lineNumber) = wrapper.FindUltimateSource(address - binaryFile.BaseAddress, _debugableFileManager);
 
@@ -338,7 +340,7 @@ internal record StackItem(string Prefix, int Address, int RamBank, int RomBank, 
 public class StackFrameState
 {
     public StackFrame StackFrame { get; }
-    public Line? Line { get; internal set; } = null;
+    public IScope? Scope { get; internal set; } = null;
 
     public StackFrameState(StackFrame stackFrame)
     {
