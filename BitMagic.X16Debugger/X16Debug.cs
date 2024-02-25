@@ -1143,13 +1143,13 @@ public class X16Debug : DebugAdapterBase
 
                     if (loadAddress < 0xa000 && loadAddress + fileLength > 0x9f00)
                     {
-                        Logger.LogLine("Warning: LOAD called into normal RAM, but will load past 0x9f00");
+                        Logger.LogLine("Warning: LOAD called into normal RAM, but will load past 0x9f00.");
                         toClear = 0x9f00 - loadAddress;
                     }
 
                     if (toClear != 0)
                     {
-                        Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to ${loadAddress + fileLength:X4} (actual: ${toClear:X4})");
+                        Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to ${loadAddress + fileLength:X4}. (actual: ${toClear:X4})");
                         _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, toClear);
                     }
                 }
