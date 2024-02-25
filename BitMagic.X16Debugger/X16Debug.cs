@@ -288,7 +288,7 @@ public class X16Debug : DebugAdapterBase
         if (emulatorExists)
         {
             var symbolsList = _debugProject.Symbols.ToList();
-            for (var i = 0; i < _debugProject.RomBankNames.Length; i++) 
+            for (var i = 0; i < _debugProject.RomBankNames.Length; i++)
             {
                 var filename = Path.Combine(_debugProject.EmulatorDirectory, _debugProject.RomBankNames[i].ToLower() + ".sym");
                 if (!File.Exists(filename))
@@ -521,12 +521,12 @@ public class X16Debug : DebugAdapterBase
             _serviceManager.DebugableFileManager.AddFiles(sourceFile);
 
             var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
-            
+
             var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
 
             var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
 
-            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber+1);
+            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -809,20 +809,21 @@ public class X16Debug : DebugAdapterBase
         {
             if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
 
-            if (File.Exists(filename))
+            var name = Path.GetFullPath(filename, _debugProject.BasePath);
+            if (File.Exists(name))
             {
-                _emulator.SdCard.AddFiles(filename);
+                _emulator.SdCard.AddFiles(name);
                 continue;
             }
 
-            if (Directory.Exists(filename))
+            if (Directory.Exists(name))
             {
-                _emulator.SdCard.AddDirectory(filename);
+                _emulator.SdCard.AddDirectory(name);
                 continue;
             }
 
-            var wildcard = Path.GetFileName(filename);
-            var path = Path.GetDirectoryName(filename);
+            var wildcard = Path.GetFileName(name);
+            var path = Path.GetDirectoryName(name);
             if (!Directory.Exists(path))
             {
                 Logger.LogError($"Cannot find directory: {path}");
@@ -1122,11 +1123,14 @@ public class X16Debug : DebugAdapterBase
             else
             {
                 var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
-                if (_setlfs_secondaryaddress < 2)
-                    fileLength = -2;
+                    if (_setlfs_secondaryaddress < 2)
+                        fileLength = -2;
 
-                Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
-                _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
+                if (fileLength > 0)
+                {
+                    Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
+                    _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
+                }
             }
 
             //var debugableFile = _serviceManager.DebugableFileManager.GetFile(_setnam_value);
@@ -1287,7 +1291,7 @@ public class X16Debug : DebugAdapterBase
         var scopes = _serviceManager.ScopeManager.AllScopes;
 
         toReturn.Scopes.AddRange(scopes);
-        
+
         return toReturn;
     }
 
