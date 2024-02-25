@@ -1128,8 +1128,30 @@ public class X16Debug : DebugAdapterBase
 
                 if (fileLength > 0)
                 {
-                    Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
-                    _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
+                    int toClear = fileLength;
+                    if (loadAddress >= 0xa000 && loadAddress - 0xa000 + fileLength > 0x2000)
+                    {
+                        Logger.LogLine("Warning: LOAD called into Banked RAM, but the file is too large.");
+                        toClear = 0x2000 - (loadAddress - 0xa000);
+                    }
+
+                    if (loadAddress >= 0xc000)
+                    {
+                        Logger.LogLine("Warning: LOAD called into ROM.");
+                        toClear = 0;
+                    }
+
+                    if (loadAddress < 0xa000 && loadAddress + fileLength > 0x9f00)
+                    {
+                        Logger.LogLine("Warning: LOAD called into normal RAM, but will load past 0x9f00");
+                        toClear = 0x9f00 - loadAddress;
+                    }
+
+                    if (toClear != 0)
+                    {
+                        Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to ${loadAddress + fileLength:X4} (actual: ${toClear:X4})");
+                        _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, toClear);
+                    }
                 }
             }
 
