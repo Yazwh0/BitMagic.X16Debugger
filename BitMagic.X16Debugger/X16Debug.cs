@@ -425,15 +425,16 @@ public class X16Debug : DebugAdapterBase
 
         if (!string.IsNullOrWhiteSpace(_debugProject.SdCard))
         {
-            if (File.Exists(_debugProject.SdCard))
+            var sdcard = Path.GetFullPath(_debugProject.SdCard, _debugProject.BasePath);
+            if (File.Exists(sdcard))
             {
                 Logger.LogLine($"Loading SD Card '{_debugProject.SdCard}'...");
-                var sdCard = new SdCard(_debugProject.SdCard, Logger);
+                var sdCard = new SdCard(sdcard, Logger);
                 _emulator.LoadSdCard(sdCard);
             }
             else
             {
-                Logger.LogLine($"Cannot find SD Card '{_debugProject.SdCard}'.");
+                Logger.LogLine($"Cannot find SD Card '{sdcard}'.");
             }
         }
 
