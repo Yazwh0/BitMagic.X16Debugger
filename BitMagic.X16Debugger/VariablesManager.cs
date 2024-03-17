@@ -359,7 +359,7 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("PCM Write Position", "int", () => $"{_emulator.VeraAudio.PcmBufferWrite}", () => _emulator.VeraAudio.PcmBufferWrite));
         scope.AddVariable(new VariableMap("PCM Sample Rate", "int", () => $"{_emulator.VeraAudio.PcmSampleRate}", () => _emulator.VeraAudio.PcmSampleRate));
         scope.AddVariable(new VariableMap("PCM Volume", "int", () => $"{_emulator.VeraAudio.PcmVolume}", () => _emulator.VeraAudio.PcmVolume));
-        scope.AddVariable(new VariableMap("PCM Mode", "int", () => _emulator.VeraAudio.PcmMode switch
+        scope.AddVariable(new VariableMap("PCM Mode", "string", () => _emulator.VeraAudio.PcmMode switch
         {
             0 => "8Bit Mono",
             1 => "8Bit Stereo",
@@ -377,6 +377,26 @@ internal class VariableManager
             )));
 
         _psgManager.Register(this);
+
+        scope = GetNewScope("VERA FX");
+
+        scope.AddVariable(new VariableMap("Addr Mode", "string", () => _emulator.VeraFx.AddrMode switch
+        {
+            0 => "Normal",
+            1 => "Line Draw",
+            2 => "Polygon",
+            3 => "Affine",
+            _ => $"?? {_emulator.VeraFx.AddrMode}"
+        }));
+        scope.AddVariable(new VariableMap("Cache", "uint", () => $"0x{_emulator.VeraFx.Cache:X8}", () => _emulator.VeraFx.Cache));
+        scope.AddVariable(new VariableMap("Cache Index", "uint", () => _emulator.VeraFx.CacheIndex, () => _emulator.VeraFx.CacheIndex));
+        scope.AddVariable(new VariableMap("Cache Shift", "int", () => _emulator.VeraFx.CacheShift, () => _emulator.VeraFx.CacheShift));
+        scope.AddVariable(new VariableMap("Cache Fill", "bool", () => _emulator.VeraFx.Cachefill, () => _emulator.VeraFx.Cachefill));
+        scope.AddVariable(new VariableMap("Cache Write", "bool", () => _emulator.VeraFx.CacheWrite, () => _emulator.VeraFx.CacheWrite));
+        scope.AddVariable(new VariableMap("4 Bit Mode", "bool", () => _emulator.VeraFx.Fx4BitMode, () => _emulator.VeraFx.Fx4BitMode));
+        scope.AddVariable(new VariableMap("Transparant Writes", "bool", () => _emulator.VeraFx.TransparantWrites, () => _emulator.VeraFx.TransparantWrites));
+        scope.AddVariable(new VariableMap("One-Byte Cycling", "bool", () => _emulator.VeraFx.OneByteCycling, () => _emulator.VeraFx.OneByteCycling));
+        scope.AddVariable(new VariableMap("Two-Byte Cache Inc", "bool", () => _emulator.VeraFx.TwoByteCacheIncr, () => _emulator.VeraFx.TwoByteCacheIncr));
 
         scope = GetNewScope("Kernal");
 
