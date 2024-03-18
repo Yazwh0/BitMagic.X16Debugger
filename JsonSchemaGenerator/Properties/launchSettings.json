@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "JsonSchemaGenerator": {
+      "commandName": "Project",
+      "commandLineArgs": "--output ..\\..\\..\\..\\..\\BitMagic.VSC\\Bitmagic.VscExtension\\debugProject.schema.json"
+    }
+  }
+}
