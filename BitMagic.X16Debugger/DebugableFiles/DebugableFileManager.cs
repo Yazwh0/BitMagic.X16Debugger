@@ -72,22 +72,7 @@ internal class DebugableFileManager
         return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
     }
 
-    public IPrgFile? GetFile(string filename)
-    {
-        if (Files.ContainsKey(filename))
-            return Files[filename];
-
-        return null;
-    }
-
-    public IPrgSourceFile? GetSourceFile(string filename)
-    {
-        if (SourceFiles.ContainsKey(filename))
-            return SourceFiles[filename];
-
-        return null;
-    }
-
+    [Obsolete("Remove when the loading is fixed")]
     public void Addfile(IPrgFile file)
     {
         Files.Add(file.Filename, file);
@@ -105,6 +90,7 @@ internal class DebugableFileManager
         }
     }
 
+    [Obsolete("Switch when the loading is fixed")]
     public void AddBitMagicFilesToSdCard(SdCard sdCard)
     {
         foreach (var file in Files.Values)
@@ -116,6 +102,15 @@ internal class DebugableFileManager
         }
     }
 
+    //public void AddBitMagicFilesToSdCard(SdCard sdCard)
+    //{
+    //    foreach(var i in GetBitMagicFiles())
+    //    {
+    //        sdCard.AddCompiledFile(i.Filename, i.Data);
+    //    }
+    //}
+
+    [Obsolete("Switch when the loading is fixed")]
     public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
     {
         foreach (var file in Files.Values)
@@ -126,4 +121,12 @@ internal class DebugableFileManager
             yield return (file.Filename, bmPrg.Data);
         }
     }
+
+    //public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
+    //{
+    //    foreach(var i in AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>())
+    //    {
+    //        yield return (i.Name, i.Data.ToArray());
+    //    }
+    //}
 }

@@ -1,5 +1,5 @@
 ﻿using BitMagic.Common;
-using BitMagic.Compiler.Extensions;
+using BitMagic.X16Debugger.Extensions;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;

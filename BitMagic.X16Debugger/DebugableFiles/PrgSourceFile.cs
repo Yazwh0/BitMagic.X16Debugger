@@ -2,20 +2,20 @@
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
-internal class PrgSourceFile : IPrgSourceFile
-{
-    IEnumerable<IPrgFile> IPrgSourceFile.Output => Output;
-    public List<BitMagicPrgFile> Output { get; } = new();
-    public string Filename { get; }
-    Dictionary<string, IEnumerable<Breakpoint>> IPrgSourceFile.Breakpoints => Breakpoints.ToDictionary(i => i.Key, i => i.Value.Select(j => j));
-    public Dictionary<string, List<Breakpoint>> Breakpoints { get; } = new();
-    IEnumerable<string> IPrgSourceFile.ReferencedFilenames => Array.Empty<string>();
-    public PrgSourceFile(string filename, BitMagicPrgFile output)
-    {
-        Filename = filename;
-        Output.Add(output);
-    }
-}
+//internal class PrgSourceFile : IPrgSourceFile
+//{
+//    IEnumerable<IPrgFile> IPrgSourceFile.Output => Output;
+//    public List<BitMagicPrgFile> Output { get; } = new();
+//    public string Filename { get; }
+//    Dictionary<string, IEnumerable<Breakpoint>> IPrgSourceFile.Breakpoints => Breakpoints.ToDictionary(i => i.Key, i => i.Value.Select(j => j));
+//    public Dictionary<string, List<Breakpoint>> Breakpoints { get; } = new();
+//    IEnumerable<string> IPrgSourceFile.ReferencedFilenames => Array.Empty<string>();
+//    public PrgSourceFile(string filename, BitMagicPrgFile output)
+//    {
+//        Filename = filename;
+//        Output.Add(output);
+//    }
+//}
 
 internal class BitMagicPrgSourceFile : IBitMagicPrgSourceFile
 {

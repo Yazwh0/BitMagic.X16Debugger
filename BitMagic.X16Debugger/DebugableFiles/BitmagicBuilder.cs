@@ -3,6 +3,7 @@ using BitMagic.Common;
 using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
+using BitMagic.X16Debugger.Extensions;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -101,13 +102,4 @@ internal class BitmagicBuilder
 
         return (toReturn, compileResult.State);
     }
-}
-
-internal static class CompileOptionsExtension
-{
-    public static TemplateOptions AsTemplateOptions(this CompileOptions options, string basePath) => new TemplateOptions
-    {
-        BinFolder = Path.GetFullPath(Path.Join(basePath, options?.BinFolder ?? "Bin")),
-        Rebuild = options?.Rebuild ?? false
-    };
 }

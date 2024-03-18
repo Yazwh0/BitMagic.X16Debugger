@@ -22,6 +22,8 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
 {
     public IReadOnlyList<byte> Data { get; }
     public int BaseAddress { get; private set; }
+    public override bool X16File => true;
+
 
     private readonly Dictionary<int, string> _symbols = new Dictionary<int, string>();
     public IReadOnlyDictionary<int, string> Symbols => _symbols;
@@ -148,23 +150,4 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
     public override Task UpdateContent() => Task.CompletedTask;
 
     public void LoadIntoMemory(Emulator emulator, int address) => emulator.LoadIntoMemory(Data.ToArray(), address, HasHeader != FileHeader.NoHeader);
-}
-
-internal static class CompileResultExtensions
-{
-    // todo: understand if the file has a header or not, assuming it does for now.
-    internal static IList<BitMagicBinaryFile> CreateBinarySourceFiles(this CompileResult result)
-    {
-        var toReturn = new List<BitMagicBinaryFile>();
-
-        // go through each output and create file on each
-        foreach (var i in result.Data.Where(i => i.Value.Length != 0)) // dont process segment that do not have data
-        {
-            var hasAddedHeader = i.Value.FileName.EndsWith(".PRG", StringComparison.InvariantCultureIgnoreCase);
-
-            toReturn.Add(new BitMagicBinaryFile(result.Project.Code, i.Value, result, hasAddedHeader ? FileHeader.HeaderNotInCode : FileHeader.NoHeader ));
-        }
-
-        return toReturn;
-    }
 }

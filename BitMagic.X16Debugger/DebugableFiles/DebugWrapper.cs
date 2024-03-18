@@ -1,5 +1,6 @@
 ﻿using BitMagic.Common;
 using BitMagic.Common.Address;
+using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 
@@ -244,6 +245,7 @@ internal class DebugWrapper : ISourceFile
     public bool RequireUpdate => _sourceFile.RequireUpdate;
 
     public bool ActualFile => _sourceFile.ActualFile;
+    public bool X16File => _sourceFile.X16File;
 
     public IReadOnlyList<ISourceFile> Parents => _sourceFile.Parents;
 
@@ -269,41 +271,4 @@ internal class DebugWrapper : ISourceFile
         throw new NotImplementedException();
     }
     #endregion
-}
-
-internal class BreakpointPair
-{
-    public Breakpoint Breakpoint { get; init; }
-    public SourceBreakpoint SourceBreakpoint { get; init; }
-    public int PrimaryAddress { get; set; }
-    public int SecondaryAddress { get; set; }
-
-    public BreakpointPair(Breakpoint breakpoint, SourceBreakpoint sourceBreakpoint, int primaryAddress, int secondaryAddress)
-    {
-        Breakpoint = breakpoint;
-        SourceBreakpoint = sourceBreakpoint;
-        PrimaryAddress = primaryAddress;
-        SecondaryAddress = secondaryAddress;
-    }
-
-}
-
-internal class DebugWrapperAlreadyLoadedException : Exception
-{
-    public DebugWrapper Wrapper { get; }
-
-    public DebugWrapperAlreadyLoadedException(DebugWrapper wrapper) : base("Wrapper already loaded.")
-    {
-        Wrapper = wrapper;
-    }
-}
-
-internal class DebugWrapperFileNotBinaryException : Exception
-{
-    public ISourceFile File { get; }
-    public DebugWrapperFileNotBinaryException(ISourceFile file) : base("File is not IBinaryFile")
-    {
-        File = file;
-    }
-
 }
