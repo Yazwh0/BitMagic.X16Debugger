@@ -6,12 +6,6 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal class DebugableFileManager
 {
-    // Keyd on prg filename
-    private readonly Dictionary<string, IPrgFile> Files = new();
-    // Keyd on source filename
-    private readonly Dictionary<string, IPrgSourceFile> SourceFiles = new();
-
-
     private readonly Dictionary<string, DebugWrapper> AllFiles = new ();
 
     private readonly IdManager _idManager;
@@ -72,61 +66,19 @@ internal class DebugableFileManager
         return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
     }
 
-    [Obsolete("Remove when the loading is fixed")]
-    public void Addfile(IPrgFile file)
-    {
-        Files.Add(file.Filename, file);
-        foreach(var source in file.SourceFiles)
-        {
-            var filename = source.Filename.FixFilename();
-            if (!SourceFiles.ContainsKey(filename))
-                SourceFiles.Add(filename, source);
-
-            foreach(var referencedFilename in source.ReferencedFilenames.Select(i => i.FixFilename()))
-            {
-                if (!SourceFiles.ContainsKey(referencedFilename))
-                    SourceFiles.Add(referencedFilename, source);
-            }
-        }
-    }
-
-    [Obsolete("Switch when the loading is fixed")]
     public void AddBitMagicFilesToSdCard(SdCard sdCard)
     {
-        foreach (var file in Files.Values)
+        foreach (var i in GetBitMagicFiles())
         {
-            if (file is not BitMagicPrgFile bmPrg)
-                continue;
-
-            sdCard.AddCompiledFile(bmPrg.Filename, bmPrg.Data);
+            sdCard.AddCompiledFile(i.Filename, i.Data);
         }
     }
 
-    //public void AddBitMagicFilesToSdCard(SdCard sdCard)
-    //{
-    //    foreach(var i in GetBitMagicFiles())
-    //    {
-    //        sdCard.AddCompiledFile(i.Filename, i.Data);
-    //    }
-    //}
-
-    [Obsolete("Switch when the loading is fixed")]
     public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
     {
-        foreach (var file in Files.Values)
+        foreach (var i in AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>())
         {
-            if (file is not BitMagicPrgFile bmPrg)
-                continue;
-
-            yield return (file.Filename, bmPrg.Data);
+            yield return (i.Name, i.Data.ToArray());
         }
     }
-
-    //public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
-    //{
-    //    foreach(var i in AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>())
-    //    {
-    //        yield return (i.Name, i.Data.ToArray());
-    //    }
-    //}
 }

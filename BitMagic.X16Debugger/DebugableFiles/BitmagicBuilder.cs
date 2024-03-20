@@ -30,11 +30,6 @@ internal class BitmagicBuilder
         var project = new Project();
         _logger.LogLine($"Compiling {debugProject.Source} ");
 
-        //if (!string.IsNullOrWhiteSpace(debugProject.SourcePrg))
-        //{
-        //    project.OutputFile.Filename = debugProject.SourcePrg;
-        //}
-
         if (debugProject.CompileOptions != null)
             project.CompileOptions = debugProject.CompileOptions;
 
@@ -87,17 +82,6 @@ internal class BitmagicBuilder
         else
         {
             _logger.LogLine("... Done.");
-        }
-
-
-        var toReturnOld = new List<BitMagicPrgFile>();
-        foreach(var bitmagicPrg in BitMagicPrgFile.ProcessCompileResult(compileResult))
-        {
-            if (bitmagicPrg.Filename.StartsWith(':')) // ignore files with no code.
-                continue;
-
-            _fileManager.Addfile(bitmagicPrg);
-            toReturnOld.Add(bitmagicPrg);
         }
 
         return (toReturn, compileResult.State);

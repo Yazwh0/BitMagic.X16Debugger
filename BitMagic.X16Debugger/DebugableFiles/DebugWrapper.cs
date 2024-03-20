@@ -129,64 +129,6 @@ internal class DebugWrapper : ISourceFile
         }
     }
 
-    // This needs to call into the breakpoint manager
-    //public List<Breakpoint> SetBreakpoints(SetBreakpointsArguments arguments, Emulator emulator, HashSet<int> debuggerBreakpoints, DebugableFileManager fileManager, IdManager idManager)
-    //{
-    //    var toReturn = new List<Breakpoint>();
-
-    //    _breakpointManager.ClearBreakpoints(this);
-
-    //    //foreach (var bp in Breakpoints)
-    //    //{
-    //    //    if (bp.PrimaryAddress != 0)
-    //    //        emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
-    //    //    if (bp.SecondaryAddress != 0)
-    //    //        emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
-    //    //}
-
-    //    Breakpoints.Clear();
-
-    //    // need to work from the source file (this) down the children to the address in memory
-    //    foreach (var sbp in arguments.Breakpoints)
-    //    {
-    //        var added = false;
-    //        foreach (var (debuggerAddress, loaded) in FindUltimateAddresses(sbp.Line - 1, fileManager))
-    //        {
-    //            if (!loaded)
-    //                continue;
-
-    //            var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, idManager);
-
-    //            // set system bit
-    //            var breakpointValue = debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)0x01;
-
-    //            var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
-
-    //            var (address, secondAddress) = AddressFunctions.GetMemoryLocations(debuggerAddress);
-    //            var currentBank = address >= 0xc000 ? emulator.RomBankAct : emulator.RamBankAct;
-
-    //            if (address < 0xa000 || bank == currentBank)
-    //                emulator.Breakpoints[address] = breakpointValue;
-
-    //            if (secondAddress != 0)
-    //                emulator.Breakpoints[secondAddress] = breakpointValue;
-
-    //            added = true;
-    //            Breakpoints.Add(new BreakpointPair(breakpoint, sbp, address, secondAddress));
-    //            toReturn.Add(breakpoint);
-    //        }
-
-    //        if (!added)
-    //        {
-    //            var breakpoint = sbp.ConvertBreakpoint(arguments.Source, false, idManager);
-    //            Breakpoints.Add(new BreakpointPair(breakpoint, sbp, 0, 0));
-    //            toReturn.Add(breakpoint);
-    //        }
-    //    }
-
-    //    return toReturn;
-    //}
-
     internal IEnumerable<(int DebuggerAddress, bool Loaded)> FindUltimateAddresses(int lineNumber, DebugableFileManager fileManager)
     {
         if (Children.Count == 0)
