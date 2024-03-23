@@ -9,4 +9,5 @@ internal interface IBinaryFile : ISourceFile
     int BaseAddress { get; }
     void LoadIntoMemory(Emulator emulator, int address);
     IReadOnlyList<byte> Data { get; }
+    IReadOnlyList<uint> DebugData { get; }
 }

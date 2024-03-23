@@ -35,7 +35,7 @@ internal class DebugWrapper : ISourceFile
     /// <param name="sourceMapManager"></param>
     /// <exception cref="DebugWrapperAlreadyLoadedException"></exception>
     /// <exception cref="DebugWrapperFileNotBinaryException"></exception>
-    [Obsolete]
+    [Obsolete("Use fileload instead")]
     public List<Breakpoint> Load(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, DebugableFileManager fileManager)
     {
         if (Loaded)
@@ -89,6 +89,7 @@ internal class DebugWrapper : ISourceFile
         LoadedDebuggerAddress = debuggerAddress;
 
         sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
+        // this clears all the debug data
         _breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
         sourceMapManager.ConstructNewSourceMap(file, hasHeader);
@@ -98,9 +99,26 @@ internal class DebugWrapper : ISourceFile
         if (file is BitMagicBinaryFile bitmagicFile)
         {
             bitmagicFile.MapProcToMemory(emulator, sourceMapManager); // map bitmagic lines to the sourecmap for the stack
+            SetDebugData(bitmagicFile, emulator, debuggerAddress, hasHeader);
         }
 
         return breakpoints;
+    }
+
+    internal static void SetDebugData(BitMagicBinaryFile file, Emulator emulator, int debuggerAddress, bool hasHeader)
+    {
+        if (!file.DebugData.Any())
+            return;
+
+        for(var i = 0; i < file.DebugData.Count; i++)
+        {
+            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress + i);
+            var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
+
+            emulator.Breakpoints[offset] |= file.DebugData[i];
+            if (secondOffset != 0)
+                emulator.Breakpoints[secondOffset] |= file.DebugData[i];
+        }
     }
 
     internal IEnumerable<BreakpointPair> FindParentBreakpoints(int lineNumber, DebugableFileManager fileManager)
@@ -138,7 +156,7 @@ internal class DebugWrapper : ISourceFile
             if (binary == null)
                 yield break;
 
-            yield return (LoadedDebuggerAddress + lineNumber, Loaded);// (binary.BaseAddress + lineNumber, Loaded);
+            yield return (LoadedDebuggerAddress + lineNumber, Loaded);
 
             yield break;
         }

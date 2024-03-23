@@ -21,6 +21,7 @@ public enum FileHeader
 internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
 {
     public IReadOnlyList<byte> Data { get; }
+    public IReadOnlyList<uint> DebugData { get; }
     public int BaseAddress { get; private set; }
     public override bool X16File => true;
 
@@ -52,6 +53,7 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
         Name = System.IO.Path.GetFileName(stream.FileName).ToUpper();
         Path = stream.FileName.ToUpper();
         Data = stream.ToArray();
+        DebugData = stream.DebugData;
         _parents.Add(source);
         HasHeader = hasHeader;
         _parentMap = new ParentSourceMapReference[Data.Count - (HasHeader == FileHeader.NoHeader ? 0 : 2)]; // if there is a header, then the first byte bytes aren't loaded into memory

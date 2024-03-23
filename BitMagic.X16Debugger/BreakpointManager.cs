@@ -43,23 +43,23 @@ internal class BreakpointManager
 
             // only set local breakpoint if we're in the right bank
             if (primaryAddress < 0xa000 || bank == currentBank)
-                _emulator.Breakpoints[address] = 0x80;
+                _emulator.Breakpoints[address] =  DebugConstants.SystemBreakpoint;
 
             if (secondAddress != 0)
-                _emulator.Breakpoints[secondAddress] = 0x80;
+                _emulator.Breakpoints[secondAddress] =  DebugConstants.SystemBreakpoint;
         }
     }
 
-    private Breakpoint ConvertBreakpoint(SourceBreakpoint breakpoint, Source source, bool verified)
-    {
-        return new Breakpoint()
-        {
-            Line = breakpoint.Line,
-            Id = _idManager.GetId(),
-            Source = source,
-            Verified = verified
-        };
-    }
+    //private Breakpoint ConvertBreakpoint(SourceBreakpoint breakpoint, Source source, bool verified)
+    //{
+    //    return new Breakpoint()
+    //    {
+    //        Line = breakpoint.Line,
+    //        Id = _idManager.GetId(),
+    //        Source = source,
+    //        Verified = verified
+    //    };
+    //}
 
     public List<Breakpoint> ClearBreakpoints(int debuggerAddress, int length)
     {
@@ -80,7 +80,7 @@ internal class BreakpointManager
             var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(i);
             var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
 
-            var breakpointValue = _debuggerBreakpoints.Contains(i) ? (byte)0x80 : (byte)0;
+            var breakpointValue = _debuggerBreakpoints.Contains(i) ? DebugConstants.SystemBreakpoint : 0;
 
             _emulator.Breakpoints[offset] = breakpointValue;
             if (secondOffset != 0)
@@ -98,9 +98,9 @@ internal class BreakpointManager
         foreach (var bp in wrapper.Breakpoints)
         {
             if (bp.PrimaryAddress != 0)
-                _emulator.Breakpoints[bp.PrimaryAddress] &= 0x80;
+                _emulator.Breakpoints[bp.PrimaryAddress] &= DebugConstants.SystemBreakpoint;
             if (bp.SecondaryAddress != 0)
-                _emulator.Breakpoints[bp.SecondaryAddress] &= 0x80;
+                _emulator.Breakpoints[bp.SecondaryAddress] &= DebugConstants.SystemBreakpoint;
 
             var thisAddress = bp.SecondaryAddress == 0 ? bp.PrimaryAddress : bp.SecondaryAddress;
             if (_breakpoints.ContainsKey(thisAddress))
@@ -128,7 +128,7 @@ internal class BreakpointManager
                     b.Breakpoint.Verified = true;
 
                     // set breakpoint in memory
-                    var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress + i) ? (byte)0x81 : (byte)0x01;
+                    var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress + i) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
 
                     var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress + i);
 
@@ -169,7 +169,7 @@ internal class BreakpointManager
                 var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, _idManager);
 
                 // set system bit
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)0x01;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
 
                 var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
 
@@ -245,7 +245,7 @@ internal class BreakpointManager
             {
                 // Need to ensure system breakpoints are set
                 var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x80 : (byte)0;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint : 0;
 
                 var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
 
@@ -281,7 +281,7 @@ internal class BreakpointManager
                 breakpoint.Id = _idManager.GetId();
 
                 var debuggerAddress = AddressFunctions.GetDebuggerAddress(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank);
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? (byte)0x81 : (byte)1;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
 
                 var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
                 _memoryBreakpoints[sourceId].Add(toAdd);
@@ -316,7 +316,7 @@ internal class BreakpointManager
     /// <param name="ramBank"></param>
     /// <param name="romBank"></param>
     /// <returns></returns>
-    public (SourceBreakpoint? BreakPoint, int HitCount, int BreakpointValue) GetCurrentBreakpoint(int address, int ramBank, int romBank)
+    public (SourceBreakpoint? BreakPoint, int HitCount, uint BreakpointValue) GetCurrentBreakpoint(int address, int ramBank, int romBank)
     {
         var (_, secondAddress) = AddressFunctions.GetMemoryLocations(address >= 0xc000 ? romBank : ramBank, address);
 

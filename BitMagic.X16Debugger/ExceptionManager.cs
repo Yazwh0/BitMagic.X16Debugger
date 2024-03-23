@@ -17,7 +17,8 @@ internal class ExceptionManager
         _emulator.Brk_Causes_Stop = false;
         _breakpoints = new Dictionary<string, Breakpoint>()
         {
-            { "BRK", new Breakpoint() { Id = idManager.GetId(), Verified = true } }
+            { "BRK", new Breakpoint() { Id = idManager.GetId(), Verified = true } },
+            { "EXP", new Breakpoint() { Id = idManager.GetId(), Verified = true } }
         };
     }
 
@@ -31,8 +32,19 @@ internal class ExceptionManager
             Default = false,
             SupportsCondition = false,
             ConditionDescription = ""
+        },
+        new ExceptionBreakpointsFilter()
+        {
+            Filter = "EXP",
+            Label = "Code Exception",
+            Description = "Exception raised within code.",
+            Default = true,
+            SupportsCondition = false,
+            ConditionDescription = ""
         }
     };
+
+    public bool IsSet(string filter) => _setBreakpoints.ContainsKey(filter);
 
     public SetExceptionBreakpointsResponse SetExceptionBreakpointsRequest(SetExceptionBreakpointsArguments arguments)
     {
@@ -45,6 +57,7 @@ internal class ExceptionManager
             switch (i)
             {
                 case "BRK":
+                case "EXP":
                     _setBreakpoints.Add(i, _breakpoints[i]);
                     break;
                 default:
@@ -66,7 +79,8 @@ internal class ExceptionManager
         LastException switch
         {
             "BRK" => new ExceptionInfoResponse() { Description = "BRK has been hit.", ExceptionId = "BRK" },
+            "EXP" => new ExceptionInfoResponse() { Description = "Exception raised within code.", ExceptionId = "EXP" },
             _ => new ExceptionInfoResponse() { Description = "Unknown exception", ExceptionId = "UNK" }
         };
-        
+
 }

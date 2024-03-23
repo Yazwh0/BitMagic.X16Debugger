@@ -15,7 +15,7 @@ internal static class CompileResultExtensions
         foreach (var i in result.Data.Where(i => i.Value.Length != 0)) // dont process segment that do not have data
         {
             var hasAddedHeader = i.Value.FileName.EndsWith(".PRG", StringComparison.InvariantCultureIgnoreCase);
-
+            
             toReturn.Add(new BitMagicBinaryFile(result.Project.Code, i.Value, result, hasAddedHeader ? FileHeader.HeaderNotInCode : FileHeader.NoHeader));
         }
 

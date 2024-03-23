@@ -876,16 +876,36 @@ public class X16Debug : DebugAdapterBase
                 case Emulator.EmulatorResult.Breakpoint:
                     var (breakpoint, hitCount, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
-                    if ((breakpointType & 0x80) != 0)
+                    if ((breakpointType & DebugConstants.SystemBreakpoint) != 0)
                     {
                         // debugger breakpoint
                         HandleDebuggerBreakpoint(breakpointType);
 
-                        if ((breakpointType & 0x7f) == 0) // this is just a debugger breakpoint, so continue
+                        if ((breakpointType ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
                         {
                             _emulator.Stepping = false;
                             wait = false;
                             break;
+                        }
+                    }
+
+                    if ((breakpointType & DebugConstants.Exception) != 0)
+                    {
+                        if (_serviceManager.ExceptionManager.IsSet("EXP"))
+                        {
+                            _serviceManager.ExceptionManager.LastException = "EXP";
+                            this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "Exception within code raised.", 0, null, true));
+                            _emulator.Stepping = true;
+                            break;
+                        } 
+                        else
+                        {
+                            if ((breakpointType ^ DebugConstants.Exception) == 0) // this is just a exception breakpoint, so continue
+                            {
+                                _emulator.Stepping = false;
+                                wait = false;
+                                break;
+                            }
                         }
                     }
 
@@ -1034,7 +1054,7 @@ public class X16Debug : DebugAdapterBase
 
     private static readonly byte[] InvalidBytes = "\"*+,/:;<=>?[\\]|"u8.ToArray();
     private static bool Contains(byte[] array, byte val) => Array.IndexOf(array, val) >= 0;
-    private void HandleDebuggerBreakpoint(int breakpointType)
+    private void HandleDebuggerBreakpoint(uint breakpointType)
     {
         if (_emulator.Pc == KERNEL_SetNam) // setnam
         {
