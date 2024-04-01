@@ -13,7 +13,7 @@ public static class Cc65LibParser
         if (!File.Exists(filename))
             throw new FileNotFoundException(filename);
 
-        using var fs = new FileStream(filename, FileMode.Open);
+        using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(fs);
 
         var header = reader.ReadUInt32();
@@ -33,7 +33,7 @@ public static class Cc65LibParser
         reader.Close();
         fs.Close();
 
-        DisplayInfo(toReturn);
+        //DisplayInfo(toReturn);
 
         return toReturn;
     }
@@ -43,7 +43,7 @@ public static class Cc65LibParser
         if (!File.Exists(filename))
             throw new FileNotFoundException(filename);
 
-        using var fs = new FileStream(filename, FileMode.Open);
+        using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(fs);
 
         var header = reader.ReadUInt32();
