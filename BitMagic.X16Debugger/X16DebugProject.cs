@@ -1,5 +1,6 @@
 ﻿using BitMagic.Compiler;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.ComponentModel;
 
 namespace BitMagic.X16Debugger;
@@ -128,7 +129,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("sdCardFiles")]
     [Description("Files to add to the root directory of the SDCard. Wildcards accepted.")]
-    public string[] SdCardFiles { get; set; } = new string[] { };
+    public SdCardFiles[] SdCardFiles { get; set; } = Array.Empty<SdCardFiles>();
 
     /// <summary>
     /// Cartridge file to load.
@@ -157,6 +158,97 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("basePath")]
     [Description("Base Path, should try to use this for all other paths.")]
     public string BasePath { get; set; } = "";
+
+    /// <summary>
+    /// Files that are to be debugged.
+    /// </summary>
+    [JsonProperty("files")]
+    [Description("Files that are to be debugged.")]
+    [JsonConverter(typeof(DebugProjectFileConverter))]
+    public IDebugProjectFile[] Files { get; set; } = [];
+}
+
+
+public class SdCardFiles
+{
+    public string Source { get; set; } = "";
+    public string Dest { get; set; } = "";
+}
+
+public class DebugProjectFileConverter : JsonConverter
+{
+    public override bool CanConvert(Type objectType) => typeof(IDebugProjectFile).IsAssignableFrom(objectType);
+
+    public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+    {
+        var array = JToken.Load(reader);
+        var toReturn = new List<IDebugProjectFile>();
+
+        foreach (var i in array.Children())
+        {
+            JObject obj = JObject.Load(i.CreateReader());
+
+            IDebugProjectFile? item = obj["type"]?.ToString() switch
+            {
+                "cc65" => new Cc65InputFile(),
+                "bitmagic" => new BitmagicInputFile(),
+                _ => null
+            };
+
+            if (item == null)
+                return null;
+
+            serializer.Populate(obj.CreateReader(), item);
+            toReturn.Add(item);
+
+        }
+
+        return toReturn.ToArray();
+    }
+
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+    {
+        serializer.Serialize(writer, value); // not used.
+    }
+}
+
+public interface IDebugProjectFile
+{
+    [JsonProperty("type")]
+    public string Type { get; }
+}
+
+public class Cc65InputFile : IDebugProjectFile
+{
+    [JsonProperty("type")]
+    public string Type { get; set; } = "";
+
+    [JsonProperty("filename")]
+    public string Filename { get; set; } = "";
+
+    [JsonProperty("objectFile")]
+    public string ObjectFile { get; set; } = "";
+
+    [JsonProperty("config")]
+    public string Config { get; set; } = "";
+
+    [JsonProperty("sourcePath")]
+    public string SourcePath { get; set; } = "";
+
+    [JsonProperty("startAddress")]
+    public int StartAddress { get; set; }
+
+    [JsonProperty("includes")]
+    public string[] Includes { get; set; } = Array.Empty<string>();
+}
+
+public class BitmagicInputFile : IDebugProjectFile
+{
+    [JsonProperty("type")]
+    public string Type { get; set; } = "";
+
+    [JsonProperty("filename")]
+    public string Filename { get; set; } = "";
 }
 
 [JsonObject("rtcNvram")]

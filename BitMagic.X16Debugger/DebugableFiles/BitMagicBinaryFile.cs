@@ -1,7 +1,6 @@
 ﻿using BitMagic.Common;
 using BitMagic.Common.Address;
 using BitMagic.Compiler;
-using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Emulator;
 using Microsoft.CodeAnalysis;
 
@@ -117,7 +116,7 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
     /// Map the file to the source map for the stack, called in the binary file load in the DebugWrapper.
     /// </summary>
     /// <param name="emulator"></param>
-    internal void MapProcToMemory(Emulator emulator, SourceMapManager sourceMapManager)
+    private void MapProcToMemory(Emulator emulator, SourceMapManager sourceMapManager)
     {
         var state = _result.State;
 
@@ -138,11 +137,9 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
         foreach (var line in proc.Data)
         {
             // need to store the memory to line in the file lookup, which is used by the stack code
-            var toAdd = new SourceMapLine(line, proc);
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(line.Address, emulator);
 
-            var debuggerAddress = AddressFunctions.GetDebuggerAddress(toAdd.Address, emulator);
-
-            sourceMapManager.AddSourceMap(debuggerAddress, toAdd);
+            sourceMapManager.AddSourceMap(debuggerAddress, line);
         }
 
         foreach (var p in proc.Procedures)
@@ -151,5 +148,21 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
 
     public override Task UpdateContent() => Task.CompletedTask;
 
-    public void LoadIntoMemory(Emulator emulator, int address) => emulator.LoadIntoMemory(Data.ToArray(), address, HasHeader != FileHeader.NoHeader);
+    public void LoadDebugData(Emulator emulator, SourceMapManager sourceMapManager, int debuggerAddress)
+    {
+        MapProcToMemory(emulator, sourceMapManager); // map bitmagic lines to the sourecmap for the stack
+
+        if (!DebugData.Any())
+            return;
+
+        for (var i = 0; i < DebugData.Count; i++)
+        {
+            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress + i);
+            var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
+
+            emulator.Breakpoints[offset] |= DebugData[i];
+            if (secondOffset != 0)
+                emulator.Breakpoints[secondOffset] |= DebugData[i];
+        }
+    }
 }

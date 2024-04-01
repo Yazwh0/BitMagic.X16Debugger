@@ -13,7 +13,7 @@ internal class SourceMapManager
 
 
     // Address to line lookup
-    private Dictionary<int, SourceMapLine> MemoryToSourceMap { get; } = new();
+    private Dictionary<int, IDebuggerMapItem> MemoryToSourceMap { get; } = new();
     // source filename to codemap
     private Dictionary<string, HashSet<CodeMap>> SourceToMemoryMap { get; } = new();
     // prg file to codemap
@@ -46,7 +46,7 @@ internal class SourceMapManager
         }
     }
 
-    public void AddSourceMap(int debuggerAddress, SourceMapLine map)
+    public void AddSourceMap(int debuggerAddress, IDebuggerMapItem map)
     {
         if (MemoryToSourceMap.ContainsKey(debuggerAddress))
             MemoryToSourceMap[debuggerAddress] = map;
@@ -54,7 +54,7 @@ internal class SourceMapManager
             MemoryToSourceMap.Add(debuggerAddress, map);
     }
 
-    public SourceMapLine? GetSourceMap(int debuggerAddress)
+    public IDebuggerMapItem? GetSourceMap(int debuggerAddress)
     {
         if (MemoryToSourceMap.ContainsKey(debuggerAddress))
             return MemoryToSourceMap[debuggerAddress];
@@ -62,7 +62,7 @@ internal class SourceMapManager
         return null;
     }
 
-    public SourceMapLine? GetPreviousMap(int debuggerAddress, int maxStep = -3)
+    public IDebuggerMapItem? GetPreviousMap(int debuggerAddress, int maxStep = -3)
     {
         var step = -1;
         while (step >= maxStep)
@@ -172,15 +172,15 @@ internal class SourceMapManager
 
         foreach (var line in proc.Data)
         {
-            var toAdd = new SourceMapLine(line, proc);
+            //var toAdd = new SourceMapLine(line);
 
-            var debuggerAddress = AddressFunctions.GetDebuggerAddress(toAdd.Address, _emulator);
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(line.Address, _emulator);
 
             if (MemoryToSourceMap.ContainsKey(debuggerAddress))
                 MemoryToSourceMap.Remove(debuggerAddress);      // we're overwriting something in memory
                                                                 //throw new Exception("Couldn't add line, as it was already in the hashset.");
 
-            MemoryToSourceMap.Add(debuggerAddress, toAdd);
+            MemoryToSourceMap.Add(debuggerAddress, line);
 
             // Add to source filemap
             HashSet<CodeMap> lineMap;
@@ -316,18 +316,5 @@ public class CodeMap
         if (o == null) return false;
 
         return LineNumber == o.LineNumber;
-    }
-}
-
-public class SourceMapLine
-{
-    public Procedure Procedure { get; }
-    public IOutputData Line { get; }
-
-    public int Address => Line.Address;
-    public SourceMapLine(IOutputData line, Procedure proc)
-    {
-        Line = line;
-        Procedure = proc;
     }
 }

@@ -1,5 +1,4 @@
 ﻿using BitMagic.Common;
-using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
@@ -11,6 +10,7 @@ internal class DebugWrapper : ISourceFile
     private readonly ISourceFile _sourceFile;
 #if DEBUG
     private static int instanceCounter = 0;
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S1144:Unused private types or members should be removed", Justification = "<Pending>")]
     private readonly int _instance = instanceCounter++;
 #endif
 
@@ -23,49 +23,6 @@ internal class DebugWrapper : ISourceFile
     {
         _sourceFile = sourceFile;
         _breakpointManager = breakpointManager;
-    }
-
-    /// <summary>
-    /// Loads the file into main memory at _address_.
-    /// Will load into the bank that is set.
-    /// </summary>
-    /// <param name="emulator"></param>
-    /// <param name="address">Actual address to load into.</param>
-    /// <param name="hasHeader">Are we including the header or not?</param>
-    /// <param name="sourceMapManager"></param>
-    /// <exception cref="DebugWrapperAlreadyLoadedException"></exception>
-    /// <exception cref="DebugWrapperFileNotBinaryException"></exception>
-    [Obsolete("Use fileload instead")]
-    public List<Breakpoint> Load(Emulator emulator, int address, bool hasHeader, SourceMapManager sourceMapManager, DebugableFileManager fileManager)
-    {
-        if (Loaded)
-            throw new DebugWrapperAlreadyLoadedException(this);
-
-        var file = _sourceFile as IBinaryFile;
-
-        if (file == null)
-            throw new DebugWrapperFileNotBinaryException(_sourceFile);
-
-        file.LoadIntoMemory(emulator, address);
-
-        Loaded = true;
-        LoadedDebuggerAddress = address;
-
-        var debuggerAddress = AddressFunctions.GetDebuggerAddress(address, emulator);
-
-        sourceMapManager.ClearSourceMap(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // remove old sourcemap
-        _breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
-
-        sourceMapManager.ConstructNewSourceMap(file, hasHeader);
-
-        var breakpoints = _breakpointManager.CreateBitMagicBreakpoints(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
-
-        if (file is BitMagicBinaryFile bitmagicFile)
-        {
-            bitmagicFile.MapProcToMemory(emulator, sourceMapManager); // map bitmagic lines to the sourecmap for the stack
-        }
-
-        return breakpoints;
     }
 
     /// <summary>
@@ -96,29 +53,9 @@ internal class DebugWrapper : ISourceFile
 
         var breakpoints = _breakpointManager.CreateBitMagicBreakpoints(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
-        if (file is BitMagicBinaryFile bitmagicFile)
-        {
-            bitmagicFile.MapProcToMemory(emulator, sourceMapManager); // map bitmagic lines to the sourecmap for the stack
-            SetDebugData(bitmagicFile, emulator, debuggerAddress, hasHeader);
-        }
+        file.LoadDebugData(emulator, sourceMapManager, debuggerAddress);
 
         return breakpoints;
-    }
-
-    internal static void SetDebugData(BitMagicBinaryFile file, Emulator emulator, int debuggerAddress, bool hasHeader)
-    {
-        if (!file.DebugData.Any())
-            return;
-
-        for(var i = 0; i < file.DebugData.Count; i++)
-        {
-            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress + i);
-            var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
-
-            emulator.Breakpoints[offset] |= file.DebugData[i];
-            if (secondOffset != 0)
-                emulator.Breakpoints[secondOffset] |= file.DebugData[i];
-        }
     }
 
     internal IEnumerable<BreakpointPair> FindParentBreakpoints(int lineNumber, DebugableFileManager fileManager)
@@ -220,6 +157,8 @@ internal class DebugWrapper : ISourceFile
     public Task UpdateContent() => _sourceFile.UpdateContent();
 
     public void MapChildren() => _sourceFile.MapChildren();
+
+    public void AddChild(ISourceFile child) => _sourceFile.AddChild(child);
 
     public int AddParent(ISourceFile parent)
     {

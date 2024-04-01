@@ -77,7 +77,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.DiscUtils.Vdi", ".
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BitMagic.Common.Address", "..\BitMagic.Libraries\BitMagic.Common.Address\BitMagic.Common.Address.csproj", "{15E97647-98E9-44F4-9C44-496E0E321EF7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonSchemaGenerator", "JsonSchemaGenerator\JsonSchemaGenerator.csproj", "{55BDED66-D58D-45F0-9D8A-1E915540E82C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JsonSchemaGenerator", "JsonSchemaGenerator\JsonSchemaGenerator.csproj", "{55BDED66-D58D-45F0-9D8A-1E915540E82C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Libraries", "Libraries", "{25ADB53E-2320-490D-BA5D-A919AF7B42E5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BitMagic.Cc65Lib", "BitMagic.Cc65Lib\BitMagic.Cc65Lib.csproj", "{FC8A8406-ABEC-4454-BA29-043A1C7795FE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -377,6 +381,18 @@ Global
 		{55BDED66-D58D-45F0-9D8A-1E915540E82C}.Release|x64.Build.0 = Release|Any CPU
 		{55BDED66-D58D-45F0-9D8A-1E915540E82C}.Release|x86.ActiveCfg = Release|Any CPU
 		{55BDED66-D58D-45F0-9D8A-1E915540E82C}.Release|x86.Build.0 = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|x64.Build.0 = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Debug|x86.Build.0 = Debug|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x64.ActiveCfg = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x64.Build.0 = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x86.ActiveCfg = Release|Any CPU
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -403,6 +419,7 @@ Global
 		{BE55C0DB-AD09-430E-A149-A680FB4992D9} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{04F40E45-1811-4DDE-8E52-E63E897A5042} = {52770F4D-C2B2-447A-8498-2D1E13EECA86}
 		{15E97647-98E9-44F4-9C44-496E0E321EF7} = {2E856C46-D027-481F-BCFC-44C64225F9FF}
+		{FC8A8406-ABEC-4454-BA29-043A1C7795FE} = {25ADB53E-2320-490D-BA5D-A919AF7B42E5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {DFCB7DF5-52B3-4B9B-9814-3EC16549A76F}

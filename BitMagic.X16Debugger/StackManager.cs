@@ -182,7 +182,7 @@ internal class StackManager
 
                     // this is the correct line
                     
-                    if (!instruction.Line.CanStep)
+                    if (!instruction.CanStep)
                     {
                         frame.Name = $"{prefix}??? {addressString} (Data)";
 
@@ -194,8 +194,8 @@ internal class StackManager
                         return toReturn;
                     }
 
-                    frame.Name = $"{prefix}{instruction.Line.Scope.Name} {addressString}";
-                    toReturn.Scope = instruction.Line.Scope;
+                    frame.Name = $"{prefix}{instruction.Scope.Name} {addressString}";
+                    toReturn.Scope = instruction.Scope;
 
                     var (source, lineNumber) = wrapper.FindUltimateSource(address - binaryFile.BaseAddress, _debugableFileManager);
 

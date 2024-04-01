@@ -7,7 +7,6 @@ internal interface IBinaryFile : ISourceFile
 {
     IReadOnlyDictionary<int, string> Symbols { get; }
     int BaseAddress { get; }
-    void LoadIntoMemory(Emulator emulator, int address);
+    void LoadDebugData(Emulator emulator, SourceMapManager sourceMapManager, int debuggerAddress);
     IReadOnlyList<byte> Data { get; }
-    IReadOnlyList<uint> DebugData { get; }
 }

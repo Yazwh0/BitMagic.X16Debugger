@@ -17,6 +17,8 @@ using SysThread = System.Threading.Thread;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
+using BitMagic.X16Debugger.Extensions;
+using BitMagic.Cc65Lib;
 
 namespace BitMagic.X16Debugger;
 
@@ -444,6 +446,21 @@ public class X16Debug : DebugAdapterBase
             _emulator.LoadSdCard(sdCard);
         }
 
+        foreach(var i in _debugProject.Files)
+        {
+            if (i is BitMagicProjectFile bitmagicFile)
+            {
+
+                continue;
+            }
+
+            if (i is Cc65InputFile cc65File)
+            {
+                Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath);
+                continue;
+            }
+        }
+
         try
         {
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
@@ -471,25 +488,16 @@ public class X16Debug : DebugAdapterBase
 
                     if (_debugProject.DirectRun && result != null)
                     {
-                        result.Load(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                        _emulator.LoadIntoMemory(prg.Data, 0x801, true);
+                        result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
 
-                        //prg.LoadDebuggerInfo(0x801, true, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
-                        _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x801;
-                        Logger.LogLine($"Injecting {prg!.Data.Count:#,##0} bytes. Starting at 0x801");
+                        _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
+                        Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
                     }
                     else
                     {
-                        //var filename = Path.GetFileName(_debugProject.Source);
-                        //if (_emulator.SdCard == null)
-                        //    throw new Exception("SDCard is null");
-
-                        //filename = Path.GetFileNameWithoutExtension(filename) + ".prg";
-                        //_emulator.SdCard.AddCompiledFile(filename, prg.Data);
-                        //Logger.LogLine($" Done. Created '{filename}' ({prg.Data.Length:#,##0} bytes.)");
                         _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
                     }
-
-                    _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
 
                     if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
                     {
@@ -554,7 +562,7 @@ public class X16Debug : DebugAdapterBase
         }
         catch (CompilerException e)
         {
-            Logger.LogError($"ERROR: {e.Message}");
+            Logger.LogLine($"ERROR: {e.Message}");
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -591,6 +599,9 @@ public class X16Debug : DebugAdapterBase
 
             throw new ProtocolException(e.Message);
         }
+
+        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
+
 
         _emulator.Stepping = stopOnEntry;
         _emulator.Control = Control.Paused; // wait for main window
@@ -806,20 +817,20 @@ public class X16Debug : DebugAdapterBase
         Logger.LogLine("Starting emulator");
 
         // load in SD Card files here.
-        foreach (var filename in _debugProject!.SdCardFiles.Where(i => !string.IsNullOrWhiteSpace(i)))
+        foreach (var file in _debugProject!.SdCardFiles)
         {
             if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
-
-            var name = Path.GetFullPath(filename, _debugProject.BasePath);
+            
+            var name = Path.GetFullPath(file.Source, _debugProject.BasePath);
             if (File.Exists(name))
             {
-                _emulator.SdCard.AddFiles(name);
+                _emulator.SdCard.AddFiles(name, file.Dest);
                 continue;
             }
 
             if (Directory.Exists(name))
             {
-                _emulator.SdCard.AddDirectory(name);
+                _emulator.SdCard.AddDirectory(name, file.Dest);
                 continue;
             }
 
@@ -833,7 +844,7 @@ public class X16Debug : DebugAdapterBase
 
             foreach (var actFilename in Directory.GetFiles(path, wildcard))
             {
-                _emulator.SdCard.AddFiles(actFilename);
+                _emulator.SdCard.AddFiles(actFilename, file.Dest);
             }
         }
 
@@ -1126,14 +1137,14 @@ public class X16Debug : DebugAdapterBase
                 Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
             }
 
-            var debugableFilenew = _serviceManager.DebugableFileManager.GetFile_New(_setnam_value);
-            if (debugableFilenew != null)
+            var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(_setnam_value);
+            if (debugableFile != null)
             {
                 Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
 
                 var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
 
-                var breakpoints = debugableFilenew.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)

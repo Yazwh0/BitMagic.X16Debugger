@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Display\BitMagic.X16Emulator.Display.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator.Serializer\BitMagic.X16Emulator.Serializer.csproj" />
     <ProjectReference Include="..\..\BitMagic.X16Emulator\BitMagic.X16Emulator\BitMagic.X16Emulator.csproj" />
+    <ProjectReference Include="..\BitMagic.Cc65Lib\BitMagic.Cc65Lib.csproj" />
   </ItemGroup>
   
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
