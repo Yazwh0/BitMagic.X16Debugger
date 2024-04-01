@@ -446,23 +446,24 @@ public class X16Debug : DebugAdapterBase
             _emulator.LoadSdCard(sdCard);
         }
 
-        foreach(var i in _debugProject.Files)
-        {
-            if (i is BitMagicProjectFile bitmagicFile)
-            {
-
-                continue;
-            }
-
-            if (i is Cc65InputFile cc65File)
-            {
-                Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath);
-                continue;
-            }
-        }
-
         try
         {
+            foreach (var i in _debugProject.Files)
+            {
+                if (i is BitMagicProjectFile bitmagicFile)
+                {
+
+                    continue;
+                }
+
+                if (i is Cc65InputFile cc65File)
+                {
+                    Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath);
+                    continue;
+                }
+            }
+
+
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
                 var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();

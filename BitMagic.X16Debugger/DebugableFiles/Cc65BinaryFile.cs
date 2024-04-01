@@ -11,6 +11,8 @@ internal static class Cc65BinaryFileFactory
 {
     public static void BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath)
     {
+        basePath = Path.Combine(basePath, inputFile.BasePath);
+
         var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), Path.Combine(basePath, inputFile.Filename), inputFile.StartAddress);
 
         var cc65obj = Cc65LibParser.Parse(Path.Combine(basePath, inputFile.ObjectFile), Path.Combine(basePath, inputFile.SourcePath));
@@ -28,7 +30,7 @@ internal static class Cc65BinaryFileFactory
                 includes.Add(Cc65LibParser.Parse(Path.Combine(basePath, i)));
             }
         }
-
+        
         foreach(var file in cc65Cfg.Files.Values)
         {
             var actualData = File.ReadAllBytes(Path.Combine(basePath, file.Filename));

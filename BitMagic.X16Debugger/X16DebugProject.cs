@@ -240,6 +240,9 @@ public class Cc65InputFile : IDebugProjectFile
 
     [JsonProperty("includes")]
     public string[] Includes { get; set; } = Array.Empty<string>();
+
+    [JsonProperty("basepath")]
+    public string BasePath { get; set; } = "";
 }
 
 public class BitmagicInputFile : IDebugProjectFile
