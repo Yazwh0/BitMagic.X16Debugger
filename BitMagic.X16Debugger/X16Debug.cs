@@ -19,6 +19,7 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.Cc65Lib;
+using BitMagic.X16Debugger.Exceptions;
 
 namespace BitMagic.X16Debugger;
 
@@ -327,9 +328,9 @@ public class X16Debug : DebugAdapterBase
 
         foreach (var symbols in _debugProject!.Symbols)
         {
+            Logger.Log($"Loading Symbols {symbols.Symbols}... ");
             try
             {
-                Logger.Log($"Loading Symbols {symbols.Symbols}... ");
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
                 _serviceManager.SourceMapManager.LoadSymbols(symbols);
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
@@ -339,6 +340,10 @@ public class X16Debug : DebugAdapterBase
                 _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
 
                 Logger.LogLine("Done.");
+            }
+            catch (SymbolsFileNotFound)
+            {
+                Logger.LogLine("Not Found.");
             }
             catch (Exception e)
             {

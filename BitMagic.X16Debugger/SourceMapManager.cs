@@ -2,6 +2,7 @@
 using BitMagic.Common.Address;
 using BitMagic.Compiler;
 using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Emulator;
 using System.Diagnostics;
 
@@ -233,7 +234,7 @@ internal class SourceMapManager
             return;
 
         if (!File.Exists(file.Symbols))
-            throw new Exception($"File not found '{file.Symbols}'");
+            throw new SymbolsFileNotFound(file.Symbols);
 
         var contents = File.ReadAllLines(file.Symbols);
 
