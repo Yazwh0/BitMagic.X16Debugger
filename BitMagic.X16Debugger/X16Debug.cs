@@ -76,6 +76,12 @@ public class X16Debug : DebugAdapterBase
         {
             HandlePaletteRequestAsync(r);
         });
+        Protocol.RegisterRequestType<LayerRequest, LayerRequestArguments, LayerRequestResponse>(delegate (IRequestResponder<LayerRequestArguments, LayerRequestResponse> r)
+        {
+            HandleLayerRequestAsync(r);
+        });
+
+        
     }
 
 #if SHOWDAP
@@ -1453,6 +1459,7 @@ public class X16Debug : DebugAdapterBase
         requestType switch
         {
             "bm_palette" => HandlePaletteRequest(),
+            "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1460,6 +1467,12 @@ public class X16Debug : DebugAdapterBase
     {
         responder.SetResponse(HandlePaletteRequest());
     }
+
+    internal virtual void HandleLayerRequestAsync(IRequestResponder<LayerRequestArguments, LayerRequestResponse> responder)
+    {
+        responder.SetResponse(LayerRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
 
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     //{
