@@ -80,8 +80,12 @@ public class X16Debug : DebugAdapterBase
         {
             HandleLayerRequestAsync(r);
         });
+        Protocol.RegisterRequestType<MemoryUseRequest, MemoryUseRequestArguments, MemoryUseRequestResponse>(delegate (IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> r)
+        {
+            HandleMemoryUseRequestAsync(r);
+        });
 
-        
+
     }
 
 #if SHOWDAP
@@ -1460,6 +1464,7 @@ public class X16Debug : DebugAdapterBase
         {
             "bm_palette" => HandlePaletteRequest(),
             "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
+            "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1473,6 +1478,10 @@ public class X16Debug : DebugAdapterBase
         responder.SetResponse(LayerRequestHandler.HandleRequest(responder.Arguments, _emulator));
     }
 
+    internal virtual void HandleMemoryUseRequestAsync(IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> responder)
+    {
+        responder.SetResponse(MemoryUseHandler.HandleRequest(responder.Arguments, _emulator));
+    }
 
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     //{
