@@ -13,13 +13,15 @@ internal class MemoryValueTracker : DebugRequestWithResponse<MemoryValueTrackerA
 
 internal static class MemoryValueTrackerHandler
 {
+    private const uint MemoryHistoric = 0b00100000;
+
     public static MemoryValueTrackerResponse HandleRequest(MemoryValueTrackerArguments? arguments, Emulator emulator)
     {
         if (arguments == null)
             return new MemoryValueTrackerResponse();
 
         if (arguments.Locations == null || !arguments.Locations.Any())
-            return FindInitial(arguments.ToFind, GetSearchWidth(arguments.SearchWidth), emulator);
+            return FindInitial(arguments, emulator);
 
         return FindInstances(arguments, emulator);
     }
@@ -30,6 +32,10 @@ internal static class MemoryValueTrackerHandler
         "Not Equal" => SearchType.NotEqual,
         "Less Than" => SearchType.LessThan,
         "Greater Than" => SearchType.GreaterThan,
+        "Changed" => SearchType.Changed,
+        "Not Changed" => SearchType.NotChanged,
+        "Gone Up" => SearchType.GoneUp,
+        "Gone Down" => SearchType.GoneDown,
         _ => SearchType.Equal
     };
 
@@ -47,15 +53,39 @@ internal static class MemoryValueTrackerHandler
         SearchType.LessThan => a < b
     };
 
-    private static MemoryValueTrackerResponse FindInitial(uint toFind, SearchWidth width, Emulator emulator)
+    private static bool IsMatch(uint a, uint b, MemoryValue previous, SearchType searchType) => searchType switch
     {
+        SearchType.Equal => a == b,
+        SearchType.NotEqual => a != b,
+        SearchType.GreaterThan => a > b,
+        SearchType.LessThan => a < b,
+        SearchType.Changed => a != previous.Value,
+        SearchType.GoneUp => a > previous.Value,
+        SearchType.GoneDown => a < previous.Value,
+        SearchType.NotChanged => a == previous.Value
+    };
+
+    private static MemoryValueTrackerResponse FindInitial(MemoryValueTrackerArguments arguments, Emulator emulator)
+    {
+        var toFind = arguments.ToFind;
+        var width = GetSearchWidth(arguments.SearchWidth);
+        var changed = GetSearchType(arguments.SearchType) == SearchType.Changed;
+
         var matches = new List<MemoryValue>();
 
         var adjust = width == SearchWidth.Byte ? 0 : -1;
         for (var i = 0; i < 0xa000 + adjust; i++)
         {
-            if (GetValue(emulator.Memory, i, width) == toFind)
-                matches.Add(new MemoryValue() { Location = i, Value = GetValue(emulator.Memory, i, width) });
+            if (changed)
+            {
+                if ((emulator.Breakpoints[i] & MemoryHistoric) != 0)
+                    matches.Add(new MemoryValue() { Location = i, Value = GetValue(emulator.Memory, i, width) });
+            }
+            else
+            {
+                if (GetValue(emulator.Memory, i, width) == toFind)
+                    matches.Add(new MemoryValue() { Location = i, Value = GetValue(emulator.Memory, i, width) });
+            }
         }
 
         // for active bank, check main ram, but store debugger https://discord.com/channels/547559626024157184/1168970882119647283address as it could be switched out next time
@@ -63,8 +93,16 @@ internal static class MemoryValueTrackerHandler
         {
             var debuggerAddress = AddressFunctions.GetDebuggerAddress(i, (int)emulator.RamBankAct, 0);
 
-            if (GetValue(emulator.Memory, i, width) == toFind)
-                matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.Memory, i, width) });
+            if (changed)
+            {
+                if ((emulator.Breakpoints[debuggerAddress] & MemoryHistoric) != 0)
+                    matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.Memory, i, width) });
+            }
+            else
+            {
+                if (GetValue(emulator.Memory, i, width) == toFind)
+                    matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.Memory, i, width) });
+            }
         }
 
         for (var bank = 0; bank < 256; bank++)
@@ -78,12 +116,21 @@ internal static class MemoryValueTrackerHandler
 
                 var (_, address) = AddressFunctions.GetMemoryLocations(debuggerAddress);
 
-                if (GetValue(emulator.RamBank, address - 0x10000, width) == toFind)
-                    matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.RamBank, address - 0x10000, width) });
+                if (changed)
+                {
+                    if ((emulator.Breakpoints[address] & MemoryHistoric) != 0)
+                        matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.RamBank, address - 0x10000, width) });
+                }
+                else
+                {
+                    if (GetValue(emulator.RamBank, address - 0x10000, width) == toFind)
+                        matches.Add(new MemoryValue() { Location = debuggerAddress, Value = GetValue(emulator.RamBank, address - 0x10000, width) });
+
+                }
             }
         }
 
-        return new MemoryValueTrackerResponse() { ToFind = toFind, Locations = matches, Stepping = emulator.Stepping, SearchType = "Equal" };
+        return new MemoryValueTrackerResponse() { ToFind = toFind, Locations = matches, Stepping = emulator.Stepping, SearchType = arguments.SearchType };
     }
 
     private static uint GetValue(Span<byte> memory, int index, SearchWidth width) => width switch
@@ -106,7 +153,7 @@ internal static class MemoryValueTrackerHandler
             // Main ram
             if (i.Location < 0xa000)
             {
-                if (IsMatch(GetValue(emulator.Memory, i.Location, width), arguments.ToFind, searchType))
+                if (IsMatch(GetValue(emulator.Memory, i.Location, width), arguments.ToFind, i, searchType))
                     matches.Add(new MemoryValue() { Location = i.Location, Value = GetValue(emulator.Memory, i.Location, width) });
 
                 continue;
@@ -118,7 +165,7 @@ internal static class MemoryValueTrackerHandler
             // banked and current bank
             if (bank == emulator.RamBankAct)
             {
-                if (IsMatch(GetValue(emulator.Memory, address, width), arguments.ToFind, searchType))
+                if (IsMatch(GetValue(emulator.Memory, address, width), arguments.ToFind, i, searchType))
                     matches.Add(new MemoryValue() { Location = i.Location, Value = GetValue(emulator.Memory, address, width) });
 
                 continue;
@@ -126,7 +173,7 @@ internal static class MemoryValueTrackerHandler
 
             var (_, bankAddress) = AddressFunctions.GetMemoryLocations(i.Location);
 
-            if (IsMatch(GetValue(emulator.RamBank, bankAddress - 0xa000, width), arguments.ToFind, searchType))
+            if (IsMatch(GetValue(emulator.RamBank, bankAddress - 0xa000, width), arguments.ToFind, i, searchType))
                 matches.Add(new MemoryValue() { Location = i.Location, Value = GetValue(emulator.RamBank, bankAddress - 0xa000, width) });
         }
 
@@ -161,7 +208,11 @@ internal enum SearchType
     Equal,
     NotEqual,
     LessThan,
-    GreaterThan
+    GreaterThan,
+    Changed,
+    NotChanged,
+    GoneUp,
+    GoneDown
 }
 
 internal enum SearchWidth
