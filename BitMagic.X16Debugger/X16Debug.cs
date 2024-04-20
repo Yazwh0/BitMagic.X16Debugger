@@ -84,7 +84,10 @@ public class X16Debug : DebugAdapterBase
         {
             HandleMemoryUseRequestAsync(r);
         });
-
+        Protocol.RegisterRequestType<MemoryValueTracker, MemoryValueTrackerArguments, MemoryValueTrackerResponse>(delegate (IRequestResponder<MemoryValueTrackerArguments, MemoryValueTrackerResponse> r)
+        {
+            HandleValueTrackerRequestAsync(r);
+        });
 
     }
 
@@ -1465,6 +1468,7 @@ public class X16Debug : DebugAdapterBase
             "bm_palette" => HandlePaletteRequest(),
             "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
+            "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1481,6 +1485,11 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleMemoryUseRequestAsync(IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> responder)
     {
         responder.SetResponse(MemoryUseHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleValueTrackerRequestAsync(IRequestResponder<MemoryValueTrackerArguments, MemoryValueTrackerResponse> responder)
+    {
+        responder.SetResponse(MemoryValueTrackerHandler.HandleRequest(responder.Arguments, _emulator));
     }
 
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)

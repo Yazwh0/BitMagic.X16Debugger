@@ -2,7 +2,6 @@
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp;
 using BitMagic.X16Emulator;
-using BitMagic.X16Emulator.Snapshot;
 
 namespace BitMagic.X16Debugger.CustomMessage;
 
