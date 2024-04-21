@@ -173,6 +173,8 @@ public class SdCardFiles
 {
     public string Source { get; set; } = "";
     public string Dest { get; set; } = "";
+
+    public bool AllowOverwrite { get; set; } = true;
 }
 
 public class DebugProjectFileConverter : JsonConverter

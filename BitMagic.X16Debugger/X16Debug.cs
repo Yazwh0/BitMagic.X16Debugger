@@ -843,13 +843,13 @@ public class X16Debug : DebugAdapterBase
             var name = Path.GetFullPath(file.Source, _debugProject.BasePath);
             if (File.Exists(name))
             {
-                _emulator.SdCard.AddFiles(name, file.Dest);
+                _emulator.SdCard.AddFiles(name, file.Dest, file.AllowOverwrite);
                 continue;
             }
 
             if (Directory.Exists(name))
             {
-                _emulator.SdCard.AddDirectory(name, file.Dest);
+                _emulator.SdCard.AddDirectory(name, file.Dest, file.AllowOverwrite);
                 continue;
             }
 
@@ -863,7 +863,7 @@ public class X16Debug : DebugAdapterBase
 
             foreach (var actFilename in Directory.GetFiles(path, wildcard))
             {
-                _emulator.SdCard.AddFiles(actFilename, file.Dest);
+                _emulator.SdCard.AddFiles(actFilename, file.Dest, file.AllowOverwrite);
             }
         }
 
