@@ -9,13 +9,14 @@ internal static class AutobootCreator
         const int addressSize = 2;
         const int tokenSize = 1;
         const int endOfLineSize = 1;
+        const int loadParamsSize = 4;
         const int spaceSize = 1;
         const int quoteMarksSize = 1;
 
-        var nextLine = 0x801 + addressSize + lineNumberSize + tokenSize + spaceSize + quoteMarksSize + prgName.Length + quoteMarksSize + endOfLineSize;
+        var nextLine = 0x801 + addressSize + lineNumberSize + tokenSize + spaceSize + quoteMarksSize + prgName.Length + quoteMarksSize + loadParamsSize + endOfLineSize;
         var toReturn = new byte[
             prgHeaderSize +
-            addressSize + lineNumberSize + tokenSize + spaceSize + quoteMarksSize + prgName.Length + quoteMarksSize + endOfLineSize +
+            addressSize + lineNumberSize + tokenSize + spaceSize + quoteMarksSize + prgName.Length + quoteMarksSize + loadParamsSize + endOfLineSize +
             addressSize + lineNumberSize + tokenSize + endOfLineSize +
             addressSize];
 
@@ -34,6 +35,12 @@ internal static class AutobootCreator
             toReturn[pos++] = (byte)prgName[i];
         }
         toReturn[pos++] = 0x22; // "
+
+        toReturn[pos++] = 0x2c; // ,
+        toReturn[pos++] = 0x38; // 8
+        toReturn[pos++] = 0x2c; // ,
+        toReturn[pos++] = 0x30; // 0
+
         toReturn[pos++] = 0x00; // End of line
 
         nextLine += addressSize + lineNumberSize + tokenSize + endOfLineSize;
