@@ -1014,7 +1014,8 @@ public class X16Debug : DebugAdapterBase
                             if (memoryChange.MemoryArea == MemoryAreas.Ram && memoryChange.Address < 0x9f00)
                             {
                                 Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryChange.Address, Count = 1 });
-                                toFlag.Add("MainRam.bmasm");
+                                if (memoryChange.Address >= 0x200)
+                                    toFlag.Add("MainRam.bmasm");
                             }
                             else if (memoryChange.MemoryArea == MemoryAreas.Vram)
                             {
@@ -1033,7 +1034,8 @@ public class X16Debug : DebugAdapterBase
                             if (memoryRangeChange.MemoryArea == MemoryAreas.Ram && memoryRangeChange.Start < 0x9f00)
                             {
                                 Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = memoryRangeChange.Start, Count = memoryRangeChange.End - memoryRangeChange.Start });
-                                toFlag.Add("MainRam.bmasm");
+                                if (memoryRangeChange.End >= 0x200)
+                                    toFlag.Add("MainRam.bmasm");
                             }
                             else if (memoryRangeChange.MemoryArea == MemoryAreas.Vram)
                             {
@@ -1445,7 +1447,7 @@ public class X16Debug : DebugAdapterBase
         if (data == null)
             return toReturn;
 
-        data.UpdateContent(); // will only update if requird.
+        data.UpdateContent().GetAwaiter().GetResult(); // will only update if requird.
 
         toReturn.Content = string.Join(Environment.NewLine, data.Content);
         return toReturn;

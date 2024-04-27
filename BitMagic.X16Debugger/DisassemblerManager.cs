@@ -67,7 +67,8 @@ internal class DisassemblerManager
 
         result = _idManager.GetObject<DecompileReturn>(BankToId[(NotSet, NotSet)]) ?? throw new Exception("Cannot find main ram object!");
 
-        result.Generate();
+        if (result.Generate != null)
+            result.Generate();
 
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, result, 0, 0);
     }
@@ -85,7 +86,8 @@ internal class DisassemblerManager
     {
         DecompileReturn decompileReturn = GetDecompileReturn(ramBank, NotSet);
 
-        decompileReturn.Generate();
+        if (decompileReturn.Generate != null)
+            decompileReturn.Generate();
 
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, ramBank, 0);
     }
@@ -138,8 +140,10 @@ internal class DisassemblerManager
 
             var item = decompileReturn;
             var decompiler = new Decompiler.Decompiler();
-            var data = _emulator.Memory.Slice(0, 0xa000);
-            var result = decompiler.Decompile(data, 0x0000, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
+
+            // decompile from 0x200 onwards
+            var data = _emulator.Memory.Slice(0x200, 0xa000);
+            var result = decompiler.Decompile(data, 0x0200, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
             item.Items = result.Items;
         });
         DecompiledData.Add(decompileReturn.Path, decompileReturn);
