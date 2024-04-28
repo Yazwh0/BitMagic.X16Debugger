@@ -53,6 +53,7 @@ internal class ServiceManager
         DisassemblerManager = new(SourceMapManager, Emulator, IdManager);
         BreakpointManager = new(Emulator, IdManager, DisassemblerManager, DebugableFileManager);
         DebugableFileManager.SetBreakpointManager(BreakpointManager);
+        DisassemblerManager.SetBreakpointManager(BreakpointManager);
         StackManager = new(Emulator, IdManager, SourceMapManager, DisassemblerManager, DebugableFileManager);
         SpriteManager = new(Emulator);
         PaletteManager = new(Emulator);
@@ -61,6 +62,9 @@ internal class ServiceManager
         ExpressionManager = new(VariableManager, Emulator);
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
 
+        BreakpointManager.BreakpointsUpdated += _debugger.BreakpointManager_BreakpointsUpdated;
+
         return Emulator;
     }
+
 }

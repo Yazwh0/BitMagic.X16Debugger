@@ -4,13 +4,16 @@ using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using static BitMagic.X16Debugger.BreakpointsUpdatedEventArgs;
 
 namespace BitMagic.X16Debugger;
 
 internal class BreakpointManager
 {
     private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new();
+    private readonly Dictionary<int, List<MemoryBreakpointMap>> _instructionBreakpoints = new();
 
+    // keyed on debugger address
     private readonly Dictionary<int, (Breakpoint Breakpoint, SourceBreakpoint SourceBreakpoint)> _breakpoints = new();
     private readonly Dictionary<int, int> _breakpointHitCount = new();
     private readonly Emulator _emulator;
@@ -18,9 +21,11 @@ internal class BreakpointManager
     private readonly DisassemblerManager _disassemblerManager;
     private readonly DebugableFileManager _debugableFileManager;
 
+    public event EventHandler<BreakpointsUpdatedEventArgs> BreakpointsUpdated;
+
     private readonly HashSet<int> _debuggerBreakpoints = new(); // breakpoints which the debugger rely on.
 
-    internal BreakpointManager(Emulator emulator, 
+    internal BreakpointManager(Emulator emulator,
         IdManager idManager, DisassemblerManager disassemblerManager,
         DebugableFileManager debugableFileManager)
     {
@@ -31,6 +36,12 @@ internal class BreakpointManager
     }
 
     public HashSet<int> DebuggerBreakpoints => _debuggerBreakpoints;
+
+    public void UpdateBreakpoints(IEnumerable<Breakpoint> breakpoints, BreakpointsUpdatedType updateType)
+    {
+        if (BreakpointsUpdated != null)
+            BreakpointsUpdated.Invoke(this, new BreakpointsUpdatedEventArgs() { Breakpoints = breakpoints.ToArray(), UpdateType = updateType });
+    }
 
     public void SetDebuggerBreakpoints()
     {
@@ -43,10 +54,10 @@ internal class BreakpointManager
 
             // only set local breakpoint if we're in the right bank
             if (primaryAddress < 0xa000 || bank == currentBank)
-                _emulator.Breakpoints[address] =  DebugConstants.SystemBreakpoint;
+                _emulator.Breakpoints[address] = DebugConstants.SystemBreakpoint;
 
             if (secondAddress != 0)
-                _emulator.Breakpoints[secondAddress] =  DebugConstants.SystemBreakpoint;
+                _emulator.Breakpoints[secondAddress] = DebugConstants.SystemBreakpoint;
         }
     }
 
@@ -169,7 +180,7 @@ internal class BreakpointManager
                 var breakpoint = sbp.ConvertBreakpoint(arguments.Source, loaded, _idManager);
 
                 // set system bit
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
 
                 var (_, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
 
@@ -245,7 +256,7 @@ internal class BreakpointManager
             {
                 // Need to ensure system breakpoints are set
                 var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint : 0;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint : 0;
 
                 var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(breakpoint.RamBank > 0 ? breakpoint.RamBank : breakpoint.RomBank, breakpoint.Address);
 
@@ -269,19 +280,28 @@ internal class BreakpointManager
         {
             foreach (var sourceBreakpoint in arguments.Breakpoints)
             {
+                if (decompiledFile.RequireUpdate)
+                    decompiledFile.UpdateContent().GetAwaiter().GetResult();
+
                 if (!decompiledFile.Items.ContainsKey(sourceBreakpoint.Line))
+                {
                     continue;
+                }
 
                 var thisLine = decompiledFile.Items[sourceBreakpoint.Line];
 
-                var breakpoint = new Breakpoint();
-                breakpoint.Source = decompiledFile.AsSource();
-                breakpoint.Line = sourceBreakpoint.Line;
-                breakpoint.Verified = true;
-                breakpoint.Id = _idManager.GetId();
+                var breakpoint = new Breakpoint
+                {
+                    Source = decompiledFile.AsSource(),
+                    Line = sourceBreakpoint.Line,
+                    Verified = true,
+                    Id = _idManager.GetId()
+                };
 
                 var debuggerAddress = AddressFunctions.GetDebuggerAddress(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank);
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ?  DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+
+                //breakpoint.InstructionReference = AddressFunctions.GetDebuggerAddressString(debuggerAddress, decompiledFile.RamBank, decompiledFile.RomBank);
 
                 var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
                 _memoryBreakpoints[sourceId].Add(toAdd);
@@ -307,6 +327,113 @@ internal class BreakpointManager
 
 
         return toReturn;
+    }
+
+    public SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
+    {
+        var toReturn = new SetInstructionBreakpointsResponse();
+
+        foreach (var b in arguments.Breakpoints)
+        {
+            var debuggerAddress = Convert.ToInt32(b.InstructionReference, 16);
+            debuggerAddress += b.Offset ?? 0;
+
+            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress);
+
+            var name = _disassemblerManager.GetName(address, ramBank, romBank);
+            if (!_disassemblerManager.DecompiledData.ContainsKey(name))
+            {
+                var breakpoint = new Breakpoint()
+                {
+                    Verified = false,
+                    Message = "Cannot locate decompiled data.",
+                    InstructionReference = b.InstructionReference,
+                    Offset = b.Offset
+                };
+
+                toReturn.Breakpoints.Add(breakpoint);
+                continue;
+            }
+
+            var decompiledFile = _disassemblerManager.DecompiledData[name];
+
+            if (decompiledFile.ReferenceId == null)
+            {
+                var breakpoint = new Breakpoint()
+                {
+                    Verified = false,
+                    Message = "Decompiled file has no reference ID.",
+                    InstructionReference = b.InstructionReference,
+                    Offset = b.Offset
+                };
+
+                toReturn.Breakpoints.Add(breakpoint);
+                continue;
+            }
+
+            var sourceId = decompiledFile.ReferenceId ?? 0;
+
+            if (!_instructionBreakpoints.ContainsKey(sourceId))
+                _instructionBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
+
+            bool found = false;
+            foreach(var i in decompiledFile.Items.Values.Where(i => i.Address ==  address ))
+            {
+                var breakpoint = new Breakpoint()
+                {
+                    Verified = true,
+                    InstructionReference = b.InstructionReference,
+                    Offset = b.Offset,
+                    Source = decompiledFile.AsSource()
+                };
+
+                toReturn.Breakpoints.Add(breakpoint);
+
+                var toAdd = new MemoryBreakpointMap(address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
+                _instructionBreakpoints[sourceId].Add(toAdd);
+
+                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+
+                var bank = address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
+                var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+                var (lowAddress, secondAddress) = AddressFunctions.GetMemoryLocations(bank, address);
+
+                // only set local breakpoint if we're in the right bank
+                if (lowAddress < 0xa000 || bank == currentBank)
+                    _emulator.Breakpoints[address] = breakpointValue;
+
+                if (secondAddress != 0)
+                    _emulator.Breakpoints[secondAddress] = breakpointValue;
+
+                var thisAddress = secondAddress == 0 ? address : secondAddress;
+                if (!_breakpoints.ContainsKey(thisAddress))
+                    _breakpoints.Add(thisAddress, (breakpoint, null));
+
+                found = true;
+                break;
+            }
+
+            if (found)
+                continue;
+
+            toReturn.Breakpoints.Add(new Breakpoint()
+            {
+                Verified = false,
+                Message = $"No instruction at {address}",
+                InstructionReference = b.InstructionReference,
+                Offset = b.Offset
+            });
+        }
+
+        return toReturn;
+    }
+
+    public List<MemoryBreakpointMap> MemoryBreakpoints(int sourceId)
+    {
+        if (_memoryBreakpoints.ContainsKey(sourceId))
+            return _memoryBreakpoints[sourceId];
+
+        return new List<MemoryBreakpointMap>(0);
     }
 
     /// <summary>
@@ -346,6 +473,7 @@ internal class BreakpointManager
         //_bitMagicBreakpoints.Clear();
         _memoryBreakpoints.Clear();
         _breakpointHitCount.Clear();
+        _instructionBreakpoints.Clear();
 
         // yes this is awful.
         for (var i = 0; i < _emulator.Breakpoints.Length; i++)
@@ -394,5 +522,18 @@ internal static class SouceBreakpointExtensions
             Source = source,
             Verified = verified
         };
+    }
+}
+
+public class BreakpointsUpdatedEventArgs : EventArgs
+{
+    public Breakpoint[]? Breakpoints { get; set; }
+    public BreakpointsUpdatedType UpdateType { get; set; } = BreakpointsUpdatedType.Changed;
+
+    public enum BreakpointsUpdatedType
+    {
+        New,
+        Changed,
+        Removed
     }
 }

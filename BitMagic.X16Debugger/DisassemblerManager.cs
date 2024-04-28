@@ -2,7 +2,6 @@
 using BitMagic.Decompiler;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.Core.Native;
 
 namespace BitMagic.X16Debugger;
 
@@ -11,6 +10,8 @@ internal class DisassemblerManager
     private readonly SourceMapManager _sourceMapManager;
     private readonly Emulator _emulator;
     private readonly IdManager _idManager;
+    private BreakpointManager? _breakpointManager = null;
+
     public Dictionary<(int RamBank, int RomBank), int> BankToId { get; } = new();
     public Dictionary<string, DecompileReturn> DecompiledData = new();
     private X16DebugProject? _project;
@@ -21,7 +22,32 @@ internal class DisassemblerManager
         _sourceMapManager = sourceMapManager;
         _emulator = emulator;
         _idManager = idManaager;
+
         CreateRamDocuments();
+    }
+
+    public string GetName(int address, int ramBank, int RomBank)
+    {
+        if (address < 0xa000)
+            return "MainRam.bmasm";
+
+        if (address < 0xc000)
+        {
+            if (_project != null && _project.RamBankNames.Length > ramBank)
+                return $"{_project.RamBankNames[ramBank]}.bmasm";
+
+            return $"z_Bank_0x{ramBank:X2}.bmasm";
+        }
+
+        if (_project != null && _project.RomBankNames.Length > RomBank)
+            return $"{_project.RomBankNames[RomBank]}.bmasm";
+
+        return $"RomBank_{RomBank}.bmasm";
+    }
+
+    public void SetBreakpointManager(BreakpointManager breakpointManager)
+    {
+        _breakpointManager = breakpointManager;
     }
 
     public void SetProject(X16DebugProject project)
@@ -112,6 +138,26 @@ internal class DisassemblerManager
             var data = _emulator.RamBank.Slice(ramBank * 0x2000, 0x2000);
             var result = decompiler.Decompile(data, 0xa000, 0xbfff, ramBank, _sourceMapManager.Symbols, null);
             item.Items = result.Items;
+            if (item.ReferenceId != null && _breakpointManager != null)
+            {
+                var existing = _breakpointManager.MemoryBreakpoints(item.ReferenceId.Value).ToDictionary(i => i.Address, i => i);
+
+                if (existing.Any())
+                {
+                    foreach (var i in existing.Values)
+                    {
+                        i.Breakpoint.Verified = false;
+                    }
+
+                    foreach (var i in result.Items.Values.Where(i => i.Address != 0 && existing.ContainsKey(i.Address)))
+                    {
+                        existing[i.Address].Breakpoint.Line = i.LineNumber;
+                        existing[i.Address].Breakpoint.Verified = true;
+                    }
+                }
+
+                _breakpointManager.UpdateBreakpoints(existing.Values.Select(i => i.Breakpoint), BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.Changed);
+            }
         });
 
         BankToId.Add((ramBank, NotSet), decompileReturn.ReferenceId ?? 0);
@@ -131,20 +177,60 @@ internal class DisassemblerManager
         decompileReturn.SetName(name, name);
         decompileReturn.SetGenerate(() =>
         {
-            var additionalSymbols = new Dictionary<int, string>
-            {
-                { 0x100, "stackstart" },
-                { 0x200, "stackend" }
-                //{ _emulator.Pc, "_pc" }
-            };
-
             var item = decompileReturn;
             var decompiler = new Decompiler.Decompiler();
 
             // decompile from 0x200 onwards
             var data = _emulator.Memory.Slice(0x200, 0xa000);
-            var result = decompiler.Decompile(data, 0x0200, 0x9fff, 0, _sourceMapManager.Symbols, additionalSymbols);
+            var result = decompiler.Decompile(data, 0x0200, 0x9f00, 0, _sourceMapManager.Symbols);
+            var newBreakpoints = new List<Breakpoint>();
             item.Items = result.Items;
+            if (item.ReferenceId != null && _breakpointManager != null)
+            {
+                var existing = _breakpointManager.MemoryBreakpoints(item.ReferenceId.Value).ToDictionary(i => i.Address, i => i);
+
+                if (existing.Any())
+                {
+                    foreach (var i in existing.Values)
+                    {
+                        i.Breakpoint.Verified = false;
+                    }
+
+                    foreach (var i in result.Items.Values.Where(i => i.Address != 0 && existing.ContainsKey(i.Address)))
+                    {
+                        existing[i.Address].Breakpoint.Line = i.LineNumber;
+                        existing[i.Address].Breakpoint.Verified = true;
+
+                        newBreakpoints.Add(new Breakpoint()
+                        {
+                            InstructionReference = AddressFunctions.GetDebuggerAddressString(i.Address, 0, 0),
+                            Verified = true,
+                            Offset = 0,
+                            Source = new Source
+                            {
+                                Name = decompileReturn.Name,
+                                Path = decompileReturn.Path,
+                                Origin = decompileReturn.Origin.ToString(),
+                                SourceReference = decompileReturn.ReferenceId,
+                            },
+                            Id = 2001
+                        });
+
+                        //newBreakpoints.Add(new Breakpoint()
+                        //{
+                        //    Verified = true,
+                        //    Id = 3001,
+                        //    Source = existing[i.Address].Breakpoint.Source,
+                        //    Line = i.LineNumber + 1
+                        //});
+                    }
+                }
+
+                if (existing.Any())
+                    _breakpointManager.UpdateBreakpoints(existing.Values.Select(i => i.Breakpoint), BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.Changed);
+                if (newBreakpoints.Any())
+                    _breakpointManager.UpdateBreakpoints(newBreakpoints, BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.New);
+            }
         });
         DecompiledData.Add(decompileReturn.Path, decompileReturn);
 
@@ -155,7 +241,7 @@ internal class DisassemblerManager
     {
         var toReturn = new DisassembleResponse();
 
-        var actItems = decompileReturn.Items.Values.Where(i => i.HasInstruction).ToArray();
+        var actItems = decompileReturn.Items.Values.ToArray();
 
         var idx = 0;
         foreach (var i in actItems)
@@ -168,6 +254,8 @@ internal class DisassemblerManager
         }
 
         idx += instructionOffset;
+
+        var first = true;
 
         for (var i = 0; i < instructionCount;)
         {
@@ -188,19 +276,20 @@ internal class DisassemblerManager
                 Address = AddressFunctions.GetDebuggerAddressString(thisLine.Address, ramBank, romBank),
                 Line = thisLine.LineNumber,
                 Symbol = thisLine.Symbol,
-                Instruction = thisLine.Instruction,
+                Instruction = thisLine.Instruction.StartsWith("/*") ? thisLine.Instruction.Substring(thisLine.Instruction.IndexOf("*/")+2).Trim()  :  thisLine.Instruction.Trim(),
                 InstructionBytes = string.Join(" ", thisLine.Data.Select(i => i.ToString("X2"))),
-                Location = new Source
+                Location = first ? new Source
                 {
                     Name = decompileReturn.Name,
                     Path = decompileReturn.Path,
                     Origin = decompileReturn.Origin.ToString(),
                     SourceReference = decompileReturn.ReferenceId,
-                }
+                } : null,
             });
 
             i++;
             idx++;
+            first = false;
         }
 
         if (toReturn.Instructions.Any())

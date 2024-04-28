@@ -18,7 +18,6 @@ using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Extensions;
-using BitMagic.Cc65Lib;
 using BitMagic.X16Debugger.Exceptions;
 
 namespace BitMagic.X16Debugger;
@@ -142,7 +141,7 @@ public class X16Debug : DebugAdapterBase
             SupportsReadMemoryRequest = true,
             SupportsDisassembleRequest = true,
             SupportsWriteMemoryRequest = true,
-            //SupportsInstructionBreakpoints = true,
+            SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
             SupportsLoadedSourcesRequest = true,
             //SupportsSetVariable = true,
@@ -688,12 +687,23 @@ public class X16Debug : DebugAdapterBase
         => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
 
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
+        => _serviceManager.BreakpointManager.HandleSetInstructionBreakpointsRequest(arguments);
+
+    public void BreakpointManager_BreakpointsUpdated(object? sender, BreakpointsUpdatedEventArgs e)
     {
-        var toReturn = new SetInstructionBreakpointsResponse();
+        if (e.Breakpoints == null)
+            return;
 
-
-
-        return toReturn;
+        foreach (var breakpoint in e.Breakpoints)
+        {
+            Protocol.SendEvent(new BreakpointEvent(e.UpdateType switch
+            {
+                BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.New => BreakpointEvent.ReasonValue.New,
+                BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.Changed => BreakpointEvent.ReasonValue.Changed,
+                BreakpointsUpdatedEventArgs.BreakpointsUpdatedType.Removed => BreakpointEvent.ReasonValue.Removed,
+                _ => BreakpointEvent.ReasonValue.Unknown
+            }, breakpoint));
+        }
     }
 
     #endregion
@@ -867,6 +877,7 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
+        // tell the app that decompiled files have changed
         foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
         {
             Protocol.SendEvent(new LoadedSourceEvent()
@@ -881,6 +892,11 @@ public class X16Debug : DebugAdapterBase
                 }
             });
         }
+
+        //
+        Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
+
+
 
         Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
