@@ -34,15 +34,15 @@ internal class DisassemblerManager
         if (address < 0xc000)
         {
             if (_project != null && _project.RamBankNames.Length > ramBank)
-                return $"{_project.RamBankNames[ramBank]}.bmasm";
+                return $"Ram/{_project.RamBankNames[ramBank]}.bmasm";
 
-            return $"z_Bank_0x{ramBank:X2}.bmasm";
+            return $"Ram/z_Bank_0x{ramBank:X2}.bmasm";
         }
 
         if (_project != null && _project.RomBankNames.Length > RomBank)
-            return $"{_project.RomBankNames[RomBank]}.bmasm";
+            return $"Rom/{_project.RomBankNames[RomBank]}.bmasm";
 
-        return $"RomBank_{RomBank}.bmasm";
+        return $"Rom/RomBank_{RomBank}.bmasm";
     }
 
     public void SetBreakpointManager(BreakpointManager breakpointManager)
