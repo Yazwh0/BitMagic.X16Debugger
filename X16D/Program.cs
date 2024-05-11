@@ -4,11 +4,16 @@ using CommandLine;
 using System.Net.Sockets;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace X16D;
 
 static class Program
 {
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    static extern bool SetDllDirectory(string lpPathName);
+
     internal class Options
     {
         [Option("debug", Default = false, Required = false)]
@@ -74,12 +79,16 @@ static class Program
         {
             Console.WriteLine($"Cannot find EmulatorCode.dll or .so in cwd '{Directory.GetCurrentDirectory()}'");
             var newLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            Console.WriteLine($"Changing cwd to {newLocation}");
-            Directory.SetCurrentDirectory(newLocation);
-            if (!File.Exists("EmulatorCore.dll") && !File.Exists("EmulatorCore.so"))
+            if (newLocation == null)
             {
-                Console.WriteLine($"Still acnnot find EmulatorCode.dll or .so.");
+                Console.WriteLine("Path for current executable is null!");
                 return 1;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Console.WriteLine($"Calling SetDllDirectory with '{newLocation}'");
+                SetDllDirectory(newLocation);
             }
         }
 
