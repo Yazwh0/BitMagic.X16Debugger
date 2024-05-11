@@ -896,8 +896,6 @@ public class X16Debug : DebugAdapterBase
         //
         Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
 
-
-
         Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
         {
