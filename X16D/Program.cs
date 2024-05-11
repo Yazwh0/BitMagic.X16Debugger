@@ -69,6 +69,12 @@ static class Program
                 Console.WriteLine($"Emulator does not exist: {options.OfficialEmulatorLocation}");
         }
 
+        if(!File.Exists("EmulatorCore.dll") && !File.Exists("EmulatorCore.so"))
+        {
+            Console.WriteLine($"Cannot find EmulatorCode.dll or .so in cwd '{Directory.GetCurrentDirectory()}'");
+            return 1;
+        }
+
         Func<Emulator> getEmulator = () =>
         {
             var emulator = new Emulator();
