@@ -3,6 +3,7 @@ using BitMagic.X16Emulator;
 using CommandLine;
 using System.Net.Sockets;
 using System.Net;
+using System.Reflection;
 
 namespace X16D;
 
@@ -69,10 +70,17 @@ static class Program
                 Console.WriteLine($"Emulator does not exist: {options.OfficialEmulatorLocation}");
         }
 
-        if(!File.Exists("EmulatorCore.dll") && !File.Exists("EmulatorCore.so"))
+        if (!File.Exists("EmulatorCore.dll") && !File.Exists("EmulatorCore.so"))
         {
             Console.WriteLine($"Cannot find EmulatorCode.dll or .so in cwd '{Directory.GetCurrentDirectory()}'");
-            return 1;
+            var newLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            Console.WriteLine($"Changing cwd to {newLocation}");
+            Directory.SetCurrentDirectory(newLocation);
+            if (!File.Exists("EmulatorCore.dll") && !File.Exists("EmulatorCore.so"))
+            {
+                Console.WriteLine($"Still acnnot find EmulatorCode.dll or .so.");
+                return 1;
+            }
         }
 
         Func<Emulator> getEmulator = () =>
