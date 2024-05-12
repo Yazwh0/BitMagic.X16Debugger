@@ -521,8 +521,16 @@ public class X16Debug : DebugAdapterBase
                     {
                         foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
                         {
-                            var path = Path.Combine(Path.GetRelativePath(_debugProject.OutputFolder, workspaceFolder), f.Filename);
-                            Logger.Log($"Writing to '{Path.GetRelativePath(workspaceFolder, path)}'... ");
+                            string path = "";
+                            if (Path.IsPathRooted(_debugProject.OutputFolder))
+                            {
+                                path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
+                            }
+                            else
+                            {
+                                path = Path.GetFullPath(Path.Combine(Path.GetRelativePath(workspaceFolder, _debugProject.OutputFolder), f.Filename));
+                            }
+                            Logger.Log($"Writing to '{path}'... ");
                             File.WriteAllBytes(path, f.Data.ToArray());
                             Logger.LogLine("Done.");
                         }

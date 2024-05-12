@@ -397,6 +397,8 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Transparant Writes", "bool", () => _emulator.VeraFx.TransparantWrites, () => _emulator.VeraFx.TransparantWrites));
         scope.AddVariable(new VariableMap("One-Byte Cycling", "bool", () => _emulator.VeraFx.OneByteCycling, () => _emulator.VeraFx.OneByteCycling));
         scope.AddVariable(new VariableMap("Two-Byte Cache Inc", "bool", () => _emulator.VeraFx.TwoByteCacheIncr, () => _emulator.VeraFx.TwoByteCacheIncr));
+        scope.AddVariable(new VariableMap("Multiplier", "bool", () => _emulator.VeraFx.MultiplierEnable, () => _emulator.VeraFx.MultiplierEnable));
+        scope.AddVariable(new VariableMap("Accumulate", "bool", () => _emulator.VeraFx.Accumulate, () => _emulator.VeraFx.Accumulate));
 
         scope = GetNewScope("Kernal");
 
