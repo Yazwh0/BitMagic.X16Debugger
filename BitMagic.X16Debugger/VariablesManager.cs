@@ -272,6 +272,7 @@ internal class VariableManager
                 }
             )));
 
+        scope.AddVariable(new VariableMap("DcSel", "uint", () => $"{_emulator.Vera.DcSel}", () => _emulator.Vera.DcSel));
         scope.AddVariable(new VariableMap("Output", "uint", () => $"{_emulator.Vera.VideoOutput}", () => _emulator.Vera.VideoOutput));
         scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}", () => _emulator.Vera.Dc_HStart));
         scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}", () => _emulator.Vera.Dc_VStart));
@@ -398,7 +399,8 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("One-Byte Cycling", "bool", () => _emulator.VeraFx.OneByteCycling, () => _emulator.VeraFx.OneByteCycling));
         scope.AddVariable(new VariableMap("Two-Byte Cache Inc", "bool", () => _emulator.VeraFx.TwoByteCacheIncr, () => _emulator.VeraFx.TwoByteCacheIncr));
         scope.AddVariable(new VariableMap("Multiplier", "bool", () => _emulator.VeraFx.MultiplierEnable, () => _emulator.VeraFx.MultiplierEnable));
-        scope.AddVariable(new VariableMap("Accumulate", "bool", () => _emulator.VeraFx.Accumulate, () => _emulator.VeraFx.Accumulate));
+        scope.AddVariable(new VariableMap("Accumulator", "int", () => _emulator.VeraFx.Accumulator, () => _emulator.VeraFx.Accumulator));
+        scope.AddVariable(new VariableMap("Accumulate Direction", "string", () => _emulator.VeraFx.AccumulateDirection == 0 ? "Add" : "Subtract", () => _emulator.VeraFx.AccumulateDirection == 0 ? "Add" : "Subtract"));
 
         scope = GetNewScope("Kernal");
 
