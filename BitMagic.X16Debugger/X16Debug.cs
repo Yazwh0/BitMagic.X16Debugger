@@ -87,7 +87,10 @@ public class X16Debug : DebugAdapterBase
         {
             HandleValueTrackerRequestAsync(r);
         });
-
+        Protocol.RegisterRequestType<HistoryRequest, HistoryRequestArguments, HistoryRequestResponse>(delegate (IRequestResponder<HistoryRequestArguments, HistoryRequestResponse> r)
+        {
+            HandleHistoryRequestAsync(r);
+        });
     }
 
 #if SHOWDAP
@@ -1493,6 +1496,7 @@ public class X16Debug : DebugAdapterBase
             "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
+            "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1514,6 +1518,11 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleValueTrackerRequestAsync(IRequestResponder<MemoryValueTrackerArguments, MemoryValueTrackerResponse> responder)
     {
         responder.SetResponse(MemoryValueTrackerHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleHistoryRequestAsync(IRequestResponder<HistoryRequestArguments, HistoryRequestResponse> responder)
+    {
+        responder.SetResponse(HistoryRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager));
     }
 
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)

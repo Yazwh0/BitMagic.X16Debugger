@@ -39,7 +39,7 @@ internal static class MemoryUseHandler
                     byte r = (val & MemoryExecution) == 0 ? (byte)0 : (byte)255;
                     byte g = (val & (MemoryChanged | MemoryHistoric)) switch
                     {
-                        MemoryHistoric => (byte)20,
+                        MemoryHistoric => (byte)80,
                         MemoryChanged + MemoryHistoric => (byte)255,
                         _ => (byte)0
                     };
