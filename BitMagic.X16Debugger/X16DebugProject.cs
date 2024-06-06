@@ -111,17 +111,17 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     public byte[] MouseBuffer { get; set; } = new byte[] { };
 
     /// <summary>
-    /// RTC NvRam Data
+    /// RTC NvRam Data.
     /// </summary>
     [JsonProperty("nvRam")]
-    [Description("RTC NvRam Data")]
+    [Description("RTC NvRam Data.")]
     public RtcNvram NvRam { get; set; } = new RtcNvram();
 
     /// <summary>
-    /// SD Card image to start with
+    /// SD Card image to start with.
     /// </summary>
     [JsonProperty("sdCard")]
-    [Description("SD Card image to start with")]
+    [Description("SD Card image to start with.")]
     public string SdCard { get; set; } = "";
 
     /// <summary>
@@ -129,7 +129,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("sdCardFiles")]
     [Description("Files to add to the root directory of the SDCard. Wildcards accepted.")]
-    public SdCardFiles[] SdCardFiles { get; set; } = Array.Empty<SdCardFiles>();
+    public SdCardFile[] SdCardFiles { get; set; } = Array.Empty<SdCardFile>();
 
     /// <summary>
     /// Cartridge file to load.
@@ -160,16 +160,16 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     public string BasePath { get; set; } = "";
 
     /// <summary>
-    /// Files that are to be debugged.
+    /// Files to be debugged.
     /// </summary>
     [JsonProperty("files")]
-    [Description("Files that are to be debugged.")]
+    [Description("Files to be debugged.")]
     [JsonConverter(typeof(DebugProjectFileConverter))]
     public IDebugProjectFile[] Files { get; set; } = [];
 }
 
 
-public class SdCardFiles
+public class SdCardFile
 {
     public string Source { get; set; } = "";
     public string Dest { get; set; } = "";
@@ -294,17 +294,17 @@ public class SymbolsFile
     public string Symbols { get; set; } = "";
 
     /// <summary>
-    /// ROM bank that the symbols are for. Omit if not a rombank file. Any symbols in the ROM area will be discarded.
+    /// ROM bank that the symbols are for. Omit if not a rombank file. If set any symbols in the ROM area will be discarded.
     /// </summary>
     [JsonProperty("romBank")]
-    [Description("ROM bank that the symbols are for. Omit if not a rombank file. Any symbols in the ROM area will be discarded.")]
+    [Description("ROM bank that the symbols are for. Omit if not a rombank file. If set any symbols in the ROM area will be discarded.")]
     public int? RomBank { get; set; } = null;
 
     /// <summary>
-    /// RAM bank that the symbols are for. Omit if not a rambank file. Any symbols in the RAM area will be discarded.
+    /// RAM bank that the symbols are for. Omit if not a rambank file. If set any symbols in the RAM area will be discarded.
     /// </summary>
     [JsonProperty("ramBank")]
-    [Description("RAM bank that the symbols are for. Omit if not a rambank file. Any symbols in the RAM area will be discarded.")]
+    [Description("RAM bank that the symbols are for. Omit if not a rambank file. If set any symbols in the RAM area will be discarded.")]
     public int? RamBank { get; set; } = null;
 
     /// <summary>
