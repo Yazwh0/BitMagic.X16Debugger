@@ -61,6 +61,7 @@ internal class ServiceManager
         VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
         ExpressionManager = new(VariableManager, Emulator);
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
+        VariableManager.SetExpressionManager(ExpressionManager);
 
         BreakpointManager.BreakpointsUpdated += _debugger.BreakpointManager_BreakpointsUpdated;
 

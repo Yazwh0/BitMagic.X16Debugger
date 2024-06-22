@@ -1,7 +1,5 @@
-﻿using BitMagic.Compiler;
-using BitMagic.X16Emulator;
+﻿using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
-using Microsoft.CodeAnalysis.Operations;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
 using static Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.VariablePresentationHint;
@@ -20,6 +18,7 @@ internal class VariableManager
     private readonly SpriteManager _spriteManager;
     private readonly StackManager _stackManager;
     private readonly PsgManager _psgManager;
+    private ExpressionManager? _expressionManager;
 
     public VariableManager(IdManager idManager, Emulator emulator, ScopeManager scopeManager, PaletteManager paletteManager,
         SpriteManager spriteManager, StackManager stackManager, PsgManager psgManager)
@@ -32,6 +31,11 @@ internal class VariableManager
         _stackManager = stackManager;
         _psgManager = psgManager;
         SetupVariables();
+    }
+
+    public void SetExpressionManager(ExpressionManager expressionManager)
+    {
+        _expressionManager = expressionManager;
     }
 
     public IDictionary<string, object> ObjectTree => _variableObjectTree;
@@ -104,7 +108,7 @@ internal class VariableManager
         {
             // Do we clear something?
         }
-        _scopeManager.LocalScope?.SetLocalScope(state, _emulator);
+        _scopeManager.LocalScope?.SetLocalScope(state, _emulator, _expressionManager);
     }
 
     public void SetChanges(SnapshotResult changes)
@@ -209,7 +213,7 @@ internal class VariableManager
         scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
-        scope.AddVariable(Register(new VariableChildren("Interrupt", () => (_emulator.State.Interrupt != 0).ToString(), "bool", new[] { 
+        scope.AddVariable(Register(new VariableChildren("Interrupt", () => (_emulator.State.Interrupt != 0).ToString(), "bool", new[] {
                 new VariableMap("Vsync", "bool", () => ((_emulator.Memory[0x9F26] & 0b0001) & (_emulator.Memory[0x9F27] & 0b0001)) != 0),
                 new VariableMap("Line", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
                 new VariableMap("SpCol", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
@@ -595,16 +599,16 @@ internal class ScopeWrapper : IScopeWrapper
 /// <summary>
 /// Wraps the local scope map, which provides the local variables from the source map
 /// </summary>
-internal class LocalScopeWrapper : IScopeWrapper
-{
-    public IScopeMap Scope { get; set; }
-    public Dictionary<string, object> ObjectTree => Scope.Variables.ToDictionary(i => i.Name, i => (object)i.GetVariable().Value);
+//internal class LocalScopeWrapper : IScopeWrapper
+//{
+//    public IScopeMap Scope { get; set; }
+//    public Dictionary<string, object> ObjectTree => Scope.Variables.ToDictionary(i => i.Name, i => (object)i.GetVariable().Value);
 
-    public LocalScopeWrapper(IScopeMap scope)
-    {
-        Scope = scope;
-    }
-}
+//    public LocalScopeWrapper(IScopeMap scope)
+//    {
+//        Scope = scope;
+//    }
+//}
 
 public interface IVariableItem
 {

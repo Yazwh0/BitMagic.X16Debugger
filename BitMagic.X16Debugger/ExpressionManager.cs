@@ -3,6 +3,7 @@ using BitMagic.Compiler.CodingSeb;
 using BitMagic.X16Emulator;
 using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Silk.NET.Core.Native;
 
 namespace BitMagic.X16Debugger;
 
@@ -92,6 +93,12 @@ internal class ExpressionManager
             toReturn.Result = result.ToString();
 
         return toReturn;
+    }
+
+    public string Evaluate(string expression)
+    {
+        var result = _evaluator.Evaluate(expression);
+        return Stringify(result);
     }
 
     public string FormatMessage(string input)
