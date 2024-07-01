@@ -17,12 +17,9 @@ internal static class LayerRequestHandler
 {
     private static readonly Image<Rgba32> _image = new(640, 480);
 
-    [DllImport("msvcrt.dll", SetLastError = false)]
-    static extern IntPtr memcpy(IntPtr dest, IntPtr src, int count);
-
     public unsafe static LayerRequestResponse HandleRequest(LayerRequestArguments? arguments, Emulator emulator)
     {
-        var idx = 0;
+        ulong idx = 0;
         var toReturn = new LayerRequestResponse();
 
         for (var layer = 0; layer < 6; layer++)
@@ -35,7 +32,7 @@ internal static class LayerRequestHandler
 
                     fixed (Rgba32* ptr = &MemoryMarshal.GetReference(span))
                     {
-                        memcpy((IntPtr)ptr, (IntPtr)emulator.DisplayPtr + idx, 640 * 4);
+                        Buffer.MemoryCopy((void*)(emulator.DisplayPtr + idx), ptr, 640 * 4, 640 * 4);
                     }
 
                     idx += 800 * 4;
