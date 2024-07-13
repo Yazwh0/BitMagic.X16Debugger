@@ -43,13 +43,19 @@ internal class BitmagicBuilder
 
         if (content.Any()) // ??
         {
-            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, debugProject.CompileOptions!.AsTemplateOptions(debugProject.BasePath), _logger).GetAwaiter().GetResult();
+            var templateOptions = debugProject.CompileOptions!.AsTemplateOptions(debugProject.BasePath);
+            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, templateOptions, _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
             var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm").FixFilename();
 
             templateResult.SetName(filename);
             templateResult.SetParentAndMap(project.Code);
+
+            if (debugProject.CompileOptions != null && debugProject.CompileOptions.SaveGeneratedBmasm)
+            {
+                File.WriteAllText(Path.Combine(templateOptions.BinFolder, filename), templateResult.Source.Code);
+            }
 
             project.Code = templateResult;
         }
