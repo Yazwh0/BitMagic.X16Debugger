@@ -25,8 +25,9 @@ generator.ContractResolver = new CamelCasePropertyNamesContractResolver();
 generator.SchemaIdGenerationHandling = SchemaIdGenerationHandling.TypeName;
 generator.SchemaReferenceHandling = SchemaReferenceHandling.All;
 generator.SchemaLocationHandling = SchemaLocationHandling.Inline;
+generator.DefaultRequired = Newtonsoft.Json.Required.AllowNull;
 
-var schema = generator.Generate(typeof(X16DebugProject));
+var schema = generator.Generate(typeof(X16DebugProject), Newtonsoft.Json.Required.AllowNull, null);
 
 var filename = Path.GetFullPath(options.Output);
 
