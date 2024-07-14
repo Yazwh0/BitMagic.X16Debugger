@@ -10,6 +10,7 @@ internal static class CompileOptionsExtension
         BinFolder = Path.GetFullPath(Path.Join(basePath, options?.BinFolder ?? "Bin")),
         Rebuild = options?.Rebuild ?? false,
         SaveGeneratedTemplate = options?.SaveGeneratedTemplate ?? false,
-        SavePreGeneratedTemplate = options?.SavePreGeneratedTemplate ?? false
+        SavePreGeneratedTemplate = options?.SavePreGeneratedTemplate ?? false,
+        BasePath = basePath
     };
 }
