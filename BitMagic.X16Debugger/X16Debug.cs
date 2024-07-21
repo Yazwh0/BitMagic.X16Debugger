@@ -531,7 +531,7 @@ public class X16Debug : DebugAdapterBase
                             }
                             else
                             {
-                                path = Path.GetFullPath(Path.Combine(Path.GetRelativePath(workspaceFolder, _debugProject.OutputFolder), f.Filename));
+                                path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
                             }
                             Logger.Log($"Writing to '{path}'... ");
                             File.WriteAllBytes(path, f.Data.ToArray());
