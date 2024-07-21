@@ -540,7 +540,7 @@ public static class TileProcessor
         return toReturn;
     }
 
-    private static void ReducetoPalletteOffset(ITileCollection source, ITileCollection destination, Depth depth, int maxEntries = 16, int baseOffset = 0)
+    private static void ReducetoPaletteOffset(ITileCollection source, ITileCollection destination, Depth depth, int maxEntries = 16, int baseOffset = 0)
     {
         var indexPalettes = new List<List<byte>>();
         var maxColours = depth switch { Depth.Bpp_1 => 2, Depth.Bpp_2 => 4, Depth.Bpp_4 => 16, Depth.Bpp_8 => 256, _ => throw new Exception() };
@@ -653,113 +653,22 @@ public static class TileProcessor
 
         var toReturn = new TileMapDefinition() { Depth = depth, MapHeight = definition.MapHeight, MapWidth = definition.MapWidth };
 
-        var indexPalettes = new List<List<byte>>();
-        var maxColours = depth switch { Depth.Bpp_1 => 2, Depth.Bpp_2 => 4, Depth.Bpp_4 => 16, Depth.Bpp_8 => 256, _ => throw new Exception() };
-
-        foreach (var tile in definition.Tiles.Select(i => i.Clone()))
-        {
-            var data = tile.Data().Distinct().ToArray();   // get all data
-
-            toReturn.Tiles.Add(tile);
-
-            if (data.Count() > maxColours)
-            {
-                throw new Exception("Tile has too many colours");
-            }
-
-            // look to see if this index set is covered already
-            var index = 0;
-            var done = false;
-            foreach (var p in indexPalettes)
-            {
-                if (p.TrueForAll(i => data.Contains(i)))
-                {
-                    tile.PaletteOffset = index;
-                    done = true;
-                    break;
-                }
-                index++;
-            }
-
-            if (done)
-                continue;
-
-            index = 0;
-            var maxMissing = int.MaxValue;
-            var maxMissingIndex = -1;
-            // look for indexs that could be expanded
-            foreach (var p in indexPalettes)
-            {
-                var missing = data.Count(i => !p.Contains(i));
-                if (missing < maxMissing && missing + p.Count < 16) // look to see if this tile could be added to this palette
-                {
-                    maxMissing = missing;
-                    maxMissingIndex = index;
-
-                    if (missing == 0)
-                        break;
-                }
-                index++;
-            }
-
-            if (maxMissingIndex != -1)
-            {
-                foreach (var i in data)
-                {
-                    if (!indexPalettes[maxMissingIndex].Contains(i))
-                    {
-                        indexPalettes[maxMissingIndex].Add(i);
-                    }
-                }
-                tile.PaletteOffset = maxMissingIndex;
-                continue;
-            }
-
-            // create a new palette
-            if (indexPalettes.Count >= maxEntries)
-                throw new Exception("Palette entry count exceeds maxEntries");
-
-            indexPalettes.Add(new List<byte> { 0 }); // background
-            indexPalettes[indexPalettes.Count - 1].AddRange(data.Where(i => i != 0));
-
-            tile.PaletteOffset = indexPalettes.Count - 1;
-        }
-
-        List<Dictionary<int, int>> ColourLookup = new();
-        foreach (var p in indexPalettes)
-        {
-            var lookup = new Dictionary<int, int>();
-            ColourLookup.Add(lookup);
-
-            var palette = new List<Colour>();
-            toReturn.Colours.Add(palette);
-
-            var newIndex = 0;
-            foreach (var i in p)
-            {
-                palette.Add(definition.Colours[0][i]);
-                lookup.Add(i, newIndex++);
-            }
-        }
-
-        // reduce the colours down and remap
-        // the palette offset has been set on the tile
-        foreach (var t in toReturn.Tiles)
-        {
-            for (var x = 0; x < t.Width; x++)
-            {
-                for (var y = 0; y < t.Height; y++)
-                {
-                    t.Pixels[x, y] = (byte)(ColourLookup[t.PaletteOffset][t.Pixels[x, y]]);
-                }
-            }
-            t.Depth = depth;
-        }
+        ReducetoPaletteOffset(definition, toReturn, depth, maxEntries, baseOffset);
 
         foreach (var m in definition.Map)
         {
             toReturn.Map.Add(new TileIndex(m.Index, m.FlipData, toReturn.Tiles[m.Index].PaletteOffset + baseOffset));
         }
+
+        return toReturn;
+    }
+
+    public static SpriteSheet ReducetoPaletteOffset(SpriteSheet source, Depth depth, int baseOffset = 0)
+    {
+        var toReturn = new SpriteSheet();
+        toReturn.Colours.Clear();
+
+        ReducetoPaletteOffset(source, toReturn, depth, 16, baseOffset);
 
         return toReturn;
     }
@@ -994,6 +903,65 @@ public class SpriteSheet : ITileCollection
             foreach (var j in i.Data())
             {
                 yield return j;
+            }
+        }
+    }
+
+
+    public IEnumerable<byte> Palette()
+    {
+        foreach (var palette in Colours)
+        {
+            foreach (var colour in palette) // should this write blanks?
+            {
+                foreach (var j in colour.VeraColour)
+                {
+                    yield return j;
+                }
+            }
+        }
+    }
+
+    public IEnumerable<byte> Palette(bool fillBanks)
+    {
+        foreach (var palette in Colours)
+        {
+            foreach (var colour in palette) // should this write blanks?
+            {
+                foreach (var j in colour.VeraColour)
+                {
+                    yield return j;
+                }
+
+            }
+
+            if (fillBanks)
+            {
+                for (var i = palette.Count; i < 16; i++)
+                {
+                    yield return 0;
+                    yield return 0;
+                }
+            }
+        }
+    }
+
+    public IEnumerable<byte> Palette(int paletteIndex, bool fillBanks)
+    {
+        foreach (var colour in Colours[paletteIndex]) // should this write blanks?
+        {
+            foreach (var j in colour.VeraColour)
+            {
+                yield return j;
+            }
+        }
+
+        if (fillBanks)
+        {
+            for (var i = Colours[paletteIndex].Count; i < 16; i++)
+            {
+                yield return 0;
+                yield return 0;
             }
         }
     }

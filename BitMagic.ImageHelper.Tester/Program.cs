@@ -40,5 +40,6 @@ sprites.AddSprite(image, 16 + 128, 32, 16, 16);
 sprites.AddSprite(image, 16 + 192, 32, 16, 16);
 
 
+var toSave = TileProcessor.ReducetoPaletteOffset(sprites, Depth.Bpp_4);
 
 Console.WriteLine();
