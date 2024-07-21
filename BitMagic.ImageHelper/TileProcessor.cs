@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp;
+using System.Globalization;
+using System.Diagnostics;
 
 namespace BitMagic.TileCreator;
 
@@ -41,13 +43,13 @@ public static class TileProcessor
 
             toReturn.Pixels = new byte[image.Width * image.Height];
 
-            Dictionary<Rgba32, byte> palette = new();
+            Dictionary<Rgba32, int> palette = new();
             var paletteIndex = 0;
             var idx = 0;
 
             if (transparent != null)
             {
-                palette.Add(Rgba32.ParseHex(transparent), (byte)paletteIndex++);
+                palette.Add(Rgba32.ParseHex(transparent), paletteIndex++);
             }
 
             image.ProcessPixelRows(i =>
@@ -57,11 +59,14 @@ public static class TileProcessor
                     var span = i.GetRowSpan(y);
                     for (var x = 0; x < image.Width; x++)
                     {
-                        var thisColour = span[x];
+                        var thisColour = ConvertToX16(span[x]);
                         if (!palette.ContainsKey(thisColour))
-                            palette.Add(thisColour, (byte)paletteIndex++);
+                            palette.Add(thisColour, paletteIndex++);
 
-                        toReturn.Pixels[idx++] = palette[thisColour];
+                        if (paletteIndex > 255)
+                            throw new Exception("Max colours reached!");
+
+                        toReturn.Pixels[idx++] = (byte)palette[thisColour];
                     }
                 }
             });
@@ -80,9 +85,157 @@ public static class TileProcessor
         }
     }
 
+    public static Rgba32 ConvertToX16(Rgba32 colour)
+    {
+        if (colour.A == 0)
+            return new Rgba32(0, 0, 0, 0);
+
+        var toReturn = new Rgba32(AdjustColour(colour.R), AdjustColour(colour.G), AdjustColour(colour.B), (byte)0xff);
+
+        return toReturn;
+    }
+
+    public static byte AdjustColour(byte input)
+    {
+        byte toReturn = (byte)(input & 0xf0);
+
+        if ((byte)(input & 0x0f) > 8)
+            toReturn += 0x10;
+
+        return (byte)(toReturn + (toReturn >> 4));
+    }
+
+    public static TilesDefinition CreateTiles(X16Image image, Depth depth, TileSize width, TileSize height, bool includeBlank = false, TileExcessHandling excessHandling = TileExcessHandling.Error, IEnumerable<Tile>? existing = null)
+    {
+        var toReturn = new TilesDefinition() { Depth = depth };
+        var sourceIndex = 0;
+
+        var maxColours = depth switch
+        {
+            Depth.Bpp_1 => 2,
+            Depth.Bpp_2 => 4,
+            Depth.Bpp_4 => 16,
+            Depth.Bpp_8 => 256,
+            _ => throw new ArgumentException($"Unknown depth {depth}")
+        };
+
+        if (image.Colours.Length > maxColours)
+            throw new Exception($"There are too many colours in the source image for that depth. Image Colours: {image.Colours.Length}");
+
+        var stepX = width switch
+        {
+            TileSize.Size_8 => 8,
+            TileSize.Size_16 => 16,
+            _ => throw new ArgumentException($"Unknown width {width}")
+        };
+
+        var stepY = height switch
+        {
+            TileSize.Size_8 => 8,
+            TileSize.Size_16 => 16,
+            _ => throw new ArgumentException($"Unknown height {width}")
+        };
+
+        if (excessHandling == TileExcessHandling.Error)
+        {
+            var ratio = (image.Width / (stepX * 1.0));
+            if (ratio - Math.Truncate(ratio) != 0)
+                throw new Exception($"image width is not divisible by {stepX}. Width: {image.Width}");
+
+            ratio = (image.Height / (stepY * 1.0));
+            if (ratio - Math.Truncate(ratio) != 0)
+                throw new Exception($"image height is not divisible by {stepY}. Width: {image.Height}");
+        }
+
+        var curX = 0;
+        var curY = 0;
+
+        if (includeBlank)
+            toReturn.Tiles.Add(new Tile(stepX, stepY, depth));
+
+        if (existing != null)
+        {
+            toReturn.Tiles.AddRange(existing);
+        }
+
+        while (true)
+        {
+            if (excessHandling == TileExcessHandling.Ignore)
+            {
+                if (curX + stepX > image.Width)
+                {
+                    curX = 0;
+                    curY += stepY;
+                    continue;
+                }
+
+                if (curY + stepY > image.Height)
+                {
+                    break;
+                }
+            }
+
+            var tile = new Tile(stepX, stepY, depth) { SourceIndex = sourceIndex };
+            toReturn.Tiles.Add(tile);
+
+            for (var x = 0; x < stepX; x++)
+            {
+                for (var y = 0; y < stepY; y++)
+                {
+                    if (curX + x < image.Width && curY + y < image.Height)
+                        tile.Pixels[x, y] = image.Pixels[(curY + y) * image.Width + curX + x];
+                }
+            }
+
+            curX += stepX;
+            sourceIndex++;
+
+            if (excessHandling == TileExcessHandling.Include)
+            {
+                if (curX >= image.Width)
+                {
+                    curX = 0;
+                    curY += stepY;
+                    continue;
+                }
+
+                if (curY >= image.Height)
+                {
+                    break;
+                }
+            }
+
+            if (excessHandling == TileExcessHandling.Error)
+            {
+                if (curX == image.Width)
+                {
+                    curX = 0;
+                    curY += stepY;
+                }
+
+                if (curY == image.Height)
+                {
+                    break;
+                }
+            }
+        }
+
+        toReturn.Colours = new List<List<Colour>>() { new List<Colour>(image.Colours) };
+
+        for (var i = 0; i < toReturn.Tiles.Count; i++)
+        {
+            toReturn.Tiles[i].Index = i;
+        }
+
+        return toReturn;
+    }
+
+
+    // For converting an image into a tilemap
     public static TileMapDefinition CreateTileMap(X16Image image, Depth depth, TileSize width, TileSize height, bool checkFlips = true, bool includeBlank = false, TileExcessHandling excessHandling = TileExcessHandling.Error, IEnumerable<Tile>? existing = null)
     {
-        var toReturn = new TileMapDefinition();
+        var toReturn = new TileMapDefinition() { Depth = depth };
+        var sourceIndex = 0;
 
         // cant flip 1bpp tiles.
         if (depth == Depth.Bpp_1)
@@ -157,7 +310,8 @@ public static class TileProcessor
                 }
             }
 
-            var tile = new Tile(stepX, stepY, depth);
+            var tile = new Tile(stepX, stepY, depth) { SourceIndex = sourceIndex };
+
             for (var x = 0; x < stepX; x++)
             {
                 for (var y = 0; y < stepY; y++)
@@ -207,20 +361,21 @@ public static class TileProcessor
 
                 if (index == -1)
                 {
-                    toReturn.Map.Add(new TileIndex((byte)toReturn.Tiles.Count, flipData));
+                    toReturn.Map.Add(new TileIndex((byte)toReturn.Tiles.Count, flipData, 0));
                     toReturn.Tiles.Add(tile);
                 }
                 else
                 {
-                    toReturn.Map.Add(new TileIndex((byte)index, flipData));
+                    toReturn.Map.Add(new TileIndex((byte)index, flipData, 0));
                 }
             }
             else
             {
-                toReturn.Map.Add(new TileIndex((byte)index, (byte)0));
+                toReturn.Map.Add(new TileIndex((byte)index, (byte)0, 0));
             }
 
             curX += stepX;
+            sourceIndex++;
 
             if (excessHandling == TileExcessHandling.Include)
             {
@@ -252,9 +407,253 @@ public static class TileProcessor
             }
         }
 
-        toReturn.Colours = image.Colours.ToArray();
+        toReturn.Colours = new List<List<Colour>>() { new List<Colour>(image.Colours) };
         toReturn.MapWidth = (int)Math.Ceiling(image.Width / stepX * 1.0);
         toReturn.MapHeight = (int)Math.Ceiling(image.Height / stepY * 1.0);
+
+        for (var i = 0; i < toReturn.Tiles.Count; i++)
+        {
+            toReturn.Tiles[i].Index = i;
+        }
+
+        return toReturn;
+    }
+
+
+    /// <summary>
+    /// Create a TileMap based on a set of tiles and a map. The index of the map is from the original tilemap image.
+    /// Unused tiles will be removed.
+    /// </summary>
+    /// <param name="tiles">Tile definitions from CreateTiles()</param>
+    /// <param name="map">Map to be used, index is from the original tilemap image</param>
+    /// <returns>TilemapDefinition</returns>
+    public static TileMapDefinition CreateTileMap(TilesDefinition tiles, IEnumerable<IEnumerable<int>> map)
+    {
+
+        var width = map.Max(i => i.Count());
+        var height = map.Count();
+
+        return CreateTileMap(tiles, map, width, height);
+    }
+
+    /// <summary>
+    /// Create a TileMap based on a set of tiles and a map. The index of the map is from the original tilemap image.
+    /// Unused tiles will be removed.
+    /// </summary>
+    /// <param name="tiles">Tile definitions from CreateTiles()</param>
+    /// <param name="map">Map to be used, index is from the original tilemap image</param>
+    /// <returns>TilemapDefinition</returns>
+    public static TileMapDefinition CreateTileMap(TilesDefinition tiles, IEnumerable<int> map, int width, int height)
+    {
+        return CreateTileMap(tiles, map.Batch(width), width, height);
+    }
+
+    private static IEnumerable<IEnumerable<T>> Batch<T>(this IEnumerable<T> source, int batchSize)
+    {
+        using (var enumerator = source.GetEnumerator())
+            while (enumerator.MoveNext())
+                yield return YieldBatchElements(enumerator, batchSize - 1);
+    }
+
+    private static IEnumerable<T> YieldBatchElements<T>(IEnumerator<T> source, int batchSize)
+    {
+        yield return source.Current;
+        for (int i = 0; i < batchSize && source.MoveNext(); i++)
+            yield return source.Current;
+    }
+
+
+    /// <summary>
+    /// Create a TileMap based on a set of tiles and a map. The index of the map is from the original tilemap image.
+    /// Unused tiles will be removed.
+    /// </summary>
+    /// <param name="tiles">Tile definitions from CreateTiles()</param>
+    /// <param name="map">Map to be used, index is from the original tilemap image</param>
+    /// <returns>TilemapDefinition</returns>
+    public static TileMapDefinition CreateTileMap(TilesDefinition tiles, IEnumerable<IEnumerable<int>> map, int width, int height)
+    {
+        var toReturn = new TileMapDefinition() { Depth = tiles.Depth };
+
+        var mapWidth = map.Max(i => i.Count());
+        var mapHeight = map.Count() / mapWidth;
+
+        if (mapWidth > width)
+            throw new Exception("Map width is greater than width requested");
+
+        if (mapHeight > height)
+            throw new Exception("Map height is greater than heigh requested");
+
+        toReturn.MapHeight = height;
+        toReturn.MapWidth = width;
+
+        toReturn.Map = new List<TileIndex>(height * width);
+
+        var tileIndex = tiles.Tiles.ToDictionary(i => i.SourceIndex, i => i);
+        var tileUsed = tiles.Tiles.ToDictionary(i => i.SourceIndex, _ => false);
+
+        foreach (var line in map)
+        {
+            var count = 0;
+            foreach (var i in line)
+            {
+                if (!tileIndex.ContainsKey(i))
+                    throw new Exception($"Cannot found tile {i} in tiles");
+
+                toReturn.Map.Add(new TileIndex(tileIndex[i].Index, 0, 0)); // as we're coming from a map image, we wont have flips
+
+                tileUsed[i] = true;
+
+                count++;
+            }
+
+            while (count < width)
+            {
+                toReturn.Map.Add(new TileIndex(0, 0, 0));
+                count++;
+            }
+        }
+
+        var index = 0;
+        foreach(var kv in tileUsed.Where(kv => kv.Value))
+        {
+            tileIndex[kv.Key].Index = index++;
+            toReturn.Tiles.Add(tileIndex[kv.Key]);
+        }
+
+        foreach (var i in toReturn.Map)
+        {
+            i.Index = tileIndex[i.Index].Index;
+        }
+
+        toReturn.Colours = new List<List<Colour>>();
+
+        foreach (var i in tiles.Colours)
+        {
+            var dest = new List<Colour>(i.Count);
+            toReturn.Colours.Add(dest);
+            foreach (var c in i)
+            {
+                dest.Add(new Colour(c.R, c.G, c.B));
+            }
+        }
+
+        return toReturn;
+    }
+
+    public static TileMapDefinition ReduceToPaletteOffset(TileMapDefinition definition, Depth depth, int maxEntries = 16)
+    {
+        if ((int)depth >= (int)definition.Depth)
+            throw new Exception("Depth must be lower than the original tilemap");
+
+        var toReturn = new TileMapDefinition() { Depth = depth, MapHeight = definition.MapHeight, MapWidth = definition.MapWidth };
+
+        var indexPalettes = new List<List<byte>>();
+        var maxColours = depth switch { Depth.Bpp_1 => 2, Depth.Bpp_2 => 4, Depth.Bpp_4 => 16, Depth.Bpp_8 => 256, _ => throw new Exception() };
+
+        foreach (var tile in definition.Tiles.Select(i => i.Clone()))
+        {
+            var data = tile.Data().Distinct().ToArray();   // get all data
+
+            toReturn.Tiles.Add(tile);
+
+            if (data.Count() > maxColours)
+            {
+                throw new Exception("Tile has too many colours");
+            }
+
+            // look to see if this index set is covered already
+            var index = 0;
+            var done = false;
+            foreach (var p in indexPalettes)
+            {
+                if (p.TrueForAll(i => data.Contains(i)))
+                {
+                    tile.PaletteOffset = index;
+                    done = true;
+                    break;
+                }
+                index++;
+            }
+
+            if (done)
+                continue;
+
+            index = 0;
+            var maxMissing = int.MaxValue;
+            var maxMissingIndex = -1;
+            // look for indexs that could be expanded
+            foreach (var p in indexPalettes)
+            {
+                var missing = data.Count(i => !p.Contains(i));
+                if (missing < maxMissing && missing + p.Count < 16) // look to see if this tile could be added to this palette
+                {
+                    maxMissing = missing;
+                    maxMissingIndex = index;
+
+                    if (missing == 0)
+                        break;
+                }
+                index++;
+            }
+
+            if (maxMissingIndex != -1)
+            {
+                foreach (var i in data)
+                {
+                    if (!indexPalettes[maxMissingIndex].Contains(i))
+                    {
+                        indexPalettes[maxMissingIndex].Add(i);
+                    }
+                }
+                tile.PaletteOffset = maxMissingIndex;
+                continue;
+            }
+
+            // create a new palette
+            if (indexPalettes.Count >= maxEntries)
+                throw new Exception("Palette entry count exceeds maxEntries");
+
+            indexPalettes.Add(new List<byte> { 0 }); // background
+            indexPalettes[indexPalettes.Count - 1].AddRange(data.Where(i => i != 0));
+
+            tile.PaletteOffset = indexPalettes.Count - 1;
+        }
+
+        List<Dictionary<int, int>> ColourLookup = new();
+        foreach (var p in indexPalettes)
+        {
+            var lookup = new Dictionary<int, int>();
+            ColourLookup.Add(lookup);
+
+            var palette = new List<Colour>();
+            toReturn.Colours.Add(palette);
+
+            var newIndex = 0;
+            foreach (var i in p)
+            {
+                palette.Add(definition.Colours[0][i]);
+                lookup.Add(i, newIndex++);
+            }
+        }
+
+        // reduce the colours down and remap
+        // the palette offset has been set on the tile
+        foreach (var t in toReturn.Tiles)
+        {
+            for (var x = 0; x < t.Width; x++)
+            {
+                for (var y = 0; y < t.Height; y++)
+                {
+                    t.Pixels[x, y] = (byte)(ColourLookup[t.PaletteOffset][t.Pixels[x, y]]);
+                }
+            }
+            t.Depth = depth;
+        }
+
+        foreach (var m in definition.Map)
+        {
+            toReturn.Map.Add(new TileIndex(m.Index, m.FlipData, toReturn.Tiles[m.Index].PaletteOffset));
+        }
 
         return toReturn;
     }
@@ -262,11 +661,13 @@ public static class TileProcessor
 
 public class Tile
 {
-
     public byte[,] Pixels { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
     public Depth Depth { get; set; }
+    public int SourceIndex { get; set; } = -1;
+    public int Index { get; set; }
+    public int PaletteOffset { get; set; } = 0;
 
     public Tile(int width, int height, Depth depth)
     {
@@ -274,6 +675,20 @@ public class Tile
         Height = height;
         Pixels = new byte[width, height];
         Depth = depth;
+    }
+
+    public Tile Clone()
+    {
+        var newArr = new byte[Width, Height];
+        Array.Copy(Pixels, newArr, Width * Height);
+
+        return new Tile(Width, Height, Depth)
+        {
+            SourceIndex = SourceIndex,
+            PaletteOffset = PaletteOffset,
+            Index = Index,
+            Pixels = newArr
+        };
     }
 
     public IEnumerable<byte> Data()
@@ -404,14 +819,27 @@ public class X16Image
     public int Height { get; set; }
 }
 
-public class TileMapDefinition
+public class TileMapDefinition : TilesDefinition
 {
-    public List<Tile> Tiles { get; set; } = new List<Tile>();
     public List<TileIndex> Map { get; set; } = new List<TileIndex>();
     public int MapWidth { get; set; }
     public int MapHeight { get; set; }
-    public Colour[] Colours { get; set; } = Array.Empty<Colour>();
 
+    public IEnumerable<byte> TileMap()
+    {
+        foreach (var i in Map)
+        {
+            yield return (byte)i.Index;     // todo: add indexing greater than 256.
+            yield return i.FlipData;
+        }
+    }
+}
+
+public class TilesDefinition
+{
+    public List<Tile> Tiles { get; set; } = new List<Tile>();
+    public List<List<Colour>> Colours { get; set; } = new List<List<Colour>>();
+    public Depth Depth { get; set; }
 
     public IEnumerable<byte> TileData()
     {
@@ -424,50 +852,89 @@ public class TileMapDefinition
         }
     }
 
-    public IEnumerable<byte> TileMap()
-    {
-        foreach(var i in Map)
-        {
-            yield return i.Index;
-            yield return i.FlipData;
-        }
-    }
-
     public IEnumerable<byte> Palette()
     {
-        foreach(var i in Colours)
+        foreach (var palette in Colours)
         {
-            foreach (var j in i.VeraColour)
+            foreach (var colour in palette) // should this write blanks?
             {
-                yield return j;
+                foreach (var j in colour.VeraColour)
+                {
+                    yield return j;
+                }
             }
         }
     }
 
+    public IEnumerable<byte> Palette(bool fillBanks)
+    {
+        foreach (var palette in Colours)
+        {
+            foreach (var colour in palette) // should this write blanks?
+            {
+                foreach (var j in colour.VeraColour)
+                {
+                    yield return j;
+                }
+
+            }
+
+            if (fillBanks)
+            {
+                for (var i = palette.Count; i < 16; i++)
+                {
+                    yield return 0;
+                    yield return 0;
+                }
+            }
+        }
+    }
+
+    public IEnumerable<byte> Palette(int paletteIndex, bool fillBanks)
+    {
+        foreach (var colour in Colours[paletteIndex]) // should this write blanks?
+        {
+            foreach (var j in colour.VeraColour)
+            {
+                yield return j;
+            }
+        }
+
+        if (fillBanks)
+        {
+            for (var i = Colours[paletteIndex].Count; i < 16; i++)
+            {
+                yield return 0;
+                yield return 0;
+            }
+        }
+    }
 }
 
-public struct TileIndex
+public class TileIndex
 {
-    public byte Index { get; set; } = 0;
+    public int Index { get; set; } = 0;
     public byte FlipData { get; set; } = 0;
 
     public TileIndex()
     {
     }
 
-    public TileIndex(byte index, byte flipData)
+    public TileIndex(int index, byte flipData, int paletteOffset)
     {
         Index = index;
-        FlipData = flipData;
+        FlipData = (byte)(((index & 0x300) >> 8) + (flipData << 2) + ((paletteOffset & 0x0f) << 4));
     }
 }
 
-
+[DebuggerDisplay("{Debug}")]
 public struct Colour
 {
     public byte R { get; set; } = 0;
     public byte G { get; set; } = 0;
     public byte B { get; set; } = 0;
+
+    public string Debug => $"#{(R & 0xf0) >> 4:X1}{(G & 0xf0) >> 4:X1}{(B & 0xf0) >> 4:X1}";
 
     public Colour()
     {
