@@ -95,7 +95,7 @@ public static class TileProcessor
         return toReturn;
     }
 
-    public static byte AdjustColour(byte input)
+    private static byte AdjustColour(byte input)
     {
         byte toReturn = (byte)(input & 0xf0);
 
@@ -514,7 +514,7 @@ public static class TileProcessor
         }
 
         var index = 0;
-        foreach(var kv in tileUsed.Where(kv => kv.Value))
+        foreach (var kv in tileUsed.Where(kv => kv.Value))
         {
             tileIndex[kv.Key].Index = index++;
             toReturn.Tiles.Add(tileIndex[kv.Key]);
@@ -540,7 +540,113 @@ public static class TileProcessor
         return toReturn;
     }
 
-    public static TileMapDefinition ReduceToPaletteOffset(TileMapDefinition definition, Depth depth, int maxEntries = 16)
+    private static void ReducetoPalletteOffset(ITileCollection source, ITileCollection destination, Depth depth, int maxEntries = 16, int baseOffset = 0)
+    {
+        var indexPalettes = new List<List<byte>>();
+        var maxColours = depth switch { Depth.Bpp_1 => 2, Depth.Bpp_2 => 4, Depth.Bpp_4 => 16, Depth.Bpp_8 => 256, _ => throw new Exception() };
+
+        foreach (var tile in source.Tiles.Select(i => i.Clone()))
+        {
+            var data = tile.Data().Distinct().ToArray();   // get all data
+
+            destination.Tiles.Add(tile);
+
+            if (data.Count() > maxColours)
+            {
+                throw new Exception("Tile has too many colours");
+            }
+
+            // look to see if this index set is covered already
+            var index = 0;
+            var done = false;
+            foreach (var p in indexPalettes)
+            {
+                if (p.TrueForAll(i => data.Contains(i)))
+                {
+                    tile.PaletteOffset = index;
+                    done = true;
+                    break;
+                }
+                index++;
+            }
+
+            if (done)
+                continue;
+
+            index = 0;
+            var maxMissing = int.MaxValue;
+            var maxMissingIndex = -1;
+            // look for indexs that could be expanded
+            foreach (var p in indexPalettes)
+            {
+                var missing = data.Count(i => !p.Contains(i));
+                if (missing < maxMissing && missing + p.Count < 16) // look to see if this tile could be added to this palette
+                {
+                    maxMissing = missing;
+                    maxMissingIndex = index;
+
+                    if (missing == 0)
+                        break;
+                }
+                index++;
+            }
+
+            if (maxMissingIndex != -1)
+            {
+                foreach (var i in data)
+                {
+                    if (!indexPalettes[maxMissingIndex].Contains(i))
+                    {
+                        indexPalettes[maxMissingIndex].Add(i);
+                    }
+                }
+                tile.PaletteOffset = maxMissingIndex;
+                continue;
+            }
+
+            // create a new palette
+            if (indexPalettes.Count >= maxEntries)
+                throw new Exception("Palette entry count exceeds maxEntries");
+
+            indexPalettes.Add(new List<byte> { 0 }); // background
+            indexPalettes[indexPalettes.Count - 1].AddRange(data.Where(i => i != 0));
+
+            tile.PaletteOffset = indexPalettes.Count - 1;
+        }
+
+        List<Dictionary<int, int>> ColourLookup = new();
+        foreach (var p in indexPalettes)
+        {
+            var lookup = new Dictionary<int, int>();
+            ColourLookup.Add(lookup);
+
+            var palette = new List<Colour>();
+            destination.Colours.Add(palette);
+
+            var newIndex = 0;
+            foreach (var i in p)
+            {
+                palette.Add(source.Colours[0][i]);
+                lookup.Add(i, newIndex++);
+            }
+        }
+
+        // reduce the colours down and remap
+        // the palette offset has been set on the tile
+        foreach (var t in destination.Tiles)
+        {
+            for (var x = 0; x < t.Width; x++)
+            {
+                for (var y = 0; y < t.Height; y++)
+                {
+                    t.Pixels[x, y] = (byte)(ColourLookup[t.PaletteOffset][t.Pixels[x, y]]);
+                }
+            }
+            t.Depth = depth;
+        }
+    }
+
+    public static TileMapDefinition ReduceToPaletteOffset(TileMapDefinition definition, Depth depth, int maxEntries = 16, int baseOffset = 0)
     {
         if ((int)depth >= (int)definition.Depth)
             throw new Exception("Depth must be lower than the original tilemap");
@@ -652,11 +758,17 @@ public static class TileProcessor
 
         foreach (var m in definition.Map)
         {
-            toReturn.Map.Add(new TileIndex(m.Index, m.FlipData, toReturn.Tiles[m.Index].PaletteOffset));
+            toReturn.Map.Add(new TileIndex(m.Index, m.FlipData, toReturn.Tiles[m.Index].PaletteOffset + baseOffset));
         }
 
         return toReturn;
     }
+}
+
+public interface ITileCollection
+{
+    public List<Tile> Tiles { get; set; }
+    public List<List<Colour>> Colours { get; set; }
 }
 
 public class Tile
@@ -835,7 +947,59 @@ public class TileMapDefinition : TilesDefinition
     }
 }
 
-public class TilesDefinition
+public class SpriteSheet : ITileCollection
+{
+    public List<Tile> Tiles { get; set; } = new List<Tile>();
+    public List<List<Colour>> Colours { get; set; } = new List<List<Colour>>() { new List<Colour> { new Colour() } };
+
+    public SpriteSheet AddSprite(X16Image image, int x, int y, int width, int height)
+    {
+        var toAdd = new Tile(width, height, Depth.Bpp_8); // always start with a full depth
+
+        for (var xp = 0; xp < width; xp++)
+        {
+            for (var yp = 0; yp < height; yp++)
+            {
+                var pixel = image.Pixels[(x + xp) + (yp + y) * image.Width];
+
+                if (pixel == 0)
+                {
+                    toAdd.Pixels[xp, yp] = 0;
+                    continue;
+                }
+
+                var sourceColour = image.Colours[pixel];
+
+                var newPixel = Colours[0].IndexOf(sourceColour, 1); // dont consider the background
+
+                if (newPixel == -1)
+                {
+                    newPixel = Colours[0].Count;
+                    Colours[0].Add(sourceColour);
+                }
+
+                toAdd.Pixels[xp, yp] = (byte)newPixel;
+            }
+        }
+
+        Tiles.Add(toAdd);
+
+        return this;
+    }
+
+    public IEnumerable<byte> SpriteData()
+    {
+        foreach (var i in Tiles)
+        {
+            foreach (var j in i.Data())
+            {
+                yield return j;
+            }
+        }
+    }
+}
+
+public class TilesDefinition : ITileCollection
 {
     public List<Tile> Tiles { get; set; } = new List<Tile>();
     public List<List<Colour>> Colours { get; set; } = new List<List<Colour>>();
