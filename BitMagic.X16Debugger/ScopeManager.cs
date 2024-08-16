@@ -248,14 +248,14 @@ internal static class IAsmVariableExtensions
     internal static string VariableTypeText(this IAsmVariable variable) =>
          variable.VariableDataType switch
          {
-             VariableDataType.Byte => "int",
-             VariableDataType.Sbyte => "int",
-             VariableDataType.Short => "int",
-             VariableDataType.Ushort => "int",
+             VariableDataType.Byte => "byte",
+             VariableDataType.Sbyte => "sbyte",
+             VariableDataType.Short => "short",
+             VariableDataType.Ushort => "ushort",
              VariableDataType.Int => "int",
-             VariableDataType.Uint => "int",
-             VariableDataType.Long => "int",
-             VariableDataType.Ulong => "int",
+             VariableDataType.Uint => "uint",
+             VariableDataType.Long => "long",
+             VariableDataType.Ulong => "ulong",
              VariableDataType.String => "string",
              VariableDataType.FixedStrings => "string",
              _ => "string"
