@@ -435,8 +435,8 @@ internal class VariableManager
 
         scope = GetNewScope("I2C");
 
-        scope.AddVariable(new VariableMap("Previous Data", "uint", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
-        scope.AddVariable(new VariableMap("Direction", "uint", () => $"{(_emulator.I2c.ReadWrite == 0 ? "To SMC" : "From SMC")}"));
+        scope.AddVariable(new VariableMap("Previous Data", "", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
+        scope.AddVariable(new VariableMap("Direction", "", () => $"{(_emulator.I2c.ReadWrite == 0 ? "To SMC" : "From SMC")}"));
         scope.AddVariable(new VariableMap("Transmitting", "uint", () => $"0x{_emulator.I2c.Transmit:X2}", () => _emulator.I2c.Transmit));
         scope.AddVariable(new VariableMap("Mode", "uint", () => $"{_emulator.I2c.Mode}", () => _emulator.I2c.Mode));
         scope.AddVariable(new VariableMap("Address", "uint", () => $"0x{_emulator.I2c.Address:X2}", () => _emulator.I2c.Address));
@@ -444,7 +444,7 @@ internal class VariableManager
 
         scope = GetNewScope("SMC");
 
-        scope.AddVariable(new VariableMap("Data", "uint", () => _emulator.Smc.DataCount switch
+        scope.AddVariable(new VariableMap("Data", "", () => _emulator.Smc.DataCount switch
         {
             0 => "Empty",
             1 => $"0x{_emulator.Smc.Data & 0xff:X2}",
