@@ -165,6 +165,11 @@ internal class DebuggerLocalVariables : IScopeMap
 
                     var type = j.Value.VariableTypeText();
 
+                    if (j.Value.Value < 256)
+                        type += $" (${j.Value.Value:X2})";
+                    else
+                        type += $" (${j.Value.Value:X4})";
+
                     _variables.Add(new VariableMap(i.Value.Name, type, getter));
                 }
             }
