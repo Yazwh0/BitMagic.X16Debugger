@@ -20,7 +20,7 @@ internal class PaletteManager
         {
             var index = i;
 
-            _children[i] = new VariableMap($"Colour 0x{index:X2}", "string", () => $"#{_emulator.Palette[index].ToVariableColour()}", () => _emulator.Palette[index].ToExpression());
+            _children[i] = new VariableMap($"Colour 0x{index:X2}", "", () => $"#{_emulator.Palette[index].ToVariableColour()}", () => _emulator.Palette[index].ToExpression());
             _variables[i] = _children[i].GetVariable();
         }
     }

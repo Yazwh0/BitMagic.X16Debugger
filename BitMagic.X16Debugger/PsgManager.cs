@@ -20,8 +20,8 @@ internal class PsgManager
                 () => _emulator.VeraAudio.PsgVoices[index].LeftRight == 0 ? "Disabled" : "Enabled",
                 new []
                 {
-                    new VariableMap("Waveform", "string", () => GetWaveform(_emulator.VeraAudio.PsgVoices[index].Waveform), () => GetWaveform(_emulator.VeraAudio.PsgVoices[index].Waveform)),
-                    new VariableMap("Output", "string", () => GetOutput(_emulator.VeraAudio.PsgVoices[index].LeftRight), () => GetOutput(_emulator.VeraAudio.PsgVoices[index].LeftRight)),
+                    new VariableMap("Waveform", "", () => GetWaveform(_emulator.VeraAudio.PsgVoices[index].Waveform), () => GetWaveform(_emulator.VeraAudio.PsgVoices[index].Waveform)),
+                    new VariableMap("Output", "", () => GetOutput(_emulator.VeraAudio.PsgVoices[index].LeftRight), () => GetOutput(_emulator.VeraAudio.PsgVoices[index].LeftRight)),
                     new VariableMap("Volume", "int", () => _emulator.VeraAudio.PsgVoices[index].Volume.ToString(), () => _emulator.VeraAudio.PsgVoices[index].Volume),
                     new VariableMap("Frequency", "int", () => _emulator.VeraAudio.PsgVoices[index].Frequency.ToString(), () => _emulator.VeraAudio.PsgVoices[index].Frequency),
                     new VariableMap("Width", "int", () => _emulator.VeraAudio.PsgVoices[index].Width.ToString(), () => _emulator.VeraAudio.PsgVoices[index].Width),
