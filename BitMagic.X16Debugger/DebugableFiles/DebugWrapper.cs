@@ -2,6 +2,7 @@
 using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using System.Linq;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -70,6 +71,9 @@ internal class DebugWrapper : ISourceFile
             yield break;
 
         // look at parents
+        if (ParentMap.Count <= lineNumber)
+            yield break;
+
         var parentMap = ParentMap[lineNumber];
 
         if (parentMap.relativeId != -1)
