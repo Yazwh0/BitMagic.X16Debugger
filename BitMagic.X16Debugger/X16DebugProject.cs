@@ -37,6 +37,13 @@ public class X16DebugProject
     public bool AutobootRun { get; set; } = true;
 
     /// <summary>
+    /// Run the named file by creating a AUTOBOOT.X16 file. This will not overwrite if the file already exists. Will override AutobootRun.
+    /// </summary>
+    [JsonProperty("autobootFile")]
+    [Description("Run the named file by creating a AUTOBOOT.X16 file. This will not overwrite if the file already exists. Will override AutobootRun.")]
+    public string AutobootFile { get; set; } = "";
+
+    /// <summary>
     /// Location to save the .prg and other files from the source file on the host. (Not on the sdcard.)
     /// </summary>
     [JsonProperty("outputFolder")]

@@ -466,6 +466,8 @@ public class X16Debug : DebugAdapterBase
             _emulator.LoadSdCard(sdCard);
         }
 
+        var autobootFile = _debugProject.AutobootFile;
+
         try
         {
             foreach (var i in _debugProject.Files)
@@ -483,7 +485,6 @@ public class X16Debug : DebugAdapterBase
                 }
             }
 
-
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
                 var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
@@ -493,18 +494,9 @@ public class X16Debug : DebugAdapterBase
 
                     var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
 
-                    if (_debugProject.AutobootRun)
+                    if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
                     {
-                        Logger.Log("Adding AUTOBOOT.X16... ");
-                        if (_emulator.SdCard!.FileSystem.Exists("AUTOBOOT.X16"))
-                        {
-                            Logger.LogLine("Error. File already exists.");
-                        }
-                        else
-                        {
-                            _emulator.SdCard!.AddCompiledFile("AUTOBOOT.X16", AutobootCreator.GetAutoboot(prg.Name));
-                            Logger.LogLine("Done.");
-                        }
+                        autobootFile = prg.Name;
                     }
 
                     if (_debugProject.DirectRun && result != null)
@@ -627,6 +619,20 @@ public class X16Debug : DebugAdapterBase
             Logger.LogLine($"ERROR: {e.Message}");
 
             throw new ProtocolException(e.Message);
+        }
+
+        if (!string.IsNullOrWhiteSpace(autobootFile))
+        {
+            Logger.Log($"Adding AUTOBOOT.X16 for '{autobootFile}'... ");
+            if (_emulator.SdCard!.FileSystem.Exists("AUTOBOOT.X16"))
+            {
+                Logger.LogLine("Error. File already exists.");
+            }
+            else
+            {
+                _emulator.SdCard!.AddCompiledFile("AUTOBOOT.X16", AutobootCreator.GetAutoboot(autobootFile));
+                Logger.LogLine("Done.");
+            }
         }
 
         _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
