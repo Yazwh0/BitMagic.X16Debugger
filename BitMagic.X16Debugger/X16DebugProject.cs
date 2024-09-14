@@ -173,6 +173,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [Description("Files to be debugged.")]
     [JsonConverter(typeof(DebugProjectFileConverter))]
     public IDebugProjectFile[] Files { get; set; } = [];
+
+    /// <summary>
+    /// Breakpoints to be set at system startup.
+    /// </summary>
+    [JsonProperty("breakpoints")]
+    [Description("Breakpoints to be set at system startup.")]
+    public int[] Breakpoints { get; set; } = Array.Empty<int>();
 }
 
 

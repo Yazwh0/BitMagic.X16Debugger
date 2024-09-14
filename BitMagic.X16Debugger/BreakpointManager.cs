@@ -4,6 +4,7 @@ using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using System.Net;
 using static BitMagic.X16Debugger.BreakpointsUpdatedEventArgs;
 
 namespace BitMagic.X16Debugger;
@@ -502,6 +503,27 @@ internal class BreakpointManager
         for (var i = 0; i < _emulator.Breakpoints.Length; i++)
         {
             _emulator.Breakpoints[i] = 0;
+        }
+    }
+
+    public void SetNonSourceBreakpoints(IEnumerable<int> breakpoints)
+    {
+        foreach (var address in breakpoints)
+        {
+            var machineAddress = AddressFunctions.GetMachineAddress(address);
+
+            var breakpointValue = _debuggerBreakpoints.Contains(address) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+
+            var bank = address >= 0xc000 ? machineAddress.RomBank : machineAddress.RamBank;
+            var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+            var (lowAddress, secondAddress) = AddressFunctions.GetMemoryLocations(bank, address);
+
+            // only set local breakpoint if we're in the right bank
+            if (lowAddress < 0xa000 || bank == currentBank)
+                _emulator.Breakpoints[address] = breakpointValue;
+
+            if (secondAddress != 0)
+                _emulator.Breakpoints[secondAddress] = breakpointValue;
         }
     }
 }

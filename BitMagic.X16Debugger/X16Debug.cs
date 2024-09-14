@@ -635,8 +635,7 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
-
+        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));        
 
         _emulator.Stepping = stopOnEntry;
         _emulator.Control = Control.Paused; // wait for main window
@@ -910,7 +909,13 @@ public class X16Debug : DebugAdapterBase
             });
         }
 
-        //
+        // set initial breakpoints
+        _serviceManager.BreakpointManager.SetNonSourceBreakpoints(_debugProject.Breakpoints);
+
+        foreach (var i in _debugProject.Breakpoints)
+        {
+        }
+
         Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
 
         Snapshot? snapshot = _emulator.Snapshot();
