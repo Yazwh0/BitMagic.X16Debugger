@@ -469,6 +469,26 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("A Out Value", "", () => ViaByteDisplay(_emulator.Via.Register_A_OutValue, '0', '1'), () => _emulator.Via.Register_A_OutValue));
         scope.AddVariable(new VariableMap("A Value    ", "", () => ViaByteDisplay(_emulator.Memory[0x9f01], '0', '1'), () => _emulator.Memory[0x9f01]));
 
+        scope.AddVariable(new VariableMap("Timer1", "", () => _emulator.Via.Timer1_Counter.ToString(), () => _emulator.Via.Timer1_Counter));
+        scope.AddVariable(new VariableMap("Timer1 Continuous", "", () => _emulator.Via.Timer1_Continous.ToString(), () => _emulator.Via.Timer1_Continous));
+        scope.AddVariable(new VariableMap("Timer1 Running", "", () => _emulator.Via.Timer1_Running.ToString(), () => _emulator.Via.Timer1_Running));
+        scope.AddVariable(new VariableMap("Timer1 Latch", "", () => _emulator.Via.Timer1_Latch.ToString(), () => _emulator.Via.Timer1_Latch));
+        scope.AddVariable(new VariableMap("Timer1 Interupt", "", () => _emulator.Via.Interrupt_Timer1.ToString(), () => _emulator.Via.Interrupt_Timer1));
+        scope.AddVariable(new VariableMap("Timer1 Pb7", "", () => _emulator.Via.Timer1_Pb7.ToString(), () => _emulator.Via.Timer1_Pb7));
+
+        scope.AddVariable(new VariableMap("Timer2", "", () => _emulator.Via.Timer2_Counter.ToString(), () => _emulator.Via.Timer2_Counter));
+        scope.AddVariable(new VariableMap("Timer2 Running", "", () => _emulator.Via.Timer2_Running.ToString(), () => _emulator.Via.Timer2_Running));
+        scope.AddVariable(new VariableMap("Timer2 Latch", "", () => _emulator.Via.Timer2_Latch.ToString(), () => _emulator.Via.Timer2_Latch));
+        scope.AddVariable(new VariableMap("Timer2 Interupt", "", () => _emulator.Via.Interrupt_Timer2.ToString(), () => _emulator.Via.Interrupt_Timer2));
+        scope.AddVariable(new VariableMap("Timer2 Pulse Count", "", () => _emulator.Via.Timer2_PulseCount.ToString(), () => _emulator.Via.Timer2_PulseCount));
+
+        scope.AddVariable(new VariableMap("Interupt Cb1", "", () => _emulator.Via.Interrupt_Cb1.ToString(), () => _emulator.Via.Interrupt_Cb1));
+        scope.AddVariable(new VariableMap("Interupt Cb2", "", () => _emulator.Via.Interrupt_Cb2.ToString(), () => _emulator.Via.Interrupt_Cb2));
+        scope.AddVariable(new VariableMap("Interupt Shift", "", () => _emulator.Via.Interrupt_ShiftRegister.ToString(), () => _emulator.Via.Interrupt_ShiftRegister));
+        scope.AddVariable(new VariableMap("Interupt Ca1", "", () => _emulator.Via.Interrupt_Ca1.ToString(), () => _emulator.Via.Interrupt_Ca1));
+        scope.AddVariable(new VariableMap("Interupt Ca2", "", () => _emulator.Via.Interrupt_Ca2.ToString(), () => _emulator.Via.Interrupt_Ca2));
+
+
         scope.AddVariable(new VariableMap("IO 0x9f00 PRB", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f00], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f00]));
         scope.AddVariable(new VariableMap("IO 0x9f01 PRA", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f01], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f01]));
         scope.AddVariable(new VariableMap("IO 0x9f02 DRB", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f02], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f02]));

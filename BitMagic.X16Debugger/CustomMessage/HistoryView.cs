@@ -2,15 +2,14 @@
 using BitMagic.Common.Address;
 using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
-using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using System.Net;
 using System.Text;
+using System.Xml;
 
 namespace BitMagic.X16Debugger.CustomMessage;
 
-internal class HistoryRequest : DebugRequestWithResponse<HistoryRequestArguments, HistoryRequestResponse>
+public class HistoryRequest : DebugRequestWithResponse<HistoryRequestArguments, HistoryRequestResponse>
 {
     public HistoryRequest() : base("getHistory")
     {
@@ -19,16 +18,38 @@ internal class HistoryRequest : DebugRequestWithResponse<HistoryRequestArguments
 
 internal static class HistoryRequestHandler
 {
+    private const int _pageSize = 1024;
+
     public static HistoryRequestResponse HandleRequest(HistoryRequestArguments? arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager)
+    {
+        if (arguments == null)
+            return GetHistory(arguments ?? new HistoryRequestArguments(), emulator, sourceMapManager, debugableFileManager);
+
+        return arguments.Message switch
+        {
+            "reset" => Reset(emulator),
+            "history" => GetHistory(arguments, emulator, sourceMapManager, debugableFileManager),
+            _ => new HistoryRequestResponse()
+        };
+    }
+
+    private static HistoryRequestResponse Reset(Emulator emulator)
+    {
+        emulator.ResetHistory();
+
+        return new HistoryRequestResponse();
+    }
+
+    private static HistoryRequestResponse GetHistory(HistoryRequestArguments arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager)
     {
         var toReturn = new HistoryRequestResponse();
 
         var history = emulator.History;
-        var idx = (int)emulator.HistoryPosition - 1;
+        var idx = (int)(emulator.HistoryPosition - 1) - (arguments.Index * _pageSize);
         if (idx == -1)
-            idx = 1023;
+            idx = emulator.Options.HistorySize - 1;
 
-        for (var i = 0; i < 1000; i++)
+        for (var i = 0; i < _pageSize; i++)
         {
             if (history[idx].SP == 0 && history[idx].OpCode == 0 && history[idx].PC == 0)
                 continue;
@@ -104,14 +125,16 @@ internal static class HistoryRequestHandler
                 lineNumber));
 
             if (idx <= 0)
-                idx = 1024;
+                idx = emulator.Options.HistorySize - 1;
 
             idx--;
         }
 
+        toReturn.More = !(history[idx].SP == 0 && history[idx].OpCode == 0 && history[idx].PC == 0);
+        toReturn.Index = arguments.Index;
+
         return toReturn;
     }
-
 
     public static string Flags(byte flags)
     {
@@ -175,13 +198,17 @@ internal static class HistoryRequestHandler
     }
 }
 
-internal class HistoryRequestArguments : DebugRequestArguments
+public class HistoryRequestArguments : DebugRequestArguments
 {
+    public string Message { get; set; } = "";
+    public int Index { get; set; }
 }
 
-internal class HistoryRequestResponse : ResponseBody
+public class HistoryRequestResponse : ResponseBody
 {
     public List<HistoryItem> HistoryItems { get; set; } = new();
+    public bool More { get; set; }
+    public int Index { get; set; }
 }
 
-internal record class HistoryItem(string Proc, string OpCode, string RawParameter, int RamBank, int RomBank, int Pc, int A, int X, int Y, int Sp, string Flags, string SourceFile, int LineNumber);
+public record class HistoryItem(string Proc, string OpCode, string RawParameter, int RamBank, int RomBank, int Pc, int A, int X, int Y, int Sp, string Flags, string SourceFile, int LineNumber);

@@ -3,15 +3,17 @@ using BitMagic.Common.Address;
 using BitMagic.Decompiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
+using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Net;
 using static BitMagic.X16Debugger.BreakpointsUpdatedEventArgs;
+using static BitMagic.X16Emulator.Emulator.VeraState;
 
 namespace BitMagic.X16Debugger;
 
 internal class BreakpointManager
 {
-    private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryBreakpoints = new();
+    private readonly Dictionary<int, List<MemoryBreakpointMap>> _memoryExecutionBreakpoints = new();
     private readonly Dictionary<int, List<MemoryBreakpointMap>> _instructionBreakpoints = new();
 
     // keyed on debugger address
@@ -21,6 +23,11 @@ internal class BreakpointManager
     private readonly IdManager _idManager;
     private readonly DisassemblerManager _disassemblerManager;
     private readonly DebugableFileManager _debugableFileManager;
+    private ExpressionManager _expressionManager;
+
+    // Function breakpoints
+    private readonly List<Breakpoint> _frameBreakpoints = new();
+    private readonly List<VramReadWriteBreakpoint> _memoryReadWriteBreakpoints = new();
 
     public event EventHandler<BreakpointsUpdatedEventArgs> BreakpointsUpdated;
 
@@ -34,6 +41,11 @@ internal class BreakpointManager
         _idManager = idManager;
         _disassemblerManager = disassemblerManager;
         _debugableFileManager = debugableFileManager;
+    }
+
+    internal void SetExpressionManager(ExpressionManager expressionManager)
+    {
+        _expressionManager = expressionManager;
     }
 
     public HashSet<int> DebuggerBreakpoints => _debuggerBreakpoints;
@@ -251,9 +263,9 @@ internal class BreakpointManager
             sourceId = decompiledFile.ReferenceId ?? 0;
         }
 
-        if (_memoryBreakpoints.ContainsKey(sourceId))
+        if (_memoryExecutionBreakpoints.ContainsKey(sourceId))
         {
-            foreach (var breakpoint in _memoryBreakpoints[sourceId])
+            foreach (var breakpoint in _memoryExecutionBreakpoints[sourceId])
             {
                 // Need to ensure system breakpoints are set
                 var debuggerAddress = AddressFunctions.GetDebuggerAddress(breakpoint.Address, breakpoint.RamBank, breakpoint.RomBank);
@@ -270,11 +282,11 @@ internal class BreakpointManager
                     _breakpoints.Remove(thisAddress);
             }
 
-            _memoryBreakpoints[sourceId].Clear();
+            _memoryExecutionBreakpoints[sourceId].Clear();
         }
         else
         {
-            _memoryBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
+            _memoryExecutionBreakpoints.Add(sourceId, new List<MemoryBreakpointMap>());
         }
 
         if (decompiledFile != null)
@@ -305,7 +317,7 @@ internal class BreakpointManager
                 //breakpoint.InstructionReference = AddressFunctions.GetDebuggerAddressString(debuggerAddress, decompiledFile.RamBank, decompiledFile.RomBank);
 
                 var toAdd = new MemoryBreakpointMap(thisLine.Address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
-                _memoryBreakpoints[sourceId].Add(toAdd);
+                _memoryExecutionBreakpoints[sourceId].Add(toAdd);
 
                 var bank = thisLine.Address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
                 var currentBank = thisLine.Address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
@@ -324,7 +336,7 @@ internal class BreakpointManager
             }
         }
 
-        toReturn.Breakpoints.AddRange(_memoryBreakpoints[sourceId].Select(i => i.Breakpoint));
+        toReturn.Breakpoints.AddRange(_memoryExecutionBreakpoints[sourceId].Select(i => i.Breakpoint));
 
 
         return toReturn;
@@ -452,10 +464,151 @@ internal class BreakpointManager
         return toReturn;
     }
 
+    // function breakpoints are used to set data breakpoints on vram, as well as frame breaks
+    public SetFunctionBreakpointsResponse HandleFunctionBreakpointsRequest(SetFunctionBreakpointsArguments arguments)
+    {
+        var toReturn = new SetFunctionBreakpointsResponse();
+
+        _memoryReadWriteBreakpoints.Clear();
+        _frameBreakpoints.Clear();
+
+        // clear out VRAM Breakpoints
+        for (var i = 0; i < 0x20000; i++)
+        {
+            _emulator.VramBreakpoints[i] = 0;
+        }
+
+        foreach (var b in arguments.Breakpoints)
+        {
+            bool added = false;
+
+            try
+            {
+                _expressionManager.EvaluateExpression(b.Name, (object? _, FunctionEvaluationEventArg e) =>
+                {
+                    var breakpoint = e.Name switch
+                    {
+                        "vram" => SetVramBreakpoint(e),
+                        "vsync" => SetFrameBreakpoint(e),
+                        _ => new Breakpoint()
+                        {
+                            Message = $"Unknown breakpoint function '{e.Name}'.",
+                            Verified = false
+                        }
+                    };
+
+                    if (breakpoint != null)
+                    {
+                        toReturn.Breakpoints.Add(breakpoint);
+                        added = true;
+                    }
+
+                    e.FunctionReturnedValue = true;
+                });
+            }
+            catch (Exception e)
+            {
+                added = true;
+                toReturn.Breakpoints.Add(new Breakpoint() { Message = e.Message, Verified = false });
+            }
+
+            if (!added)
+                toReturn.Breakpoints.Add(new Breakpoint() { Message = "Not a breakpoint function.", Verified = false });
+        }
+
+        return toReturn;
+    }
+
+    private Breakpoint? SetVramBreakpoint(FunctionEvaluationEventArg evaluateArgs)
+    {
+        var toReturn = new Breakpoint();
+        toReturn.Id = _idManager.GetId();
+
+        if (evaluateArgs.Args.Count == 0)
+        {
+            toReturn.Message = "Invalid parameters.";
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        int address;
+        int length = 1;
+        try
+        {
+            address = evaluateArgs.EvaluateArg<int>(0);
+        }
+        catch (Exception e)
+        {
+            toReturn.Message = e.Message;
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        var breakpointType = VeraBreakpointType.Read | VeraBreakpointType.Write;
+
+        if (evaluateArgs.Args.Count >= 2)
+        {
+            var secondParam = evaluateArgs.EvaluateArg(1);
+
+            if (secondParam is string sparam)
+            {
+                breakpointType = (VeraBreakpointType)(
+                                 (sparam.Contains('R') ? (int)VeraBreakpointType.Read : 0) +
+                                 (sparam.Contains('W') ? (int)VeraBreakpointType.Write : 0));
+            }
+
+            if (secondParam is int iparam)
+            {
+                address = Math.Min(address, iparam);
+                var second = Math.Max(address, iparam);
+                length = second - address;
+            }
+        }
+
+        if (evaluateArgs.Args.Count >= 3)
+        {
+            var thirdParam = evaluateArgs.EvaluateArg(2);
+
+            if (thirdParam is string sparam)
+            {
+                breakpointType = (VeraBreakpointType)(
+                                 (sparam.Contains('R') ? (int)VeraBreakpointType.Read : 0) +
+                                 (sparam.Contains('W') ? (int)VeraBreakpointType.Write : 0));
+            }
+        }
+
+        length = Math.Min(length, 0x20000 - address);
+
+        if (length == 1)
+            toReturn.Message = $"VRAM 0x{address:X5} for{((breakpointType & VeraBreakpointType.Read) != 0 ? " Read" : "")}{((breakpointType & VeraBreakpointType.Write) != 0 ? " Write" : "")}";
+        else
+            toReturn.Message = $"VRAM 0x{address:X5} -> 0x{address + length:X5} ({length} bytes) for{((breakpointType & VeraBreakpointType.Read) != 0 ? " Read" : "")}{((breakpointType & VeraBreakpointType.Write) != 0 ? " Write" : "")}" ;
+
+        toReturn.Verified = true;
+
+        var toAdd = new VramReadWriteBreakpoint(toReturn, address, length, breakpointType);
+        toAdd.Apply(_emulator);
+
+        _memoryReadWriteBreakpoints.Add(toAdd);
+
+        return toReturn;
+    }
+
+    private Breakpoint? SetFrameBreakpoint(FunctionEvaluationEventArg e)
+    {
+        var toReturn = new Breakpoint();
+
+        toReturn.Verified = true;
+
+        _frameBreakpoints.Add(toReturn);
+
+        return toReturn;
+    }
+
     public List<MemoryBreakpointMap> MemoryBreakpoints(int sourceId)
     {
-        if (_memoryBreakpoints.ContainsKey(sourceId))
-            return _memoryBreakpoints[sourceId];
+        if (_memoryExecutionBreakpoints.ContainsKey(sourceId))
+            return _memoryExecutionBreakpoints[sourceId];
 
         return new List<MemoryBreakpointMap>(0);
     }
@@ -495,7 +648,7 @@ internal class BreakpointManager
     public void Clear()
     {
         //_bitMagicBreakpoints.Clear();
-        _memoryBreakpoints.Clear();
+        _memoryExecutionBreakpoints.Clear();
         _breakpointHitCount.Clear();
         _instructionBreakpoints.Clear();
 
@@ -524,6 +677,30 @@ internal class BreakpointManager
 
             if (secondAddress != 0)
                 _emulator.Breakpoints[secondAddress] = breakpointValue;
+        }
+    }
+}
+
+internal class VramReadWriteBreakpoint
+{
+    public Breakpoint Breakpoint { get; }
+    public int Address { get; }
+    public int Length { get; }
+    public VeraBreakpointType BreakpointType { get; }
+
+    public VramReadWriteBreakpoint(Breakpoint breakpoint, int address, int lenght, VeraBreakpointType breakpointType)
+    {
+        Breakpoint = breakpoint;
+        Address = address;
+        Length = lenght;
+        BreakpointType = breakpointType;
+    }
+
+    public void Apply(Emulator emulator)
+    {
+        for (var i = Address; i < Address + Length; i++)
+        {
+            emulator.VramBreakpoints[i] = (byte)((byte)BreakpointType | emulator.VramBreakpoints[i]);
         }
     }
 }

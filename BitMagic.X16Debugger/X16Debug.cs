@@ -55,14 +55,14 @@ public class X16Debug : DebugAdapterBase
     private readonly string _officialEmulatorLocation;
 
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, IEmulatorLogger? logger = null)
+    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, IEmulatorLogger? logger = null)
     {
         Logger = logger ?? new DebugLogger(this);
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
         _emulator = _serviceManager.Emulator;
         _officialEmulatorLocation = officialEmulatorLocation;
         _defaultRomFile = romFile;
-
+       
         InitializeProtocolClient(stdIn, stdOut);
 
 #if SHOWDAP
@@ -154,7 +154,8 @@ public class X16Debug : DebugAdapterBase
             //SupportsDataBreakpoints = true,
             SupportsExceptionInfoRequest = true,
             SupportsExceptionOptions = true,
-            ExceptionBreakpointFilters = ExceptionManager.GetExceptionList()
+            ExceptionBreakpointFilters = ExceptionManager.GetExceptionList(),
+            SupportsFunctionBreakpoints = true
         };
     }
 
@@ -196,6 +197,9 @@ public class X16Debug : DebugAdapterBase
             _debugProject.BasePath = workspaceFolder;
         }
 
+        // EmulatorOptions
+        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize };
+        _emulator.SetOptions(emulatiorOptions);
 
         // Clear Ram
         if (_debugProject.MemoryFillValue != 0)
@@ -722,6 +726,9 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
+    protected override SetFunctionBreakpointsResponse HandleSetFunctionBreakpointsRequest(SetFunctionBreakpointsArguments arguments) 
+        => _serviceManager.BreakpointManager.HandleFunctionBreakpointsRequest(arguments);
+
     #endregion
 
     #region Continue/Stepping
@@ -912,15 +919,13 @@ public class X16Debug : DebugAdapterBase
         // set initial breakpoints
         _serviceManager.BreakpointManager.SetNonSourceBreakpoints(_debugProject.Breakpoints);
 
-        foreach (var i in _debugProject.Breakpoints)
-        {
-        }
-
         Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
 
         Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
         {
+            var bp = _emulator.VramBreakpoints[0x10001];
+
             var returnCode = _emulator.Emulate();
 
             var changes = snapshot!.Compare();
@@ -1508,6 +1513,7 @@ public class X16Debug : DebugAdapterBase
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
+//            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 

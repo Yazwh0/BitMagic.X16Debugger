@@ -92,9 +92,9 @@ static class Program
             }
         }
 
-        Func<Emulator> getEmulator = () =>
+        Func<EmulatorOptions?, Emulator> getEmulator = (options) =>
         {
-            var emulator = new Emulator();
+            var emulator = new Emulator(options);
 
             emulator.FrameControl = FrameControl.Synced;
             emulator.Stepping = true;
@@ -140,7 +140,7 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Func<Emulator> getEmulator, int port, string rom, string emulatorLocation)
+    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int port, string rom, string emulatorLocation)
     {
         Console.WriteLine($"Listening on port {port}.");
         X16Debug? debugger;

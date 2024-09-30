@@ -3,7 +3,6 @@ using BitMagic.Compiler.CodingSeb;
 using BitMagic.X16Emulator;
 using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using Silk.NET.Core.Native;
 
 namespace BitMagic.X16Debugger;
 
@@ -72,6 +71,24 @@ internal class ExpressionManager
 
         if (!asmValue.RequiresRecalc)
             e.Value = asmValue.Result;
+    }
+
+    /// <summary>
+    /// For reuse, rather than returning data via DAP
+    /// </summary>
+    public object? EvaluateExpression(string expression, EventHandler<FunctionEvaluationEventArg>? functionCallback)
+    {
+        object? result = null;
+
+        if (functionCallback != null)
+            _evaluator.EvaluateFunction += functionCallback;
+
+        result = _evaluator.Evaluate(expression);
+
+        if (functionCallback != null)
+            _evaluator.EvaluateFunction -= functionCallback;
+
+        return result;
     }
 
     public EvaluateResponse Evaluate(EvaluateArguments arguments)

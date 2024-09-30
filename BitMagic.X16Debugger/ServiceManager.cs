@@ -1,5 +1,4 @@
-﻿using BitMagic.Compiler;
-using BitMagic.X16Debugger.DebugableFiles;
+﻿using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 
 namespace BitMagic.X16Debugger;
@@ -7,7 +6,7 @@ namespace BitMagic.X16Debugger;
 // Not quite DI, but a place to hold all the managers and initialise in the correct order.
 internal class ServiceManager
 {
-    private readonly Func<Emulator> _getNewEmulatorInstance;
+    private readonly Func<EmulatorOptions?, Emulator> _getNewEmulatorInstance;
     private readonly X16Debug _debugger;
     public Emulator Emulator { get; private set; }
 
@@ -29,7 +28,7 @@ internal class ServiceManager
     public IdManager IdManager { get; private set; }
 
 #pragma warning disable CS8618
-    public ServiceManager(Func<Emulator> GetNewEmulatorInstance, X16Debug debugger)
+    public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, X16Debug debugger)
 #pragma warning restore CS8618
     {
         _getNewEmulatorInstance = GetNewEmulatorInstance;
@@ -39,7 +38,7 @@ internal class ServiceManager
 
     public Emulator Reset()
     {
-        Emulator = _getNewEmulatorInstance();
+        Emulator = _getNewEmulatorInstance(null);
 
         IdManager = new();
 
@@ -61,9 +60,12 @@ internal class ServiceManager
         VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
         ExpressionManager = new(VariableManager, Emulator);
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
+
         VariableManager.SetExpressionManager(ExpressionManager);
+        BreakpointManager.SetExpressionManager(ExpressionManager);
 
         BreakpointManager.BreakpointsUpdated += _debugger.BreakpointManager_BreakpointsUpdated;
+
 
         return Emulator;
     }

@@ -101,7 +101,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("machine")]
     [Description("Machine to load globals from if there is no bmasm source.")]
-    public string Machine { get; set; } = "";
+    public string Machine { get; set; } = "CommanderX16";
 
     /// <summary>
     /// Prefill the keyboard buffer with this data. 16bytes max, rest are discarded.
@@ -180,6 +180,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("breakpoints")]
     [Description("Breakpoints to be set at system startup.")]
     public int[] Breakpoints { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Size of the history buffer for the history view. Must be a power of 2.
+    /// </summary>
+    [JsonProperty("historySize")]
+    [Description("Size of the history buffer for the history view. Must be a power of 2.")]
+    public int HistorySize { get; set; } = 0x400;
 }
 
 
