@@ -356,6 +356,9 @@ internal class VariableManager
                         new VariableMap("IO 0x9f3f", "ushort", () => $"0x{_emulator.Memory[0x9f3f]:X2}", () => _emulator.Memory[0x9f3f]),
                     })
                     ));
+
+        scope.AddVariable(new VariableMap("Frame", "uint", () => $"{_emulator.Vera.Frame_Count}", () => _emulator.Vera.Frame_Count));
+
         scope.AddVariable(new VariableMemory("VRam", () => "0x20000 bytes", "vram", () => _emulator.Vera.Vram.ToArray()));
 
         scope = GetNewScope("VERA Audio");

@@ -19,6 +19,7 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Debugger.Exceptions;
+using System.Transactions;
 
 namespace BitMagic.X16Debugger;
 
@@ -924,8 +925,6 @@ public class X16Debug : DebugAdapterBase
         Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
         {
-            var bp = _emulator.VramBreakpoints[0x10001];
-
             var returnCode = _emulator.Emulate();
 
             var changes = snapshot!.Compare();
@@ -933,7 +932,7 @@ public class X16Debug : DebugAdapterBase
             if (changes != null)
                 _serviceManager.VariableManager.SetChanges(changes);
 
-            bool wait = true;
+            //bool wait = true;
             switch (returnCode)
             {
                 case Emulator.EmulatorResult.Stepping:
@@ -945,78 +944,19 @@ public class X16Debug : DebugAdapterBase
                     _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.Breakpoint:
-                    var (breakpoint, hitCount, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
-
-                    if ((breakpointType & DebugConstants.SystemBreakpoint) != 0)
+                    if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Breakpoint) != 0)
                     {
-                        // debugger breakpoint
-                        HandleDebuggerBreakpoint(breakpointType);
-
-                        if ((breakpointType ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
-                        {
-                            _emulator.Stepping = false;
-                            wait = false;
-                            break;
-                        }
+                        HandleSourceBreakpointHit();
+                    }
+                    if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Vram) != 0)
+                    {
+                        HandleVramBreakpointHit();
+                    }
+                    if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Vsync) != 0)
+                    {
+                        HandleVsyncBreakpointHit();
                     }
 
-                    if ((breakpointType & DebugConstants.Exception) != 0)
-                    {
-                        if (_serviceManager.ExceptionManager.IsSet("EXP"))
-                        {
-                            _serviceManager.ExceptionManager.LastException = "EXP";
-                            this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "Exception within code raised.", 0, null, true));
-                            _emulator.Stepping = true;
-                            break;
-                        } 
-                        else
-                        {
-                            if ((breakpointType ^ DebugConstants.Exception) == 0) // this is just a exception breakpoint, so continue
-                            {
-                                _emulator.Stepping = false;
-                                wait = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (breakpoint != null)
-                    {
-                        var stepping = _emulator.Stepping;
-                        var condition = true;
-                        if (!string.IsNullOrWhiteSpace(breakpoint.Condition))
-                        {
-                            condition = _serviceManager.ExpressionManager.ConditionMet(breakpoint.Condition);
-                        }
-
-                        if (condition && !string.IsNullOrWhiteSpace(breakpoint.HitCondition))
-                        {
-                            condition = _serviceManager.ExpressionManager.ConditionMet($"{hitCount} {breakpoint.HitCondition}");
-                        }
-
-                        if (!string.IsNullOrEmpty(breakpoint.LogMessage))
-                        {
-                            if (condition)
-                            {
-                                var message = _serviceManager.ExpressionManager.FormatMessage(breakpoint.LogMessage);
-                                if (!string.IsNullOrEmpty(message)) // only send actual messages, allows for simpler conditional logpoints
-                                    Logger.LogLine(message);
-                            }
-                            _emulator.Stepping = stepping;
-                            wait = false;
-                            break;
-                        }
-                        else if (!condition)
-                        {
-                            _emulator.Stepping = stepping;
-                            wait = false;
-                            break;
-                        }
-                    }
-
-                    this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Breakpoint hit", 0, null, true));
-
-                    _emulator.Stepping = true;
                     break;
                 case Emulator.EmulatorResult.UnknownOpCode:
                     this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Unknown OpCode hit", 0, null, true));
@@ -1040,7 +980,7 @@ public class X16Debug : DebugAdapterBase
                     return;
             }
 
-            if (wait)
+            if (_emulator.Stepping)
             {
                 EmulatorWindow.PauseAudio();
 
@@ -1123,6 +1063,168 @@ public class X16Debug : DebugAdapterBase
                 EmulatorWindow.ContinueAudio();
             }
         }
+    }
+
+    private void HandleVramBreakpointHit()
+    {
+        // need to find the breakpoints that have been hit
+        var isData0 = _emulator.State.MemoryRead == 0x9f23 || _emulator.State.MemoryWrite == 0x9f23;
+        var isData1 = _emulator.State.MemoryRead == 0x9f24 || _emulator.State.MemoryWrite == 0x9f24;
+
+        if (!isData0 && !isData1)
+            return;
+
+        var address = isData0 ? _emulator.Vera.Data0_Address : _emulator.Vera.Data1_Address;
+
+        var breakpoints = _serviceManager.BreakpointManager.VramReadWriteBreakpoints.Where(i => address >= i.Address && address <= i.Address + i.Length);
+
+        var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "VRAM Breakpoint hit", 0, null, true);
+
+        stopEvent.HitBreakpointIds = new();
+
+        // need to parse them all incase there are log points
+        foreach (var breakpoint in breakpoints)
+        {
+            if (BreakpointActive(breakpoint.BreakpointState))
+            {
+                if (breakpoint.BreakpointState.Breakpoint.Id.HasValue)
+                    stopEvent.HitBreakpointIds.Add(breakpoint.BreakpointState.Breakpoint.Id.Value);
+
+                _emulator.Stepping = true;
+            }
+        }
+
+        if (_emulator.Stepping)
+        {
+            this.Protocol.SendEvent(stopEvent);
+        }
+    }
+
+    private void HandleVsyncBreakpointHit()
+    {
+        var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "VSYNC Breakpoint hit", 0, null, true);
+
+        stopEvent.HitBreakpointIds = new();
+        _emulator.Stepping = true;
+
+        var currentFrame = _emulator.Vera.Frame_Count;
+        // need to parse them all incase there are log points
+        foreach (var breakpoint in _serviceManager.BreakpointManager.VsyncBreakpoinst.Where(i => i.FrameNumber == currentFrame || i.FrameNumber == 0))
+        {
+            if (BreakpointActive(breakpoint.BreakpointState))
+            {
+                if (breakpoint.BreakpointState.Breakpoint.Id.HasValue)
+                    stopEvent.HitBreakpointIds.Add(breakpoint.BreakpointState.Breakpoint.Id.Value);
+
+                _emulator.Stepping = true;
+            }
+        }
+
+        // get next breakpoint and set it, otherwise disable
+        var next = _serviceManager.BreakpointManager.VsyncBreakpoinst.Where(i => i.FrameNumber == 0 || i.FrameNumber > currentFrame).OrderBy(i => i.FrameNumber).FirstOrDefault();
+
+        if (next != null)
+        {
+            if (next.FrameNumber == 0)
+                _emulator.Vera.Frame_Count_Breakpoint = currentFrame + 1;
+            else
+                _emulator.Vera.Frame_Count_Breakpoint = next.FrameNumber;
+        }
+        else
+        {
+            _emulator.Vera.Frame_Count_Breakpoint = 0xffffffff;
+        }
+
+        if (_emulator.Stepping)
+        {
+            this.Protocol.SendEvent(stopEvent);
+        }
+    }
+
+
+    // Should this be moved to the breakpoint manager??
+    private void HandleSourceBreakpointHit()
+    {
+        var (breakpointState, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
+
+        if ((breakpointType & DebugConstants.SystemBreakpoint) != 0)
+        {
+            // debugger breakpoint
+            HandleDebuggerBreakpoint(breakpointType);
+
+            if ((breakpointType ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
+            {
+                _emulator.Stepping = false;
+                return;
+            }
+        }
+
+        if ((breakpointType & DebugConstants.Exception) != 0)
+        {
+            if (_serviceManager.ExceptionManager.IsSet("EXP"))
+            {
+                _serviceManager.ExceptionManager.LastException = "EXP";
+                this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "Exception within code raised.", 0, null, true));
+                _emulator.Stepping = true;
+                return;
+            }
+            else
+            {
+                if ((breakpointType ^ DebugConstants.Exception) == 0) // this is just a exception breakpoint, so continue
+                {
+                    _emulator.Stepping = false;
+                    return;
+                }
+            }
+        }
+
+        if (breakpointState == null || BreakpointActive(breakpointState))
+        {
+            var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Breakpoint hit", 0, null, true);
+
+            if (breakpointState != null && breakpointState.Breakpoint != null && breakpointState.Breakpoint.Id != null)
+            {
+                stopEvent.HitBreakpointIds = new List<int>() { breakpointState.Breakpoint.Id.Value };
+            }
+
+            this.Protocol.SendEvent(stopEvent);
+
+            _emulator.Stepping = true;
+        }
+    }
+
+    private bool BreakpointActive(BreakpointState breakpointState)
+    {
+        if (breakpointState.SourceBreakpoint == null)
+            return true;
+
+        var condition = true;
+        if (!string.IsNullOrWhiteSpace(breakpointState.SourceBreakpoint.Condition))
+        {
+            condition = _serviceManager.ExpressionManager.ConditionMet(breakpointState.SourceBreakpoint.Condition);
+        }
+
+        if (condition && !string.IsNullOrWhiteSpace(breakpointState.SourceBreakpoint.HitCondition))
+        {
+            condition = _serviceManager.ExpressionManager.ConditionMet($"{breakpointState.HitCount} {breakpointState.SourceBreakpoint.HitCondition}");
+        }
+
+        if (!string.IsNullOrEmpty(breakpointState.SourceBreakpoint.LogMessage))
+        {
+            if (condition)
+            {
+                var message = _serviceManager.ExpressionManager.FormatMessage(breakpointState.SourceBreakpoint.LogMessage);
+                if (!string.IsNullOrEmpty(message)) // only send actual messages, allows for simpler conditional logpoints
+                    Logger.LogLine(message);
+            }
+            return false;   // dont stop for logpoints
+        }
+        else if (!condition)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static readonly byte[] InvalidBytes = "\"*+,/:;<=>?[\\]|"u8.ToArray();

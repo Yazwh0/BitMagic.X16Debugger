@@ -23,12 +23,13 @@ internal static class HistoryRequestHandler
     public static HistoryRequestResponse HandleRequest(HistoryRequestArguments? arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager)
     {
         if (arguments == null)
-            return GetHistory(arguments ?? new HistoryRequestArguments(), emulator, sourceMapManager, debugableFileManager);
+            return GetHistory(arguments ?? new HistoryRequestArguments(), emulator, sourceMapManager, debugableFileManager, false);
 
         return arguments.Message switch
         {
             "reset" => Reset(emulator),
-            "history" => GetHistory(arguments, emulator, sourceMapManager, debugableFileManager),
+            "history" => GetHistory(arguments, emulator, sourceMapManager, debugableFileManager, false),
+            "getall" => GetHistory(arguments, emulator, sourceMapManager, debugableFileManager, true),
             _ => new HistoryRequestResponse()
         };
     }
@@ -40,16 +41,17 @@ internal static class HistoryRequestHandler
         return new HistoryRequestResponse();
     }
 
-    private static HistoryRequestResponse GetHistory(HistoryRequestArguments arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager)
+    private static HistoryRequestResponse GetHistory(HistoryRequestArguments arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager, bool getAll)
     {
         var toReturn = new HistoryRequestResponse();
 
         var history = emulator.History;
-        var idx = (int)(emulator.HistoryPosition - 1) - (arguments.Index * _pageSize);
-        if (idx == -1)
-            idx = emulator.Options.HistorySize - 1;
+        var idx = getAll ? (int)(emulator.HistoryPosition - 1) : (int)(emulator.HistoryPosition - 1) - (arguments.Index * _pageSize);
+        idx = idx & (emulator.Options.HistorySize - 1);
+        //if (idx == -1)
+        //    idx = emulator.Options.HistorySize - 1;
 
-        for (var i = 0; i < _pageSize; i++)
+        for (var i = 0; i < (getAll ? emulator.Options.HistorySize - 1 : _pageSize); i++)
         {
             if (history[idx].SP == 0 && history[idx].OpCode == 0 && history[idx].PC == 0)
                 continue;
