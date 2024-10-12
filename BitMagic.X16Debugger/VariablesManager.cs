@@ -213,13 +213,24 @@ internal class VariableManager
         scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
-        scope.AddVariable(Register(new VariableChildren("Interrupt", () => (_emulator.State.Interrupt != 0).ToString(), "bool", new[] {
-                new VariableMap("Vsync", "bool", () => ((_emulator.Memory[0x9F26] & 0b0001) & (_emulator.Memory[0x9F27] & 0b0001)) != 0),
-                new VariableMap("Line", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
-                new VariableMap("SpCol", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
-                new VariableMap("Aflow", "bool", () => ((_emulator.Memory[0x9F26] & 0b1000) & (_emulator.Memory[0x9F27] & 0b1000)) != 0),
-                new VariableMap("Via", "bool", () => _emulator.State.Via_Interrupt != 0),
+        scope.AddVariable(Register(new VariableChildren("Interrupt", () => ((_emulator.State.Interrupt_Hit & _emulator.State.Interrupt_Mask) != 0).ToString(), "bool", new[] {
+                new VariableMap("Vsync ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0001) & (_emulator.Memory[0x9F27] & 0b0001)) != 0),
+                new VariableMap("Vsync Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Vsync) != 0),
+                new VariableMap("Vsync Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Vsync) != 0),
+                new VariableMap("Line ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
+                new VariableMap("Line Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Line) != 0),
+                new VariableMap("Line Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Line) != 0),
+                new VariableMap("SpCol ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
+                new VariableMap("SpCol Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Spcol) != 0),
+                new VariableMap("SpCol Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Spcol) != 0),
+                new VariableMap("Aflow ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b1000) & (_emulator.Memory[0x9F27] & 0b1000)) != 0),
+                new VariableMap("Aflow Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Aflow) != 0),
+                new VariableMap("Aflow Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Aflow) != 0),
+                new VariableMap("Via Int", "bool", () => _emulator.Via.Interrupt, () => _emulator.Via.Interrupt),
+                new VariableMap("Via Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Via) != 0),
                 new VariableMap("YM", "bool", () => _emulator.State.Ym_Interrupt != 0),
+                new VariableMap("YM Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Ym) != 0),
+                new VariableMap("YM Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Ym) != 0),
         })));
 
         scope = GetNewScope("VERA");
