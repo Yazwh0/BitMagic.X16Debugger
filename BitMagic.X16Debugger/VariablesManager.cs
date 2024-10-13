@@ -220,6 +220,7 @@ internal class VariableManager
                 new VariableMap("Line ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
                 new VariableMap("Line Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Line) != 0),
                 new VariableMap("Line Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Line) != 0),
+                new VariableMap("Line", "ushort", () => (_emulator.State.Interrupt_LineNum.ToString()), () => _emulator.State.Interrupt_LineNum),
                 new VariableMap("SpCol ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
                 new VariableMap("SpCol Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Spcol) != 0),
                 new VariableMap("SpCol Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Spcol) != 0),
