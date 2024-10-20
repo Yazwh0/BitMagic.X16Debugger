@@ -521,6 +521,11 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("IO 0x9f0e IER", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0e]));
         scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0f]));
 
+        scope = GetNewScope("SD Card");
+
+        scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () =>  _emulator.SdCard.Image.ToArray()));
+
+
         AddLocalScope("Locals");
     }
 

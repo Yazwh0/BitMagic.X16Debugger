@@ -1433,6 +1433,9 @@ public class X16Debug : DebugAdapterBase
                 case "vram":
                     data = _emulator.Vera.Vram;
                     break;
+                case "sdcard":
+                    data = _emulator.SdCard.Image;
+                    break;
                 default:
                     throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
             }
@@ -1467,6 +1470,9 @@ public class X16Debug : DebugAdapterBase
                 break;
             case "vram":
                 data = _emulator.Vera.Vram;
+                break;
+            case "sdcard":
+                data = _emulator.SdCard.Image;
                 break;
             default:
                 throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
