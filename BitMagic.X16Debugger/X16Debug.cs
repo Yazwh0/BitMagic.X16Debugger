@@ -948,6 +948,10 @@ public class X16Debug : DebugAdapterBase
                     {
                         HandleSourceBreakpointHit();
                     }
+                    if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Stack) != 0)
+                    {
+                        HandleSourceBreakpointHit();
+                    }
                     if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Vram) != 0)
                     {
                         HandleVramBreakpointHit();
