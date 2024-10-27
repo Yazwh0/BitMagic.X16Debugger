@@ -524,6 +524,7 @@ internal class VariableManager
         scope = GetNewScope("SD Card");
 
         scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () =>  _emulator.SdCard.Image.ToArray()));
+        scope.AddVariable(new VariableMap("Last Sector Read", "uint",  () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
 
 
         AddLocalScope("Locals");
