@@ -1,4 +1,4 @@
-﻿namespace BitMagic.X16Debugger.Variables;
+﻿namespace BitMagic.X16Debugger.Scopes;
 
 internal interface IScopeWrapper
 {

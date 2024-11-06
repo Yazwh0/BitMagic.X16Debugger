@@ -1,5 +1,6 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.Compiler.CodingSeb;
+using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 using CodingSeb.ExpressionEvaluator;

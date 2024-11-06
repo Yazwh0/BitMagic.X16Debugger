@@ -1,4 +1,5 @@
-﻿using BitMagic.X16Emulator;
+﻿using BitMagic.X16Debugger.Scopes;
+using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
