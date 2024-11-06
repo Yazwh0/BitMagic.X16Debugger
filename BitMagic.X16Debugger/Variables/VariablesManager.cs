@@ -109,7 +109,7 @@ internal class VariableManager
         {
             // Do we clear something?
         }
-        _scopeManager.LocalScope?.SetLocalScope(state, _emulator, _expressionManager);
+        _scopeManager.LocalScope?.SetLocalScope(state, _emulator, _expressionManager, this);
     }
 
     public void SetChanges(SnapshotResult changes)

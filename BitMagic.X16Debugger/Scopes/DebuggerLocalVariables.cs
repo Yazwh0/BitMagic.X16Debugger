@@ -2,6 +2,8 @@
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using Newtonsoft.Json.Linq;
+using System;
 
 namespace BitMagic.X16Debugger.Scopes;
 
@@ -23,7 +25,7 @@ internal class DebuggerLocalVariables : IScopeMap
         };
     }
 
-    public void SetLocalScope(StackFrameState? state, Emulator emulator, ExpressionManager expressionManager)
+    public void SetLocalScope(StackFrameState? state, Emulator emulator, ExpressionManager expressionManager, VariableManager variableManager)
     {
         _variables.Clear();
         if (state == null || state.Scope == null)
@@ -49,30 +51,43 @@ internal class DebuggerLocalVariables : IScopeMap
 
                 var j = i;
 
-                if (i.Value.VariableType == VariableType.DebuggerExpression)
-                {
-                    var debugVar = j.Value as DebuggerVariable ?? throw new Exception("Variable claims to be a debugger expression but isnt.");
+                var toAdd = GetVariable(i.Key, i.Value, expressionManager, memory, variableManager);
 
-                    Func<string> getter = debugVar.ToExpressionFunction(expressionManager);
+                _variables.Add(toAdd);
+                //if (i.Value.VariableType == VariableType.DebuggerExpression)
+                //{
+                //    var debugVar = j.Value as DebuggerVariable ?? throw new Exception("Variable claims to be a debugger expression but isnt.");
 
-                    var type = j.Value.VariableTypeText();
+                //    Func<string> getter = debugVar.ToExpressionFunction(expressionManager);
 
-                    _variables.Add(new VariableMap(i.Value.Name, type, getter));
-                }
-                else
-                {
-                    // todo: handle arrays
-                    Func<string> getter = j.Value.ToStringFunction(memory);
+                //    var type = j.Value.VariableTypeText();
 
-                    var type = j.Value.VariableTypeText();
+                //    _variables.Add(new VariableMap(i.Value.Name, type, getter));
+                //}
+                //else
+                //{
+                //    // todo: handle arrays
+                //    //if (j.Value.Array)
+                //    //{
+                //    //    var array = 
+                //    //    var variableIndex = new VariableIndex(i.Value.Name, () => { 
 
-                    if (j.Value.Value < 256)
-                        type += $" (${j.Value.Value:X2})";
-                    else
-                        type += $" (${j.Value.Value:X4})";
+                //    //    })
 
-                    _variables.Add(new VariableMap(i.Value.Name, type, getter));
-                }
+                //    //    continue;
+                //    //}
+
+                //    Func<string> getter = j.Value.ToStringFunction(memory);
+
+                //    var type = j.Value.VariableTypeText();
+
+                //    if (j.Value.Value < 256)
+                //        type += $" (${j.Value.Value:X2})";
+                //    else
+                //        type += $" (${j.Value.Value:X4})";
+
+                //    _variables.Add(new VariableMap(i.Value.Name, type, getter));
+                //}
             }
 
             if (s.Parent != null)
@@ -80,5 +95,73 @@ internal class DebuggerLocalVariables : IScopeMap
             else
                 break;
         }
+    }
+
+    private IVariableItem? GetVariable(string name, IAsmVariable variable, ExpressionManager expressionManager, MemoryWrapper memory, VariableManager variableManager)
+    {
+        var j = variable;
+
+        if (variable.VariableType == VariableType.DebuggerExpression)
+        {
+            var debugVar = j as DebuggerVariable ?? throw new Exception("Variable claims to be a debugger expression but isnt.");
+
+            Func<string> getter = debugVar.ToExpressionFunction(expressionManager);
+
+            var type = j.VariableTypeText();
+
+            return new VariableMap(variable.Name, type, getter);
+        }
+        else
+        {
+            // todo: handle arrays
+            if (j.Array)
+            {
+                var v = new VariableIndex(name, GetArray(j, memory));
+                variableManager.Register(v);
+                return v;
+            }
+
+            Func<string> getter = j.ToStringFunction(memory);
+
+            var type = j.VariableTypeText();
+
+            if (j.Value < 256)
+                type += $" (${j.Value:X2})";
+            else
+                type += $" (${j.Value:X4})";
+
+            return new VariableMap(name, type, getter);
+        }
+
+        return null;
+    }
+
+    private Func<(string Value, ICollection<Variable> Variables)> GetArray(IAsmVariable variable, MemoryWrapper memory)
+    {
+        var _variable = variable;
+        var _memory = memory;
+
+        return () => {
+            var toReturn = new List<Variable>();
+
+            for (var i = 0; i < _variable.Length; i++)
+            {
+                Func<string> getter = _variable.ToStringFunction(_memory, i);
+
+                var type = _variable.VariableTypeText();
+                var value = _variable.MemoryOffset(i);
+
+                if (value < 256)
+                    type += $" (${value:X2})";
+                else
+                    type += $" (${value:X4})";
+
+                var x = new VariableMap(i.ToString(), type, getter);
+
+                toReturn.Add(x.GetVariable());
+            }
+
+            return ($"{_variable.VariableTypeText()}[{_variable.Length.ToString()}]", toReturn);
+        };
     }
 }
