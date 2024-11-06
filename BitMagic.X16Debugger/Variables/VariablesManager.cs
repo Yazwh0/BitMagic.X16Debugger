@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
 using static Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.VariablePresentationHint;
 
-namespace BitMagic.X16Debugger;
+namespace BitMagic.X16Debugger.Variables;
 
 internal class VariableManager
 {
@@ -192,13 +192,13 @@ internal class VariableManager
                 new VariableChildren("Flags",
                 () => $"[{(_emulator.Negative ? "N" : " ")}{(_emulator.Overflow ? "V" : " ")} {(_emulator.BreakFlag ? "B" : " ")}{(_emulator.Decimal ? "D" : " ")}{(_emulator.InterruptDisable ? "I" : " ")}{(_emulator.Zero ? "Z" : " ")}{(_emulator.Carry ? "C" : " ")}]",
                 new[] {
-                    new VariableMap("Negative", "bool", () => _emulator.Negative, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Overflow", "bool", () => _emulator.Overflow, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Break", "bool", () => _emulator.BreakFlag, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Decimal", "bool", () => _emulator.Decimal, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Interupt", "bool", () => _emulator.InterruptDisable, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Zero", "bool", () => _emulator.Zero, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
-                    new VariableMap("Carry", "bool", () => _emulator.Carry, attribute: VariablePresentationHint.AttributesValue.IsBoolean),
+                    new VariableMap("Negative", "bool", () => _emulator.Negative, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Overflow", "bool", () => _emulator.Overflow, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Break", "bool", () => _emulator.BreakFlag, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Decimal", "bool", () => _emulator.Decimal, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Interupt", "bool", () => _emulator.InterruptDisable, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Zero", "bool", () => _emulator.Zero, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Carry", "bool", () => _emulator.Carry, attribute: AttributesValue.IsBoolean),
                 })));
         scope.AddVariable(new VariableMap("A", "byte", () => _emulator.A, () => _emulator.A));
         scope.AddVariable(new VariableMap("X", "byte", () => _emulator.X, () => _emulator.X));
@@ -214,17 +214,17 @@ internal class VariableManager
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
         scope.AddVariable(Register(new VariableIndex("Stack", _stackManager.GetStack)));
         scope.AddVariable(Register(new VariableChildren("Interrupt", () => ((_emulator.State.Interrupt_Hit & _emulator.State.Interrupt_Mask) != 0).ToString(), "bool", new[] {
-                new VariableMap("Vsync ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0001) & (_emulator.Memory[0x9F27] & 0b0001)) != 0),
+                new VariableMap("Vsync ISR", "bool", () => (_emulator.Memory[0x9F26] & 0b0001 & _emulator.Memory[0x9F27] & 0b0001) != 0),
                 new VariableMap("Vsync Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Vsync) != 0),
                 new VariableMap("Vsync Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Vsync) != 0),
-                new VariableMap("Line ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0010) & (_emulator.Memory[0x9F27] & 0b0010)) != 0),
+                new VariableMap("Line ISR", "bool", () => (_emulator.Memory[0x9F26] & 0b0010 & _emulator.Memory[0x9F27] & 0b0010) != 0),
                 new VariableMap("Line Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Line) != 0),
                 new VariableMap("Line Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Line) != 0),
-                new VariableMap("Line", "ushort", () => (_emulator.State.Interrupt_LineNum.ToString()), () => _emulator.State.Interrupt_LineNum),
-                new VariableMap("SpCol ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b0100) & (_emulator.Memory[0x9F27] & 0b0100)) != 0),
+                new VariableMap("Line", "ushort", () => _emulator.State.Interrupt_LineNum.ToString(), () => _emulator.State.Interrupt_LineNum),
+                new VariableMap("SpCol ISR", "bool", () => (_emulator.Memory[0x9F26] & 0b0100 & _emulator.Memory[0x9F27] & 0b0100) != 0),
                 new VariableMap("SpCol Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Spcol) != 0),
                 new VariableMap("SpCol Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Spcol) != 0),
-                new VariableMap("Aflow ISR", "bool", () => ((_emulator.Memory[0x9F26] & 0b1000) & (_emulator.Memory[0x9F27] & 0b1000)) != 0),
+                new VariableMap("Aflow ISR", "bool", () => (_emulator.Memory[0x9F26] & 0b1000 & _emulator.Memory[0x9F27] & 0b1000) != 0),
                 new VariableMap("Aflow Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Aflow) != 0),
                 new VariableMap("Aflow Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Aflow) != 0),
                 new VariableMap("Via Int", "bool", () => _emulator.Via.Interrupt, () => _emulator.Via.Interrupt),
@@ -257,15 +257,15 @@ internal class VariableManager
         scope.AddVariable(
             Register(
                 new VariableChildren("Layer 0", () => _emulator.Vera.Layer0Enable ?
-                    (_emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer0_T256C)}Tiles") :
+                    _emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer0_T256C)}Tiles" :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}", () => _emulator.Vera.Layer0_MapAddress),
                     new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}", () => _emulator.Vera.Layer0_TileAddress),
                     new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}", () => _emulator.Vera.Layer0_HScroll),
                     new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}", () => _emulator.Vera.Layer0_VScroll),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}", () => (_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}", () =>(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}", () => _emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16),
                     new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer0_MapWidth)),
                     new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer0_MapHeight)),
                 }
@@ -274,15 +274,15 @@ internal class VariableManager
         scope.AddVariable(
             Register(
                 new VariableChildren("Layer 1", () => _emulator.Vera.Layer1Enable ?
-                    (_emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer1_T256C)}Tiles") :
+                    _emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer1_T256C)}Tiles" :
                     "Disabled",
                 new[] {
                     new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}", () => _emulator.Vera.Layer1_MapAddress),
                     new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}", () => _emulator.Vera.Layer1_TileAddress),
                     new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}", () => _emulator.Vera.Layer1_HScroll),
                     new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}", () => _emulator.Vera.Layer1_VScroll),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}", () =>(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}", () =>(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16),
                     new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer1_MapWidth)),
                     new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer1_MapHeight)),
                 }
@@ -450,7 +450,7 @@ internal class VariableManager
 
         scope = GetNewScope("I2C");
 
-        scope.AddVariable(new VariableMap("Previous Data", "", () => $"{(((_emulator.I2c.Previous & 1) != 0) ? "DATA" : "____")} {(((_emulator.I2c.Previous & 2) != 0) ? "CLK" : "___")}"));
+        scope.AddVariable(new VariableMap("Previous Data", "", () => $"{((_emulator.I2c.Previous & 1) != 0 ? "DATA" : "____")} {((_emulator.I2c.Previous & 2) != 0 ? "CLK" : "___")}"));
         scope.AddVariable(new VariableMap("Direction", "", () => $"{(_emulator.I2c.ReadWrite == 0 ? "To SMC" : "From SMC")}"));
         scope.AddVariable(new VariableMap("Transmitting", "uint", () => $"0x{_emulator.I2c.Transmit:X2}", () => _emulator.I2c.Transmit));
         scope.AddVariable(new VariableMap("Mode", "uint", () => $"{_emulator.I2c.Mode}", () => _emulator.I2c.Mode));
@@ -523,8 +523,8 @@ internal class VariableManager
 
         scope = GetNewScope("SD Card");
 
-        scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () =>  _emulator.SdCard.Image.ToArray()));
-        scope.AddVariable(new VariableMap("Last Sector Read", "uint",  () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
+        scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () => _emulator.SdCard.Image.ToArray()));
+        scope.AddVariable(new VariableMap("Last Sector Read", "uint", () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
 
 
         AddLocalScope("Locals");
@@ -603,318 +603,4 @@ internal class VariableManager
 
     private static string GetT256C(bool t256c) =>
         t256c ? " T256C " : " ";
-}
-
-internal interface IScopeWrapper
-{
-    IScopeMap Scope { get; }
-    Dictionary<string, object> ObjectTree { get; }
-}
-
-internal class ScopeWrapper : IScopeWrapper
-{
-    private readonly ScopeMap _scope;
-    public IScopeMap Scope => _scope;
-    public Dictionary<string, object> ObjectTree { get; set; } = new();
-
-    public ScopeWrapper(ScopeMap scope)
-    {
-        _scope = scope;
-    }
-
-    public void AddVariable(IVariableItem variable)
-    {
-        _scope.AddVariable(variable);
-
-        if (variable.GetExpressionValue != null)
-            ObjectTree.Add(variable.Name, variable.GetExpressionValue);
-    }
-
-    public void Clear()
-    {
-        _scope.Clear();
-        ObjectTree.Clear();
-    }
-}
-
-/// <summary>
-/// Wraps the local scope map, which provides the local variables from the source map
-/// </summary>
-//internal class LocalScopeWrapper : IScopeWrapper
-//{
-//    public IScopeMap Scope { get; set; }
-//    public Dictionary<string, object> ObjectTree => Scope.Variables.ToDictionary(i => i.Name, i => (object)i.GetVariable().Value);
-
-//    public LocalScopeWrapper(IScopeMap scope)
-//    {
-//        Scope = scope;
-//    }
-//}
-
-public interface IVariableItem
-{
-    int Id { get; }
-    string Name { get; }
-    Variable GetVariable(); // Get the Variable from a variable request
-    Func<object>? GetValue { get; } // Get value for Variables
-    Action<string>? SetValue { get; } // Set value from a call to SetVariable
-    void SetVariable(SetVariableArguments value); // From a variable edit
-    Func<object>? GetExpressionValue { get; }  // used by the Watches
-}
-
-public abstract class VariableItem : IVariableItem
-{
-    public int Id { get; set; }
-    public string Name { get; }
-    public Func<object>? GetExpressionValue { get; protected set; }
-
-    internal string Type { get; set; } = "";
-    internal KindValue Kind { get; set; }
-    internal AttributesValue Attributes { get; set; }
-    internal string? MemoryReference { get; set; }
-
-    public Func<object>? GetValue { get; protected set; }
-    public Action<string>? SetValue { get; protected set; }
-    public abstract void SetVariable(SetVariableArguments value);
-
-    protected VariableItem(string name)
-    {
-        Name = name;
-    }
-
-    protected VariableItem(string name, Func<string> getValue)
-    {
-        Name = name;
-        GetValue = getValue;
-        GetExpressionValue = getValue;
-    }
-
-    protected VariableItem(string name, Func<string> getValue, Action<string> setValue)
-    {
-        Name = name;
-        GetValue = getValue;
-        GetExpressionValue = getValue;
-        SetValue = setValue;
-    }
-
-    public virtual Variable GetVariable() => new Variable()
-    {
-        Name = Name,
-        Type = Type,
-        Value = GetValue == null ? "" : ExpressionManager.Stringify(GetValue()),
-        PresentationHint = new VariablePresentationHint() { Kind = Kind, Attributes = Attributes },
-        MemoryReference = MemoryReference
-    };
-}
-
-public class VariableChildren : VariableItem
-{
-    private readonly Dictionary<string, IVariableItem> _children;
-
-    public VariableChildren(string name, Func<string> getValue, string variableType, IVariableItem[] children) : base(name, getValue)
-    {
-        _children = children.ToDictionary(i => i.Name, i => i);
-        GetExpressionValue = () => _children.ToDictionary(i => i.Key, i => (object?)i.Value.GetExpressionValue);
-        Attributes = AttributesValue.ReadOnly;
-        Type = variableType;
-    }
-
-    public VariableChildren(string name, Func<string> getValue, IVariableItem[] children) : this(name, getValue, "", children)
-    {
-    }
-
-    public override void SetVariable(SetVariableArguments value)
-    {
-        if (!_children.ContainsKey(value.Name))
-            return; // throw error?
-
-        var child = _children[value.Name];
-        if (child.SetValue != null)
-            child.SetValue(value.Value);
-    }
-
-    public override Variable GetVariable() => new Variable()
-    {
-        Name = Name,
-        Type = Type,
-        Value = GetValue == null ? "" : ExpressionManager.Stringify(GetValue()),
-        PresentationHint = new VariablePresentationHint() { Kind = Kind, Attributes = Attributes },
-        MemoryReference = MemoryReference,
-        NamedVariables = _children.Count,
-        VariablesReference = Id
-    };
-
-    public IEnumerable<IVariableItem> Children => _children.Values;
-}
-
-public class VariableIndex : VariableItem
-{
-    private Func<(string Value, ICollection<Variable> Variables)> GetChildValues { get; }
-
-    public VariableIndex(string name, Func<(string Value, ICollection<Variable> Variables)> getChildValeus) : base(name)
-    {
-        GetChildValues = getChildValeus;
-        GetValue = () => GetChildValues().Value;
-        // need to change the constructor here. Need a value, rather than a variable.
-        GetExpressionValue = () => GetChildValues().Variables.Select(i => i.Value).ToArray();
-        Attributes = AttributesValue.ReadOnly;
-        Type = "";
-    }
-
-    public override void SetVariable(SetVariableArguments value)
-    {
-        // not sure what to do here.
-    }
-
-    public override Variable GetVariable()
-    {
-        (string Value, ICollection<Variable> Variables) = GetChildValues();
-
-        return new Variable()
-        {
-            Name = Name,
-            Type = Type,
-            Value = Value,
-            PresentationHint = new VariablePresentationHint() { Kind = Kind, Attributes = Attributes },
-            MemoryReference = MemoryReference,
-            IndexedVariables = Variables.Count,
-            VariablesReference = Id
-        };
-    }
-
-    public IEnumerable<Variable> GetChildren() => GetChildValues().Variables;
-}
-
-// Doesn't actually return the memory values.
-public class VariableMemory : VariableItem
-{
-    public VariableMemory(string name, Func<string> getValue, string memoryReference, Func<byte[]> getValues) : base(name, getValue)
-    {
-        MemoryReference = memoryReference;
-        Type = "";
-        GetExpressionValue = () => new MemoryWrapper(getValues);
-    }
-
-    // shouldn't get called.
-    public override void SetVariable(SetVariableArguments value)
-    {
-    }
-}
-
-public class VariableNotKnownException : Exception
-{
-    public VariableNotKnownException(string message) : base(message) { }
-}
-
-public class MemoryWrapper
-{
-    internal readonly Func<byte[]> _values;
-    public MemoryWrapper(Func<byte[]> values)
-    {
-        _values = values;
-    }
-
-    public MemoryLocation this[int index]
-    {
-        get
-        {
-            return new MemoryLocation(_values, index);
-        }
-    }
-
-    public class MemoryLocation
-    {
-        internal readonly Func<byte[]> _values;
-        internal int _index;
-        internal MemoryLocation(Func<byte[]> values, int index)
-        {
-            _values = values;
-            _index = index;
-        }
-
-        public byte Byte => _values()[_index];
-        public sbyte Sbyte => (sbyte)_values()[_index];
-        public char Char => (char)_values()[_index];
-        public short Short => BitConverter.ToInt16(_values(), _index);
-        public ushort Ushort => BitConverter.ToUInt16(_values(), _index);
-        public int Int => BitConverter.ToInt32(_values(), _index);
-        public uint Uint => BitConverter.ToUInt32(_values(), _index);
-        public long Long => BitConverter.ToInt64(_values(), _index);
-        public ulong Ulong => BitConverter.ToUInt64(_values(), _index);
-        public string String
-        {
-            get
-            {
-                var sb = new StringBuilder();
-
-                var values = _values();
-
-                for (var i = _index; i < values.Length && values[i] != 0 && i < _index + 1024; i++)
-                    sb.Append((char)values[i]);
-
-                return sb.ToString();
-            }
-        }
-        public string FixedString(int length)
-        {
-            var sb = new StringBuilder();
-
-            var values = _values();
-
-            for (var i = _index; i < values.Length && i < length + _index; i++)
-                sb.Append((char)values[i]);
-
-            return sb.ToString();
-        }
-
-        public override string ToString() => _values()[_index].ToString();
-    }
-}
-
-
-internal class VariableMap : IVariableItem
-{
-    private readonly Variable _variable;
-    public string Name => _variable.Name;
-    public int Id => 0;
-
-    public Func<object> GetValue { get; }
-
-    public Action<string>? SetValue => throw new NotImplementedException();
-
-    public Func<object>? GetExpressionValue { get; }
-
-    public VariableMap(string name, string type, Func<object> getFunction,
-        VariablePresentationHint.KindValue kindValue = VariablePresentationHint.KindValue.Property,
-        VariablePresentationHint.AttributesValue attribute = AttributesValue.None
-        ) : this(name, type, getFunction, getFunction, kindValue, attribute)
-    {
-    }
-
-    public VariableMap(string name, string type, Func<object> getFunction, Func<object> getExpression,
-        VariablePresentationHint.KindValue kindValue = VariablePresentationHint.KindValue.Property,
-        VariablePresentationHint.AttributesValue attribute = AttributesValue.None
-    )
-    {
-        _variable = new Variable()
-        {
-            Name = name,
-            Type = type,
-            PresentationHint = new VariablePresentationHint() { Kind = kindValue, Attributes = attribute }
-        };
-
-        GetValue = getFunction;
-        GetExpressionValue = getExpression;
-    }
-
-    public Variable GetVariable()
-    {
-        _variable.Value = ExpressionManager.Stringify(GetValue());
-        return _variable;
-    }
-
-    public void SetVariable(SetVariableArguments value)
-    {
-        throw new NotImplementedException();
-    }
 }

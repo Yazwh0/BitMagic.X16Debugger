@@ -1,5 +1,6 @@
 ﻿using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
@@ -161,6 +162,7 @@ internal class DebuggerLocalVariables : IScopeMap
                 }
                 else
                 {
+                    // todo: handle arrays
                     Func<string> getter = j.Value.ToStringFunction(memory);
 
                     var type = j.Value.VariableTypeText();

@@ -1,4 +1,5 @@
 ﻿using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 
 namespace BitMagic.X16Debugger;
