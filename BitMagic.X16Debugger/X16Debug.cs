@@ -19,7 +19,6 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Debugger.Exceptions;
-using System.Transactions;
 using BitMagic.X16Debugger.Variables;
 
 namespace BitMagic.X16Debugger;
