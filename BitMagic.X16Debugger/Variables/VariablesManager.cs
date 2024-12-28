@@ -522,10 +522,20 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("IO 0x9f0e IER", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0e], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0e]));
         scope.AddVariable(new VariableMap("IO 0x9f0f ORA", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f0f], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f0f]));
 
+
         scope = GetNewScope("SD Card");
 
         scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () => _emulator.SdCard.Image.ToArray()));
         scope.AddVariable(new VariableMap("Last Sector Read", "uint", () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
+        scope.AddVariable(new VariableMap("Position", "uint", () => $"0x{_emulator.Spi.Position:X8}", () => _emulator.Spi.LastRead));
+        scope.AddVariable(new VariableMap("Chip Select", "bool", () => _emulator.Spi.ChipSelect.ToString(), () => _emulator.Spi.ChipSelect));
+        scope.AddVariable(new VariableMap("Auto TX", "bool", () => _emulator.Spi.AutoTx.ToString(), () => _emulator.Spi.AutoTx));
+        scope.AddVariable(new VariableMap("Receive Count", "uint", () => $"0x{_emulator.Spi.ReceiveCount:X8}", () => _emulator.Spi.ReceiveCount));
+        scope.AddVariable(new VariableMap("Send Count", "uint", () => $"0x{_emulator.Spi.SendCount:X8}", () => _emulator.Spi.SendCount));
+        scope.AddVariable(new VariableMap("Idle", "bool", () => _emulator.Spi.Idle.ToString(), () => _emulator.Spi.Idle));
+        //scope.AddVariable(new VariableMap("Command Next", "byte", () => $"0x{_emulator.Spi.CommandNext:X2}", () => _emulator.Spi.CommandNext));
+        scope.AddVariable(new VariableMap("Previous Value", "uint", () => $"0x{_emulator.Spi.PreviousValue:X8}", () => _emulator.Spi.PreviousValue));
+        scope.AddVariable(new VariableMap("Previous Command", "byte", () => $"0x{_emulator.Spi.PreviousCommand:X2}", () => _emulator.Spi.PreviousCommand));
 
 
         AddLocalScope("Locals");
