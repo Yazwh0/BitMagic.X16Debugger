@@ -187,6 +187,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("historySize")]
     [Description("Size of the history buffer for the history view. Must be a power of 2.")]
     public int HistorySize { get; set; } = 0x400;
+
+    /// <summary>
+    /// Multiplier to scale the display window.
+    /// </summary>
+    [JsonProperty("windowScale")]
+    [Description("Multiplier to scale the display window.")]
+    public float WindowScale { get; set; } = 0x01;
 }
 
 

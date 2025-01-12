@@ -199,7 +199,7 @@ public class X16Debug : DebugAdapterBase
         }
 
         // EmulatorOptions
-        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize };
+        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
         _emulator.SetOptions(emulatiorOptions);
 
         // Clear Ram

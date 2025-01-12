@@ -98,7 +98,7 @@ static class Program
 
             emulator.FrameControl = FrameControl.Synced;
             emulator.Stepping = true;
-
+            
             return emulator;
         };
 
