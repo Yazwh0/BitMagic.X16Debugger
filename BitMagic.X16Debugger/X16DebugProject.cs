@@ -87,7 +87,14 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("romBankNames")]
     [Description("Display names for the Rom banks.")]
-    public string[] RomBankNames { get; set; } = new string[] { "Kernal", "Keymap", "Dos", "Fat32", "Basic", "Monitor", "Charset", "Codex", "Graph", "Demo", "Audio", "Util", "Bannex", "X16Edit1", "X16Edit2" };
+    public string[] RomBankNames { get; set; } = new string[] { "Kernal", "Keymap", "Dos", "Fat32", "Basic", "Monitor", "Charset", "Diag", "Graph", "Demo", "Audio", "Util", "Bannex", "X16Edit1", "X16Edit2", "Basload" };
+
+    /// <summary>
+    /// Symbol file for Rom banks, if set it overrides the default.
+    /// </summary>
+    [JsonProperty("romBankSymbols")]
+    [Description("Symbol file for Rom banks, if set it overrides the default.")]
+    public string[] RomBankSymbols { get; set; } = new string[] { };
 
     /// <summary>
     /// Display names for the Ram banks.

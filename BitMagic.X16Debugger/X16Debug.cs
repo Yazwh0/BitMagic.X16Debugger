@@ -313,7 +313,20 @@ public class X16Debug : DebugAdapterBase
             var symbolsList = _debugProject.Symbols.ToList();
             for (var i = 0; i < _debugProject.RomBankNames.Length; i++)
             {
-                var filename = Path.Combine(_debugProject.EmulatorDirectory, _debugProject.RomBankNames[i].ToLower() + ".sym");
+                string filename = "";
+                if (_debugProject.RomBankSymbols.Length > i && _debugProject.RomBankSymbols[i] != string.Empty)
+                {
+                    filename = _debugProject.RomBankSymbols[i];
+                    if (filename == " ")
+                    {
+                        Logger.LogLine($"Blank symbol override, skipping entry for {_debugProject.RomBankNames[i]}.");
+                        continue;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(filename))
+                    filename = Path.Combine(_debugProject.EmulatorDirectory, _debugProject.RomBankNames[i].ToLower() + ".sym");
+
                 if (!File.Exists(filename))
                 {
                     Logger.LogLine($"Default symbols file {filename} doesn't exist.");
