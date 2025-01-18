@@ -124,7 +124,8 @@ internal static class HistoryRequestHandler
                 history[idx].SP,
                 Flags(history[idx].Flags),
                 sourceFilename,
-                lineNumber));
+                lineNumber,
+                history[idx].Clock));
 
             if (idx <= 0)
                 idx = emulator.Options.HistorySize - 1;
@@ -213,4 +214,4 @@ public class HistoryRequestResponse : ResponseBody
     public int Index { get; set; }
 }
 
-public record class HistoryItem(string Proc, string OpCode, string RawParameter, int RamBank, int RomBank, int Pc, int A, int X, int Y, int Sp, string Flags, string SourceFile, int LineNumber);
+public record class HistoryItem(string Proc, string OpCode, string RawParameter, int RamBank, int RomBank, int Pc, int A, int X, int Y, int Sp, string Flags, string SourceFile, int LineNumber, ulong Clock);
