@@ -193,7 +193,7 @@ public static class Cc65LibParser
             uint fragmentCount = reader.ReadCc65Var();
 
             var name = toReturn.StringPool[(int)nameId];
-            Console.WriteLine($"{segmentType:X2} - {name} -- {size:X4}");
+            //Console.WriteLine($"{segmentType:X2} - {name} -- {size:X4}");
 
             var segment = new Segment() { Name_stringId = nameId, Size = size, Allignment = allignment, SegmentType = segmentType };
             toReturn.Segments.Add(segment);
