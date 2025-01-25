@@ -31,6 +31,11 @@ internal class DebugableFileManager
         if (wrapper.ReferenceId == null && !wrapper.Source.ActualFile) // do not create Ids for real files
             wrapper.ReferenceId = _idManager.AddObject(wrapper, ObjectType.DecompiledData);
 
+        if (wrapper.Path.StartsWith("DAT"))
+        {
+            var a = 0;
+        }
+
         AllFiles.Add(wrapper.Path, wrapper);
 
         foreach (var p in file.Parents)
@@ -78,7 +83,7 @@ internal class DebugableFileManager
     {
         foreach (var i in AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>())
         {
-            yield return (i.Name, i.Data.ToArray());
+            yield return (i.Path, i.Data.ToArray());
         }
     }
 }

@@ -1266,15 +1266,32 @@ public class X16Debug : DebugAdapterBase
             _setnam_fileaddress = 0;
             _setnam_fileexists = false;
 
-            if (_setnam_value.Any(i => i < 0x20 || Contains(InvalidBytes, (byte)i)))
+            if (_setnam_value.StartsWith("@:"))
+            {
+                _setnam_value = _setnam_value[2..];
+            }
+
+            var idx = _setnam_value.LastIndexOfAny(['\\', '/']);
+            var folder = "";
+            var actFilename = _setnam_value;
+            var path = _setnam_value;
+
+            if (idx != -1)
+            {
+                folder = _setnam_value[..idx];
+                actFilename = _setnam_value[(idx + 1)..];
+                path = $"{folder}\\{actFilename}";
+            }
+
+            if (actFilename.Any(i => i < 0x20 || Contains(InvalidBytes, (byte)i)))
             {
                 _setnam_fileexists = false;
             }
             else
             {
-                if (_emulator.SdCard!.FileSystem.FileExists(_setnam_value))
+                if (_emulator.SdCard!.FileSystem.FileExists(path))
                 {
-                    using var data = _emulator.SdCard.FileSystem.OpenFile(_setnam_value, FileMode.Open);
+                    using var data = _emulator.SdCard.FileSystem.OpenFile(path, FileMode.Open);
 
                     _setnam_fileaddress = data.ReadByte();
                     _setnam_fileaddress += data.ReadByte() << 8;
@@ -1285,7 +1302,7 @@ public class X16Debug : DebugAdapterBase
             }
 
             if (_setnam_fileexists)
-                Logger.LogLine($"SETNAM called with '{filename}', found '{_setnam_value}' with header ${_setnam_fileaddress:X4}.");
+                Logger.LogLine($"SETNAM called with '{filename}', found '{path}' with header ${_setnam_fileaddress:X4}.");
             else
                 Logger.LogLine($"SETNAM called with '{filename}', no file found.");
 

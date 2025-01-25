@@ -128,6 +128,7 @@ internal static class Cc65BinaryFileFactory
                             if (!sourceMap.ContainsKey(lineInfo.FileInfo_id))
                             {
                                 var sourceFilename = Path.GetFullPath(Path.Combine(basePath, cc65obj.StringPool[(int)sourceFile.Filename_StringId])).FixFilename();
+
                                 var idx = toAdd.AddParent(new StaticTextFile(File.ReadAllText(sourceFilename), sourceFilename, true));
                                 sourceMap.Add(lineInfo.FileInfo_id, idx);
                             }
@@ -151,9 +152,13 @@ internal static class Cc65BinaryFileFactory
 
             toAdd.Data = actualData;
 
-            foreach(var p in toAdd.Parents)
+            foreach (var p in toAdd.Parents)
             {
                 p.AddChild(toAdd);
+            }
+
+            foreach (var p in toAdd.Parents)
+            {
                 p.MapChildren();
             }
             serviceManager.DebugableFileManager.AddFiles(toAdd);
@@ -167,7 +172,7 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
     {
         BaseAddress = baseAddress;
         Path = name;
-        Name = name;
+        Name = System.IO.Path.GetFileName(name);
         _parentMap = new ParentSourceMapReference[size];
         for (var i = 0; i < _parentMap.Length; i++)
         {
