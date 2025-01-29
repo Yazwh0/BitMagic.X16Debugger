@@ -139,6 +139,20 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     public string SdCard { get; set; } = "";
 
     /// <summary>
+    /// SD Card image to write.
+    /// </summary>
+    [JsonProperty("sdCardOutput")]
+    [Description("SD Card image to write. Can have .gz or .zip extensions if compressed.")]
+    public string SdCardOutput { get; set; } = "";
+
+    /// <summary>
+    /// SD Card image to write once the emulation finishes.
+    /// </summary>
+    [JsonProperty("SdCardFinalOutput")]
+    [Description("SD Card image to write once the emulation finishes. Can have .gz or .zip extensions if compressed.")]
+    public string SdCardFinalOutput { get; set; } = "";
+
+    /// <summary>
     /// Files to add to the root directory of the SDCard. Wildcards accepted.
     /// </summary>
     [JsonProperty("sdCardFiles")]

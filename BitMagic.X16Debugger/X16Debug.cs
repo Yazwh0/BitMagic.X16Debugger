@@ -930,6 +930,13 @@ public class X16Debug : DebugAdapterBase
             });
         }
 
+        // create sdcard if requested
+        if (!string.IsNullOrWhiteSpace(_debugProject.SdCardOutput) && _emulator.SdCard != null)
+        {
+            var sdcardOutput = Path.GetFullPath(_debugProject.SdCardOutput, _debugProject.BasePath);
+            _emulator.SdCard.Save(sdcardOutput, true);
+        }
+
         // set initial breakpoints
         _serviceManager.BreakpointManager.SetNonSourceBreakpoints(_debugProject.Breakpoints);
 
@@ -984,16 +991,20 @@ public class X16Debug : DebugAdapterBase
                     this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "BRK hit", 0, null, true));
                     _emulator.Stepping = true;
 
-                    //Logger.LogLine($"Stopping. BRK hit at ${_emulator.Pc:X4} RAM Bank: ${_emulator.RamBankAct:X2} ROM Bank: ${_emulator.RomBankAct:X2}");
-                    //this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
-                    //this.Protocol.SendEvent(new TerminatedEvent());
-                    //_running = false;
                     break;
                 default:
+                    // create sdcard if requested
+                    if (_debugProject != null && !string.IsNullOrWhiteSpace(_debugProject.SdCardFinalOutput) && _emulator.SdCard != null)
+                    {
+                        var sdcardOutput = Path.GetFullPath(_debugProject.SdCardFinalOutput, _debugProject.BasePath);
+                        _emulator.SdCard.Save(sdcardOutput, true);
+                    }
+
                     Logger.LogLine($"Stopping. Result : {returnCode}");
                     this.Protocol.SendEvent(new ExitedEvent((int)returnCode));
                     this.Protocol.SendEvent(new TerminatedEvent());
                     _running = false;
+
                     return;
             }
 
