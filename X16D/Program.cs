@@ -30,6 +30,12 @@ static class Program
 
         [Option("officialEmulator", Default = "", Required = false)]
         public string OfficialEmulatorLocation { get; set; } = "";
+
+        [Option("runInOfficialEmulator", Default = false, Required = false)]
+        public bool RunInOfficialEmulator { get; set; }
+
+        [Option("officialEmulatorParameters", Default = "", Required = false)]
+        public string OfficialEmulatorParameters { get; set; } = "";
     }
 
     private const string RomEnvironmentVariable = "BITMAGIC_ROM";
@@ -98,22 +104,21 @@ static class Program
 
             emulator.FrameControl = FrameControl.Synced;
             emulator.Stepping = true;
-            
+
             return emulator;
         };
 
         try
         {
             if (options.ServerPort != 0)
-                RunAsServer(getEmulator, options.ServerPort, rom, options.OfficialEmulatorLocation);
+                RunAsServer(getEmulator, options.ServerPort, rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
             else
             {
                 Console.WriteLine(@"Running using stdin\stdout.");
 
-                var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom, options.OfficialEmulatorLocation);
+                var debugger = new X16Debug(getEmulator, Console.OpenStandardInput(), Console.OpenStandardOutput(), rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
                 try
                 {
-                    //debugger.Protocol.LogMessage += (_, e) => Debug.WriteLine(e.Message);
                     debugger.Logger.LogLine("Starting");
                     debugger.Run();
                     debugger.Logger.LogLine("Finished. (Normally)");
@@ -140,7 +145,7 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int port, string rom, string emulatorLocation)
+    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int port, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
     {
         Console.WriteLine($"Listening on port {port}.");
         X16Debug? debugger;
@@ -160,7 +165,7 @@ static class Program
                     using (Stream stream = new NetworkStream(clientSocket))
                     {
                         var logger = new ConsoleLogger();
-                        debugger = new X16Debug(getEmulator, stream, stream, rom, emulatorLocation, logger);
+                        debugger = new X16Debug(getEmulator, stream, stream, rom, emulatorLocation, runInEmulatorLocation, officialEmulatorParameters, logger);
                         logger.AddSecondaryLogger(new DebugLogger(debugger));
 
                         debugger.Protocol.DispatcherError += (sender, e) =>

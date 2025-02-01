@@ -33,7 +33,7 @@ internal class BitmagicBuilder
         if (debugProject.CompileOptions != null)
             project.CompileOptions = debugProject.CompileOptions;
 
-        debugProject.Source = Path.GetFullPath(debugProject.Source).FixFilename();
+        debugProject.Source = Path.GetFullPath(Path.Combine(debugProject.BasePath, debugProject.Source));
         var codeFile = new BitMagicProjectFile(debugProject.Source);
         project.Code = codeFile;
         await codeFile.Load();

@@ -3,7 +3,9 @@
     "X16D": {
       "commandName": "Project",
       "nativeDebugging": true,
-      "commandLineArgs": "--port 2563"
+      "xcommandLineArgs": "--port 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48",
+      "commandLineArgs": "--port 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48 --runInOfficialEmulator"
+
     }
   }
 }

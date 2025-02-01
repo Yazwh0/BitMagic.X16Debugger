@@ -30,6 +30,8 @@ public class X16Debug : DebugAdapterBase
     private SysThread? _debugThread;
     private SysThread? _windowThread;
 
+    private SysThread? _externalThread;
+
     private readonly ServiceManager _serviceManager;
 
     private readonly Dictionary<int, CodeMap> _GotoTargets = new();
@@ -39,7 +41,7 @@ public class X16Debug : DebugAdapterBase
     private readonly ManualResetEvent _runEvent = new ManualResetEvent(false);
     private readonly object SyncObject = new object();
 
-    private X16DebugProject? _debugProject;
+    internal X16DebugProject? _debugProject;
     private IMachine? _machine;
     private readonly string _defaultRomFile;
     public IEmulatorLogger Logger { get; }
@@ -53,15 +55,21 @@ public class X16Debug : DebugAdapterBase
     private int _setnam_fileaddress = 0;
     private bool _setnam_fileexists = false;
 
-    private readonly string _officialEmulatorLocation;
+    internal readonly string OfficialEmulatorLocation;
+    internal readonly string OfficialEmulatorParams;
+    private readonly bool _runInOfficialEmulator;
+
 
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, IEmulatorLogger? logger = null)
+    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false,  string officialEmulatorParams = "", IEmulatorLogger? logger = null)
     {
         Logger = logger ?? new DebugLogger(this);
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
         _emulator = _serviceManager.Emulator;
-        _officialEmulatorLocation = officialEmulatorLocation;
+        OfficialEmulatorLocation = officialEmulatorLocation;
+        _runInOfficialEmulator = runInOfficialEmulator;
+        OfficialEmulatorParams = officialEmulatorParams;
+
         _defaultRomFile = romFile;
        
         InitializeProtocolClient(stdIn, stdOut);
@@ -213,7 +221,7 @@ public class X16Debug : DebugAdapterBase
 
         if (string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory))
         {
-            _debugProject.EmulatorDirectory = _officialEmulatorLocation;
+            _debugProject.EmulatorDirectory = OfficialEmulatorLocation;
         }
 
         if (!string.IsNullOrWhiteSpace(_debugProject.EmulatorDirectory))
@@ -635,6 +643,7 @@ public class X16Debug : DebugAdapterBase
         catch (Exception e)
         {
             Logger.LogLine($"ERROR: {e.Message}");
+            Logger.LogError(e.StackTrace);
 
             throw new ProtocolException(e.Message);
         }
@@ -653,7 +662,17 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));        
+        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
+
+        if (_runInOfficialEmulator)
+        {
+            _externalThread = new SysThread(() => { ExternalEmulatorRunner.Run(this); });
+            _externalThread.Name = "DebugLoop Thread";
+            _externalThread.Priority = ThreadPriority.Highest;
+            _externalThread.Start();
+
+            return new LaunchResponse();
+        }
 
         _emulator.Stepping = stopOnEntry;
         _emulator.Control = Control.Paused; // wait for main window
@@ -882,37 +901,7 @@ public class X16Debug : DebugAdapterBase
     {
         Logger.LogLine("Starting emulator");
 
-        // load in SD Card files here.
-        foreach (var file in _debugProject!.SdCardFiles)
-        {
-            if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
-            
-            var name = Path.GetFullPath(file.Source, _debugProject.BasePath);
-            if (File.Exists(name))
-            {
-                _emulator.SdCard.AddFiles(name, file.Dest, file.AllowOverwrite);
-                continue;
-            }
-
-            if (Directory.Exists(name))
-            {
-                _emulator.SdCard.AddDirectory(name, file.Dest, file.AllowOverwrite);
-                continue;
-            }
-
-            var wildcard = Path.GetFileName(name);
-            var path = Path.GetDirectoryName(name);
-            if (!Directory.Exists(path))
-            {
-                Logger.LogError($"Cannot find directory: {path}");
-                continue;
-            }
-
-            foreach (var actFilename in Directory.GetFiles(path, wildcard))
-            {
-                _emulator.SdCard.AddFiles(actFilename, file.Dest, file.AllowOverwrite);
-            }
-        }
+        SetupSdCard();
 
         // tell the app that decompiled files have changed
         foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
@@ -928,13 +917,6 @@ public class X16Debug : DebugAdapterBase
                     SourceReference = i.ReferenceId
                 }
             });
-        }
-
-        // create sdcard if requested
-        if (!string.IsNullOrWhiteSpace(_debugProject.SdCardOutput) && _emulator.SdCard != null)
-        {
-            var sdcardOutput = Path.GetFullPath(_debugProject.SdCardOutput, _debugProject.BasePath);
-            _emulator.SdCard.Save(sdcardOutput, true);
         }
 
         // set initial breakpoints
@@ -1090,6 +1072,50 @@ public class X16Debug : DebugAdapterBase
                 _serviceManager.StackManager.Invalidate();
                 EmulatorWindow.ContinueAudio();
             }
+        }
+    }
+
+    internal void SetupSdCard()
+    {
+
+        // load in SD Card files here.
+        foreach (var file in _debugProject!.SdCardFiles)
+        {
+            if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
+
+            var name = Path.GetFullPath(file.Source, _debugProject.BasePath);
+            if (File.Exists(name))
+            {
+                _emulator.SdCard.AddFiles(name, file.Dest, file.AllowOverwrite);
+                continue;
+            }
+
+            if (Directory.Exists(name))
+            {
+                _emulator.SdCard.AddDirectory(name, file.Dest, file.AllowOverwrite);
+                continue;
+            }
+
+            var wildcard = Path.GetFileName(name);
+            var path = Path.GetDirectoryName(name);
+            if (!Directory.Exists(path))
+            {
+                Logger.LogError($"Cannot find directory: {path}");
+                continue;
+            }
+
+            foreach (var actFilename in Directory.GetFiles(path, wildcard))
+            {
+                _emulator.SdCard.AddFiles(actFilename, file.Dest, file.AllowOverwrite);
+            }
+        }
+
+        // create sdcard if requested
+        if (!string.IsNullOrWhiteSpace(_debugProject.SdCardOutput) && _emulator.SdCard != null)
+        {
+            var sdcardOutput = Path.GetFullPath(_debugProject.SdCardOutput, _debugProject.BasePath);
+            _debugProject.SdCardOutput = sdcardOutput; // so if we run the official emulator we dont need to seek
+            _emulator.SdCard.Save(sdcardOutput, true);
         }
     }
 
