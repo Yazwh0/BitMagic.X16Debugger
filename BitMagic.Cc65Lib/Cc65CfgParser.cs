@@ -9,7 +9,8 @@ public static class Cc65CfgParser
     private static Regex _removeComments = new Regex("/\\*(.|\\n)*?\\*/", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _removeLineComments = new Regex("#.*$", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _sections = new Regex("(?<name>\\w+)\\s+\\{(?<content>(\\n|\\r|\\r\\n|.)*?)\\}", RegexOptions.Multiline | RegexOptions.Compiled);
-    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>\\w[\\S]|[^;,]+),?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+//    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>\\w[\\S]|[^;,]+),?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>(\"([^\"]*)\"|\\w+)|[^;,\\s]+)\\s*,?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
 
     private static readonly object _lock = new();
     private static Cc65Cfg? _returning;
