@@ -47,7 +47,7 @@ internal class BitmagicBuilder
             var templateResult = engine.ProcessFile(project.Code, debugProject.Source, templateOptions, _logger).GetAwaiter().GetResult();
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
-            var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm").FixFilename();
+            var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm"); //.FixFilename();
 
             templateResult.SetName(filename);
             templateResult.SetParentAndMap(project.Code);
