@@ -227,6 +227,8 @@ internal class BreakpointManager
     {
         /// NEW CODE
 
+        arguments.Source.Path = arguments.Source.Path.FixFilename();
+
         var f = _debugableFileManager.GetFileSource(arguments.Source);
 
         if (f != null) // can have files with breakpoints that are not part of the project
