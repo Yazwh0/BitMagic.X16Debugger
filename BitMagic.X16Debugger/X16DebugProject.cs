@@ -290,10 +290,22 @@ public class Cc65InputFile : IDebugProjectFile
     public int StartAddress { get; set; }
 
     [JsonProperty("includes")]
-    public string[] Includes { get; set; } = Array.Empty<string>();
+    public string[] Includes { get; set; } = [];
+
+    [JsonProperty("filemap")]
+    public Cc65InputFileMap[] Filemap { get; set; } = [];
 
     [JsonProperty("basepath")]
     public string BasePath { get; set; } = "";
+}
+
+public class Cc65InputFileMap
+{
+    [JsonProperty("path")]
+    public string Path { get; set; } = "";
+
+    [JsonProperty("replace")]
+    public string Replace { get; set; } = "";
 }
 
 public class BitmagicInputFile : IDebugProjectFile

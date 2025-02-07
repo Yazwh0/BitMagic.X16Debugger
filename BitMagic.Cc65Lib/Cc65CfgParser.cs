@@ -85,6 +85,7 @@ public static class Cc65CfgParser
                 var value = match.Groups["value"];
                 var outputFile = (string?)null;
                 var startAddress = (int?)null;
+                var size = (int?)null;
                 bool useS = false;
 
                 for (var i = 0; i < names.Captures.Count; i++)
@@ -106,6 +107,18 @@ public static class Cc65CfgParser
                         var s = evaluator.Evaluate(start);
 
                         startAddress = Convert.ToInt32(s);
+                    }
+                    else if (string.Equals(names.Captures[i].Value, "size", StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        var start = value.Captures[i].Value;
+
+                        start = start.Replace("%S", fileStartAddress.ToString());
+                        start = start.Replace("__HEADER_LAST__", fileStartAddress.ToString());
+                        start = start.Replace("__ONCE_RUN__", "$400");
+
+                        var s = evaluator.Evaluate(start);
+
+                        size = Convert.ToInt32(s);
                     }
                 }
 
@@ -129,7 +142,7 @@ public static class Cc65CfgParser
                 var areaName = match.Groups["section"].Value;
 
                 if (!file.Areas.ContainsKey(areaName))
-                    file.Areas.Add(areaName, new Cc65MemoryArea() { Name = areaName, StartAddress = startAddress });
+                    file.Areas.Add(areaName, new Cc65MemoryArea() { Name = areaName, StartAddress = startAddress, Size = size });
 
                 if (!toReturn.Areas.ContainsKey(areaName))
                     toReturn.Areas.Add(areaName, file.Areas[areaName]);
@@ -229,6 +242,7 @@ public class Cc65MemoryArea
 {
     public string Name { get; set; } = "";
     public int? StartAddress { get; set; } = null;
+    public int? Size { get; set; } = null;
     public Dictionary<string, Cc65Segment> Segments { get; } = new();
 }
 
