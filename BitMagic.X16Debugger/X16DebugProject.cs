@@ -274,8 +274,8 @@ public class Cc65InputFile : IDebugProjectFile
     [JsonProperty("type")]
     public string Type { get; set; } = "";
 
-    [JsonProperty("filename")]
-    public string Filename { get; set; } = "";
+    [JsonProperty("outputs")]
+    public Cc65InputFileOutput[] Outputs { get; set; } = [];
 
     [JsonProperty("objectFile")]
     public string ObjectFile { get; set; } = "";
@@ -286,9 +286,6 @@ public class Cc65InputFile : IDebugProjectFile
     [JsonProperty("sourcePath")]
     public string SourcePath { get; set; } = "";
 
-    [JsonProperty("startAddress")]
-    public int StartAddress { get; set; }
-
     [JsonProperty("includes")]
     public string[] Includes { get; set; } = [];
 
@@ -297,6 +294,21 @@ public class Cc65InputFile : IDebugProjectFile
 
     [JsonProperty("basepath")]
     public string BasePath { get; set; } = "";
+}
+
+public class Cc65InputFileOutput
+{
+    [JsonProperty("filename")]
+    public string Filename { get; set; } = "";
+
+    [JsonProperty("startAddress")]
+    public int StartAddress { get; set; }
+
+    [JsonProperty("default")]
+    public bool Default { get; set; } = false;
+
+    [JsonProperty("hasHeader")]
+    public bool HasHeader { get; set; } = true;
 }
 
 public class Cc65InputFileMap

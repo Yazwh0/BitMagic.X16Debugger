@@ -30,7 +30,7 @@ public static class Cc65LibParser
         reader.Close();
         fs.Close();
 
-        DisplayInfo(toReturn);
+        //DisplayInfo(toReturn);
 
         return toReturn;
     }
