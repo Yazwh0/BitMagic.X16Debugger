@@ -178,7 +178,7 @@ internal class StackManager
 
                 if (wrapper != null)
                 {
-                    var binaryFile = wrapper.Source as IBinaryFile;
+                    var binaryFile = wrapper.Source as IBinaryFile ?? throw new Exception("wrapper source isn't a binary file.");
 
                     // this is the correct line
                     
@@ -197,7 +197,13 @@ internal class StackManager
                     frame.Name = $"{prefix}{instruction.Scope.Name} {addressString}";
                     toReturn.Scope = instruction.Scope;
 
-                    var (source, lineNumber) = wrapper.FindUltimateSource(address - binaryFile.BaseAddress, _debugableFileManager);
+                    //debuggerAddress = 0x18a563;
+
+                    // todo: calcualte the offset in the binary file for the current address.
+                    var line = AddressFunctions.GetOffsetFromDebuggerAddress(binaryFile.BaseAddress, debuggerAddress);
+
+                    //debuggerAddress - binaryFile.BaseAddress
+                    var (source, lineNumber) = wrapper.FindUltimateSource(line, _debugableFileManager);
 
                     if (source != null)
                     {

@@ -46,7 +46,7 @@ internal class ServiceManager
 
         DebugableFileManager = new(IdManager);
 
-        SourceMapManager = new(Emulator);
+        SourceMapManager = new(Emulator, _debugger.Logger);
         ScopeManager = new(IdManager);
         ExceptionManager = new(Emulator, IdManager);
 

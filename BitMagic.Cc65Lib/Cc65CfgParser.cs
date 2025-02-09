@@ -9,7 +9,7 @@ public static class Cc65CfgParser
     private static Regex _removeComments = new Regex("/\\*(.|\\n)*?\\*/", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _removeLineComments = new Regex("#.*$", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _sections = new Regex("(?<name>\\w+)\\s+\\{(?<content>(\\n|\\r|\\r\\n|.)*?)\\}", RegexOptions.Multiline | RegexOptions.Compiled);
-//    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>\\w[\\S]|[^;,]+),?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    //    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>\\w[\\S]|[^;,]+),?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>(\"([^\"]*)\"|\\w+)|[^;,\\s]+)\\s*,?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
 
     private static readonly object _lock = new();
@@ -86,6 +86,7 @@ public static class Cc65CfgParser
                 var outputFile = (string?)null;
                 var startAddress = (int?)null;
                 var size = (int?)null;
+                var bank = (int?)null;
                 bool useS = false;
 
                 for (var i = 0; i < names.Captures.Count; i++)
@@ -120,6 +121,12 @@ public static class Cc65CfgParser
 
                         size = Convert.ToInt32(s);
                     }
+                    else if (string.Equals(names.Captures[i].Value, "bank", StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        var bnk_raw = value.Captures[i].Value;
+                        var b = evaluator.Evaluate(bnk_raw);
+                        bank = Convert.ToInt32(b);
+                    }
                 }
 
                 if (outputFile == null)
@@ -142,7 +149,7 @@ public static class Cc65CfgParser
                 var areaName = match.Groups["section"].Value;
 
                 if (!file.Areas.ContainsKey(areaName))
-                    file.Areas.Add(areaName, new Cc65MemoryArea() { Name = areaName, StartAddress = startAddress, Size = size });
+                    file.Areas.Add(areaName, new Cc65MemoryArea() { Name = areaName, StartAddress = startAddress, Size = size, Bank = bank });
 
                 if (!toReturn.Areas.ContainsKey(areaName))
                     toReturn.Areas.Add(areaName, file.Areas[areaName]);
@@ -243,6 +250,7 @@ public class Cc65MemoryArea
     public string Name { get; set; } = "";
     public int? StartAddress { get; set; } = null;
     public int? Size { get; set; } = null;
+    public int? Bank { get; set; } = null;
     public Dictionary<string, Cc65Segment> Segments { get; } = new();
 }
 

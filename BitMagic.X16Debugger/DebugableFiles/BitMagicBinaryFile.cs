@@ -157,12 +157,14 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
 
         for (var i = 0; i < DebugData.Count; i++)
         {
-            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress + i);
+            var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress);
             var (offset, secondOffset) = AddressFunctions.GetMemoryLocations(ramBank > 0 ? ramBank : romBank, address);
 
             emulator.Breakpoints[offset] |= DebugData[i];
             if (secondOffset != 0)
                 emulator.Breakpoints[secondOffset] |= DebugData[i];
+
+            debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
         }
     }
 }

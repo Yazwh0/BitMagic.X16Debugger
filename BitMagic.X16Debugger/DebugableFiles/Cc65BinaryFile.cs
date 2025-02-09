@@ -4,6 +4,7 @@ using BitMagic.Common.Address;
 using BitMagic.Compiler;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Emulator;
+using System.IO.Enumeration;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -23,14 +24,12 @@ internal static class Cc65BinaryFileFactory
         var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
 
         var objects = new List<Cc65Obj>();
-        var allSourceMaps = new Dictionary<string, Dictionary<uint, int>>();
 
         var objfilename = Path.Combine(basePath, inputFile.ObjectFile);
         foreach (var f in Directory.GetFiles(Path.GetDirectoryName(objfilename), Path.GetFileName(objfilename)))
         {
             objects.Add(Cc65LibParser.Parse(f, Path.Combine(basePath, inputFile.SourcePath)));
         }
-        //var cc65obj = Cc65LibParser.Parse(Path.Combine(basePath, inputFile.ObjectFile), Path.Combine(basePath, inputFile.SourcePath));
 
         var includes = new List<Cc65Obj>();
         var libraries = new List<Cc65Library>();
@@ -49,7 +48,13 @@ internal static class Cc65BinaryFileFactory
 
         foreach (var file in cc65Cfg.Files.Values)
         {
-            Cc65InputFileOutput? thisFile = inputFile.Outputs.FirstOrDefault(i => i.Filename == file.Filename);
+            // look for exact first
+            var thisFile = inputFile.Outputs.FirstOrDefault(i => i.Filename == file.Filename);
+
+            if (thisFile == null)
+            {
+                thisFile = inputFile.Outputs.FirstOrDefault(i => FileSystemName.MatchesSimpleExpression(i.Filename, file.Filename));
+            }
 
             if (thisFile == null)
             {
@@ -59,37 +64,44 @@ internal static class Cc65BinaryFileFactory
 
             var actualData = File.ReadAllBytes(Path.Combine(basePath, file.Filename));
 
-            var toAdd = new Cc65BinaryFile(file.Filename, (file.StartAddress ?? 0) == 0 ? thisFile.StartAddress : (file.StartAddress ?? 0), actualData.Length);
+            var firstBank = file.Areas.Min(i => i.Value.Bank) ?? 0;
+            var startAddress = (file.StartAddress ?? 0) == 0 ? thisFile.StartAddress : (file.StartAddress ?? 0);
+            var toAdd = new Cc65BinaryFile(file.Filename, AddressFunctions.GetDebuggerAddress(startAddress, firstBank, firstBank) , actualData.Length);
 
-            var currentAddress = thisFile.StartAddress;
+            var currentAddress = startAddress; // thisFile.StartAddress;
             var adjust = thisFile.HasHeader ? 2 : 0;
+            var currentBank = firstBank;
+
+            var sourceMap = new Dictionary<string, int>();
 
             foreach (var area in file.Areas)
             {
-                // get rid of any file header
-                if (area.Value.StartAddress != null && area.Value.StartAddress < toAdd.BaseAddress)
+                // ignore file header
+                if (area.Value.StartAddress != null && (area.Value.StartAddress & 0xffff) < (toAdd.BaseAddress & 0xffff))
                 {
                     //adjust += toAdd.BaseAddress - area.Value.StartAddress.Value;
                     continue;
                 }
 
-                if (area.Value.StartAddress != 0)
+                if (area.Value.StartAddress.HasValue && area.Value.StartAddress != 0)
                 {
+                    if (area.Value.StartAddress.Value < currentAddress && currentAddress != 0)
+                    {
+                        currentBank = (area.Value.Bank.HasValue && area.Value.Bank.Value != 0) ? area.Value.Bank.Value : currentBank++;
+                        adjust += area.Value.StartAddress.Value >= 0xa000 && area.Value.StartAddress.Value < 0xc000 ? 0x2000 : 0x4000; // add on ram\rom bank
+                    }
                     currentAddress = area.Value.StartAddress.Value;
                 }
-                var startCount = currentAddress;
 
-                //Console.WriteLine(area.Value.Name);
+                var startCount = currentAddress;
 
                 foreach (var s in area.Value.Segments)
                 {
                     Cc65Lib.Segment? segment = null;
 
-                    //var exp = cc65obj.StringPool.IndexOf(s.Key);
-
                     var possibles = new List<Cc65Obj>();
                     var possibleSegments = new List<Cc65Lib.Segment>();
-                    var sourceMaps = new Dictionary<string, Dictionary<uint, int>>();
+
                     foreach (var ofile in objects)
                     {
                         foreach (var i in ofile.Segments)
@@ -99,11 +111,6 @@ internal static class Cc65BinaryFileFactory
                             {
                                 possibles.Add(ofile);
                                 possibleSegments.Add(i);
-                                if (!allSourceMaps.ContainsKey(ofile.Filename))
-                                    allSourceMaps.Add(ofile.Filename, new Dictionary<uint, int>());
-
-                                sourceMaps.Add(ofile.Filename, allSourceMaps[ofile.Filename]);
-                                break;
                             }
                         }
                     }
@@ -144,13 +151,16 @@ internal static class Cc65BinaryFileFactory
                         segment = possibleSegments[segmentIndex];
 
                         var cc65obj = possibles[segmentIndex];
-                        var sourceMap = sourceMaps[cc65obj.Filename];
+                        //var sourceMap = sourceMaps[cc65obj.Filename];
 
                         //                        Console.WriteLine($"{cc65obj.StringPool[(int)segment.Name_stringId]} Start address: ${currentAddress:X4} {currentAddress}, Size {segment.Size} CfgSize {s.Value.si}");
 
 
                         if (s.Value.StartAddress != null)
+                        {
                             currentAddress = s.Value.StartAddress.Value;
+                        }
+
 
                         if (s.Key == "EXEHDR")
                         {
@@ -176,40 +186,42 @@ internal static class Cc65BinaryFileFactory
                             }
 
                             // map code
+                            var lineIdx = i.LineInfo[i.LineInfo.Count - 1];
+                            var lineInfo = cc65obj.Lines[(int)lineIdx];
+                            var sourceFile = cc65obj.Files[(int)lineInfo.FileInfo_id];
+                            var fl = cc65obj.StringPool[(int)sourceFile.Filename_StringId];
+
                             if ((i.FragmentType & Fragment.TypeMask) == Fragment.Literal)
                             {
-                                var lineIdx = i.LineInfo[i.LineInfo.Count - 1];
-                                var lineInfo = cc65obj.Lines[(int)lineIdx];
-                                var sourceFile = cc65obj.Files[(int)lineInfo.FileInfo_id];
-
-                                if (!sourceMap.ContainsKey(lineInfo.FileInfo_id))
+                                if (!sourceMap.ContainsKey(fl))
                                 {
-                                    string sourceFilename = "";
-                                    var fl = cc65obj.StringPool[(int)sourceFile.Filename_StringId];
+                                    string sourceFilename = fl;
 
                                     foreach (var m in inputFile.Filemap)
                                     {
-                                        if (!fl.StartsWith(m.Path))
+                                        if (!sourceFilename.StartsWith(m.Path))
                                             continue;
 
-                                        fl = fl.Replace(m.Path, m.Replace);
+                                        sourceFilename = sourceFilename.Replace(m.Path, m.Replace);
                                     }
 
-                                    var f = Path.Combine(basePath, fl);
-                                    sourceFilename = Path.GetFullPath(f);
+                                    sourceFilename = Path.Combine(basePath, sourceFilename);
+                                    sourceFilename = Path.GetFullPath(sourceFilename);
                                     sourceFilename = sourceFilename.FixFilename();
 
                                     var idx = toAdd.AddParent(new StaticTextFile(File.ReadAllText(sourceFilename), sourceFilename, true));
-                                    sourceMap.Add(lineInfo.FileInfo_id, idx);
+                                    sourceMap.Add(fl, idx);
                                 }
 
-                                //Console.WriteLine($"{cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}");
-                                toAdd.SetParentMap(currentAddress - thisFile.StartAddress, (int)lineInfo.Line - 1, sourceMap[lineInfo.FileInfo_id]);
+                                //Console.WriteLine($"{file.Filename} {area.Value.Name} {cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}");
+
+                                var offset = currentAddress - startAddress + (currentBank - firstBank) * 0x2000;
+                                toAdd.SetParentMap(offset, (int)lineInfo.Line - 1, sourceMap[fl]);
                             }
 
                             for (var j = 0; j < i.Data.Length; j++)
                             {
-                                var idx = currentAddress - thisFile.StartAddress + adjust;
+                                var idx = currentAddress - startAddress + adjust;
                                 if (i.Data[j] != actualData[idx] && i.FragmentType != 0x20)
                                 {
                                     Console.WriteLine($"Missmatch Data : {i.Data[j]:X2} Act: {actualData[idx]:X2}");
@@ -283,17 +295,20 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
         for (int i = 0; i < _parentMap.Length; i++)
         {
             if (_parentMap[i].relativeId == -1)
+            {
+                debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
                 continue;
+            }
 
-            var debuggerAddressAct = AddressFunctions.GetDebuggerAddress(debuggerAddress + i, emulator);
-
-            sourceMapManager.AddSourceMap(debuggerAddressAct, new TextLine(new SourceFilePosition()
+            sourceMapManager.AddSourceMap(debuggerAddress, new TextLine(new SourceFilePosition()
             {
                 LineNumber = i - 1,
                 Name = Name,
                 Source = "",
                 SourceFile = this
             }, true));
+
+            debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
         }
     }
 

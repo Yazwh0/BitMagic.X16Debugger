@@ -31,11 +31,6 @@ internal class DebugableFileManager
         if (wrapper.ReferenceId == null && !wrapper.Source.ActualFile) // do not create Ids for real files
             wrapper.ReferenceId = _idManager.AddObject(wrapper, ObjectType.DecompiledData);
 
-        if (wrapper.Path.StartsWith("DAT"))
-        {
-            var a = 0;
-        }
-
         AllFiles.Add(wrapper.Path, wrapper);
 
         foreach (var p in file.Parents)
@@ -68,6 +63,7 @@ internal class DebugableFileManager
 
     public DebugWrapper? GetWrapper(ISourceFile sourceFile)
     {
+        return AllFiles[sourceFile.Path];
         return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
     }
 

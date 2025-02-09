@@ -1,4 +1,5 @@
 ﻿using BitMagic.Common;
+using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
@@ -50,7 +51,7 @@ internal class DebugWrapper : ISourceFile
         // this clears all the debug data
         _breakpointManager.ClearBreakpoints(debuggerAddress, file.Data.Count - (hasHeader ? 2 : 0)); // Unload breakpoints that we're overwriting
 
-        sourceMapManager.ConstructNewSourceMap(file, hasHeader);
+        sourceMapManager.ConstructNewSourceMap(file, hasHeader, debuggerAddress);
 
         var breakpoints = _breakpointManager.CreateBitMagicBreakpoints(debuggerAddress, this, fileManager); // set breakpoints as verified (loade)
 
@@ -97,7 +98,13 @@ internal class DebugWrapper : ISourceFile
             if (binary == null)
                 yield break;
 
-            yield return (LoadedDebuggerAddress + lineNumber, Loaded);
+            var debuggerAddress = Loaded ? LoadedDebuggerAddress : binary.BaseAddress;
+
+            debuggerAddress = AddressFunctions.AddDebuggerAddress(debuggerAddress, lineNumber);
+
+            yield return (debuggerAddress, Loaded);
+            // todo: this needs to be a verified debuggerAddress
+            //yield return (LoadedDebuggerAddress + lineNumber, Loaded);
 
             yield break;
         }
@@ -119,17 +126,21 @@ internal class DebugWrapper : ISourceFile
         if (lineNumber > ParentMap.Count)
             return (Source, lineNumber);
 
-        if (ParentMap[lineNumber].relativeId == -1)
+        var parent = ParentMap[lineNumber];
+
+        if (parent.relativeId == -1)
         {
             return (Source, lineNumber);
         }
 
-        var wrapper = fileManager.GetWrapper(Parents[ParentMap[lineNumber].relativeId]);
+        var parentId = Parents[parent.relativeId];
+
+        var wrapper = fileManager.GetWrapper(parentId);
 
         if (wrapper == null)
             return (null, -1);
 
-        return wrapper.FindUltimateSource(ParentMap[lineNumber].relativeLineNumber, fileManager);
+        return wrapper.FindUltimateSource(parent.relativeLineNumber, fileManager);
     }
 
     public ISourceFile Source => _sourceFile;

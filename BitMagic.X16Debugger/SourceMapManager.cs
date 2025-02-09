@@ -24,10 +24,12 @@ internal class SourceMapManager
     public Dictionary<int, string> Symbols { get; } = new();
 
     private readonly Emulator _emulator;
+    private readonly IEmulatorLogger _logger;
 
-    public SourceMapManager(Emulator emulator)
+    public SourceMapManager(Emulator emulator, IEmulatorLogger logger)
     {
         _emulator = emulator;
+        _logger = logger;
     }
 
     public IBinaryFile? GetSourceFile(int debuggerAddress)
@@ -38,12 +40,15 @@ internal class SourceMapManager
         return null;
     }
 
-    public void ClearSourceMap(int startAddress, int length)
+    public void ClearSourceMap(int startDebuggerAddress, int length)
     {
-        for(var i = 0; i < length; i++)
+        var idx = startDebuggerAddress;
+        for (var i = 0; i < length; i++)
         {
-            if (MemoryToSourceMap.ContainsKey(startAddress + i))
-                MemoryToSourceMap.Remove(startAddress + i);
+            if (MemoryToSourceMap.ContainsKey(idx))
+                MemoryToSourceMap.Remove(idx);
+
+            idx = AddressFunctions.IncrementDebuggerAddress(idx);
         }
     }
 
@@ -117,9 +122,16 @@ internal class SourceMapManager
     /// Load IBinaryFile into memory
     /// </summary>
     /// <param name="source"></param>
-    public void ConstructNewSourceMap(IBinaryFile source, bool hasHeader)
+    public void ConstructNewSourceMap(IBinaryFile source, bool hasHeader, int debuggerAddress)
     {
-        var debuggerAddress = AddressFunctions.GetDebuggerAddress(source.BaseAddress, _emulator);
+        // todo: remap according to where the file was actually loaded.
+        if (debuggerAddress != source.BaseAddress)
+        {
+            _logger.LogLine("");
+            _logger.LogLine($"Warning: {source.Name} loaded to a different address than expected. Expected 0x{source.BaseAddress:X6}, Actual 0x{debuggerAddress:X6}");
+        }
+
+       // var debuggerAddress = loadedDebuggerAddress; // AddressFunctions.GetDebuggerAddress(loadedDebuggerAddress, _emulator);
 
         for (var i = hasHeader ? 2 : 0; i < source.Data.Count; i++)
         {
@@ -129,7 +141,7 @@ internal class SourceMapManager
             }
 
             MemoryToSourceFile[debuggerAddress] = source;
-            debuggerAddress++;
+            debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
         }
     }
 
@@ -138,25 +150,25 @@ internal class SourceMapManager
     /// </summary>
     /// <param name="result">Compile result for the BM prg file</param>
     /// <param name="outputFilename">Filename to be constructed</param>
-    [Obsolete]
-    public void ConstructSourceMap(CompileResult result, string outputFilename)
-    {
-        var state = result.State;
+    //[Obsolete]
+    //public void ConstructSourceMap(CompileResult result, string outputFilename)
+    //{
+    //    var state = result.State;
 
-        foreach (var segment in state.Segments.Values.Where(i => string.Equals(i.Filename, outputFilename, StringComparison.InvariantCultureIgnoreCase)))
-        {
-            foreach (var defaultProc in segment.DefaultProcedure.Values)
-            {
-                MapProc(defaultProc, outputFilename);
-            }
-        }
+    //    foreach (var segment in state.Segments.Values.Where(i => string.Equals(i.Filename, outputFilename, StringComparison.InvariantCultureIgnoreCase)))
+    //    {
+    //        foreach (var defaultProc in segment.DefaultProcedure.Values)
+    //        {
+    //            MapProc(defaultProc, outputFilename);
+    //        }
+    //    }
 
-        foreach (var (name, value) in result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
-        {
-            if (!Symbols.ContainsKey(value.Value))
-                Symbols.Add(value.Value, name);
-        }
-    }
+    //    foreach (var (name, value) in result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
+    //    {
+    //        if (!Symbols.ContainsKey(value.Value))
+    //            Symbols.Add(value.Value, name);
+    //    }
+    //}
 
     private void MapProc(Procedure proc, string outputFilename)
     {
