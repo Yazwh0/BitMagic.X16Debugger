@@ -100,6 +100,10 @@ public class X16Debug : DebugAdapterBase
         {
             HandleHistoryRequestAsync(r);
         });
+        Protocol.RegisterRequestType<SpriteRequest, SpriteRequestArguments, SpriteRequestResponse>(delegate (IRequestResponder<SpriteRequestArguments, SpriteRequestResponse> r)
+        {
+            HandleSpriteRequestAsync(r);
+        });
     }
 
 #if SHOWDAP
@@ -1693,6 +1697,7 @@ public class X16Debug : DebugAdapterBase
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
 //            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
+            "spriteView" => SpriteRequestHandler.HandleRequest(requestArgs as SpriteRequestArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1721,6 +1726,10 @@ public class X16Debug : DebugAdapterBase
         responder.SetResponse(HistoryRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager));
     }
 
+    internal virtual void HandleSpriteRequestAsync(IRequestResponder<SpriteRequestArguments, SpriteRequestResponse> responder)
+    {
+        responder.SetResponse(SpriteRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     //{
     //    return new DataBreakpointInfoResponse();

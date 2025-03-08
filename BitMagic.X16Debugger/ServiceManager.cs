@@ -2,6 +2,7 @@
 using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
+using System.Drawing;
 
 namespace BitMagic.X16Debugger;
 
@@ -68,8 +69,61 @@ internal class ServiceManager
 
         BreakpointManager.BreakpointsUpdated += _debugger.BreakpointManager_BreakpointsUpdated;
 
+        //var colours = Emulator.DebugSpriteColours;
+
+        //var xidx = 1;
+        //foreach (var c in GetGradients(0x800000ff, 0x8000ffff, 21))
+        //{
+        //    colours[xidx++] = c;
+        //}
+        //foreach (var c in GetGradients(0x8000ffff, 0x8000ff00, 21))
+        //{
+        //    colours[xidx++] = c;
+        //}
+        //foreach (var c in GetGradients(0x8000ff00, 0x80ffff00, 21))
+        //{
+        //    colours[xidx++] = c;
+        //}
+        //foreach (var c in GetGradients(0x80ffff00, 0x80ff0000, 22))
+        //{
+        //    colours[xidx++] = c;
+        //}
+        //foreach (var c in GetGradients(0x80ff0000, 0x80ff00ff, 21))
+        //{
+        //    colours[xidx++] = c;
+        //}
+        //foreach (var c in GetGradients(0x80ff00ff, 0x800000ff, 22))
+        //{
+        //    colours[xidx++] = c;
+        //}
+
+        //for (var i = 0; i < 128; i++)
+        //{
+        //    var c = colours[i];
+
+        //    Console.WriteLine($"0x{c:X8}, ");
+        //}
 
         return Emulator;
     }
 
+
+    private static IEnumerable<uint> GetGradients(uint start_val, uint end_val, int steps)
+    {
+        var start = Color.FromArgb((int)start_val);
+        var end = Color.FromArgb((int)end_val);
+
+        int stepA = ((end.A - start.A) / (steps - 1));
+        int stepR = ((end.R - start.R) / (steps - 1));
+        int stepG = ((end.G - start.G) / (steps - 1));
+        int stepB = ((end.B - start.B) / (steps - 1));
+
+        for (int i = 0; i < steps; i++)
+        {
+            yield return (uint)Color.FromArgb(start.A + (stepA * i),
+                                        start.R + (stepR * i),
+                                        start.G + (stepG * i),
+                                        start.B + (stepB * i)).ToArgb();
+        }
+    }
 }
