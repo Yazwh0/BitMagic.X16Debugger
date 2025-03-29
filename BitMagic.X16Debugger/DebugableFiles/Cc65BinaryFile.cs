@@ -4,14 +4,17 @@ using BitMagic.Common.Address;
 using BitMagic.Compiler;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Emulator;
+using Microsoft.Extensions.FileSystemGlobbing;
 using System.IO.Enumeration;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal static class Cc65BinaryFileFactory
 {
-    public static void BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath)
+    public static void BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath, IEmulatorLogger logger)
     {
+        logger.LogLine($"Building cc65 object map for config '{inputFile.Config}'");
+
         basePath = Path.Combine(basePath, inputFile.BasePath);
 
         var defaultFile = inputFile.Outputs.FirstOrDefault(i => i.Default) ?? inputFile.Outputs.FirstOrDefault();
@@ -21,28 +24,46 @@ internal static class Cc65BinaryFileFactory
             throw new Exception("No default output defined");
         }
 
-        var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
+        var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), inputFile.DefaultOuputFile, Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
 
         var objects = new List<Cc65Obj>();
 
-        var objfilename = Path.Combine(basePath, inputFile.ObjectFile);
-        foreach (var f in Directory.GetFiles(Path.GetDirectoryName(objfilename), Path.GetFileName(objfilename)))
+        foreach (var i in inputFile.ObjectFiles)
         {
-            objects.Add(Cc65LibParser.Parse(f, Path.Combine(basePath, inputFile.SourcePath)));
+            var matcher = new Matcher();
+            matcher.AddInclude(i);
+
+            var foundItem = false;
+            foreach (var f in matcher.GetResultsInFullPath(basePath))
+            {
+                logger.LogLine($"  Loading object file {Path.Combine(inputFile.SourcePath, f)}");
+                objects.Add(Cc65LibParser.Parse(f, Path.Combine(basePath, inputFile.SourcePath)));
+                foundItem = true;
+            }
+            if (!foundItem)
+            {
+                logger.LogLine($"  Warning: No files found for '{i}'.");
+            }
         }
 
         var includes = new List<Cc65Obj>();
         var libraries = new List<Cc65Library>();
+        var externalSourceFiles = new List<string>();
+
         foreach (var i in inputFile.Includes)
 
         {
-            if (Path.GetExtension(i) == ".lib")
-            {
-                libraries.Add(Cc65LibParser.ParseLib(Path.Combine(basePath, i)));
-            }
-            else
-            {
-                includes.Add(Cc65LibParser.Parse(Path.Combine(basePath, i)));
+            switch (Path.GetExtension(i).ToLower())
+                {
+                case ".lib":
+                    libraries.Add(Cc65LibParser.ParseLib(Path.Combine(basePath, i)));
+                    break;
+                case ".mac":
+                    externalSourceFiles.Add(Path.Combine(basePath, i));
+                    break;
+                default:
+                    includes.Add(Cc65LibParser.Parse(Path.Combine(basePath, i)));
+                    break;
             }
         }
 
@@ -58,15 +79,30 @@ internal static class Cc65BinaryFileFactory
 
             if (thisFile == null)
             {
-                Console.WriteLine($"Skipping {file.Filename}");
+                logger.LogLine($"Skipping {file.Filename}");
                 continue;
             }
 
-            var actualData = File.ReadAllBytes(Path.Combine(basePath, file.Filename));
+            var referenceFile = Path.Combine(basePath, thisFile.ReferenceFile);
+            if (!File.Exists(referenceFile))
+            {
+                referenceFile = Path.Combine(basePath, thisFile.Filename);
+            }
+
+            byte[] actualData;
+            if (!File.Exists(referenceFile))
+            {
+                logger.LogError($"Cannot find file '{thisFile.Filename}'.");
+                continue;
+            }
+            else
+            {
+                actualData = File.ReadAllBytes(referenceFile);
+            }
 
             var firstBank = file.Areas.Min(i => i.Value.Bank) ?? 0;
             var startAddress = (file.StartAddress ?? 0) == 0 ? thisFile.StartAddress : (file.StartAddress ?? 0);
-            var toAdd = new Cc65BinaryFile(file.Filename, AddressFunctions.GetDebuggerAddress(startAddress, firstBank, firstBank) , actualData.Length);
+            var toAdd = new Cc65BinaryFile(file.Filename, AddressFunctions.GetDebuggerAddress(startAddress, firstBank, firstBank), actualData.Length);
 
             var currentAddress = startAddress; // thisFile.StartAddress;
             var adjust = thisFile.HasHeader ? 2 : 0;
@@ -142,9 +178,23 @@ internal static class Cc65BinaryFileFactory
                             if (s.Value.Optional)
                                 continue;
                             else
-                                throw new Exception($"Cannot find segment {s.Key}");
+                            {
+                                logger.LogLine($"Warning: Cannot find segment {s.Key}");
+                                //throw new Exception($"Cannot find segment {s.Key}");
+                                continue;
+                            }
                         }
                     }
+
+                    if (s.Value.Align != null && s.Value.Align > 1)
+                    {
+                        if (currentAddress % s.Value.Align != 0)
+                        {
+                            currentAddress = ((currentAddress / s.Value.Align.Value) + 1) * s.Value.Align.Value;
+                        }
+                    }
+
+                    // Can there be multiple possible segments?! Is this correct???
 
                     for (var segmentIndex = 0; segmentIndex < possibles.Count; segmentIndex++)
                     {
@@ -171,25 +221,22 @@ internal static class Cc65BinaryFileFactory
                         var fragIdx = 0;
                         foreach (var i in segment.Fragments)
                         {
-                            if (i.IsExpression)
-                            {
-                                // we dont evaluate expressions, or map code
-                                fragIdx++;
-                                currentAddress += i.Size();
-                                //lastFragment = i;
-                                //lastSize = lastFragment.Size();
-                                //var lineIdx = i.LineInfo[i.LineInfo.Count - 1];
-                                //var lineInfo = cc65obj.Lines[(int)lineIdx];
-                                //var sourceFile = cc65obj.Files[(int)lineInfo.FileInfo_id];
-                                //Console.WriteLine($"{cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}\t{lastSize}");
-                                continue;
-                            }
-
                             // map code
                             var lineIdx = i.LineInfo[i.LineInfo.Count - 1];
                             var lineInfo = cc65obj.Lines[(int)lineIdx];
                             var sourceFile = cc65obj.Files[(int)lineInfo.FileInfo_id];
                             var fl = cc65obj.StringPool[(int)sourceFile.Filename_StringId];
+                            //Console.WriteLine($"{file.Filename} {area.Value.Name} {cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}");
+
+
+                            if (i.IsExpression)
+                            {
+                                //Console.WriteLine($"Expression of 0x{i.Size():X2}");
+                                // we dont evaluate expressions, or map code
+                                fragIdx++;
+                                currentAddress += i.Size();
+                                continue;
+                            }
 
                             if ((i.FragmentType & Fragment.TypeMask) == Fragment.Literal)
                             {
@@ -209,6 +256,23 @@ internal static class Cc65BinaryFileFactory
                                     sourceFilename = Path.GetFullPath(sourceFilename);
                                     sourceFilename = sourceFilename.FixFilename();
 
+                                    if (!File.Exists(sourceFilename))
+                                    {
+                                        foreach (var f in externalSourceFiles)
+                                        {
+                                            if (Path.GetFileName(f) == Path.GetFileName(sourceFilename))
+                                            {
+                                                sourceFilename = f;
+                                                break;
+                                            }
+                                        }
+
+                                        if (!File.Exists(sourceFilename))
+                                        {
+                                            logger.LogError($"Cannot find file '{sourceFilename}'");
+                                        }
+                                    }
+
                                     var idx = toAdd.AddParent(new StaticTextFile(File.ReadAllText(sourceFilename), sourceFilename, true));
                                     sourceMap.Add(fl, idx);
                                 }
@@ -224,7 +288,7 @@ internal static class Cc65BinaryFileFactory
                                 var idx = currentAddress - startAddress + adjust;
                                 if (i.Data[j] != actualData[idx] && i.FragmentType != 0x20)
                                 {
-                                    Console.WriteLine($"Missmatch Data : {i.Data[j]:X2} Act: {actualData[idx]:X2}");
+                                    Console.WriteLine($"Missmatch Data {idx:X4} ({startAddress+idx:X4}) : {i.Data[j]:X2} Act: {actualData[idx]:X2}");
                                     throw new Exception($"Difference between object file and generated file at {idx} in segment {s.Key} fragment {fragIdx}");
                                 }
                                 currentAddress++;
@@ -252,8 +316,12 @@ internal static class Cc65BinaryFileFactory
             {
                 p.MapChildren();
             }
+
+            logger.LogLine($"  '{toAdd.Name}' added to debugable files. 0x{startAddress:X4} -> 0x{currentAddress-1:X4}");
             serviceManager.DebugableFileManager.AddFiles(toAdd);
         }
+
+        logger.LogLine("... Done.");
     }
 }
 
@@ -323,5 +391,10 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
     public override void SetParentMap(int lineNumber, int parentLineNumber, int parentId)
     {
         _parentMap[lineNumber] = new ParentSourceMapReference(parentLineNumber, parentId);
+    }
+
+    public void Relocate(int newBaseAddress)
+    {
+        BaseAddress = newBaseAddress;
     }
 }

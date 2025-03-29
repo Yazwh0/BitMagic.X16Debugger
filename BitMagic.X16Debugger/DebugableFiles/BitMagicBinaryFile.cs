@@ -167,4 +167,27 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
             debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
         }
     }
+
+    public void Relocate(int newBaseAddress)
+    {
+        var segment = _result.State.Segments.Values.FirstOrDefault(i => string.Equals(i.Filename, Name, StringComparison.InvariantCultureIgnoreCase));
+
+        if (segment != null) // error condition?
+        {
+            var delta = newBaseAddress - BaseAddress;
+            BaseAddress = newBaseAddress;
+
+            segment.StartAddress += delta;
+
+            foreach (var defaultProc in segment.DefaultProcedure.Values)
+            {
+                defaultProc.Relocate(delta);
+            }
+
+            //foreach (var defaultProc in segment.DefaultProcedure.Values)
+            //{
+            //    MapProcForParents(defaultProc);
+            //}
+        }
+    }
 }

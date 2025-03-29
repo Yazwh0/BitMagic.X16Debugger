@@ -216,7 +216,7 @@ public static class Cc65LibParser
                         fragment.Data = new byte[fragmentSize];
                         break;
                     default:
-                        throw new Exception($"Unklnown fragment type 0x{fragmentType:X02}");
+                        throw new Exception($"Unknown fragment type 0x{fragmentType:X02}");
                 }
 
                 var lineCount = reader.ReadCc65Var();

@@ -67,11 +67,12 @@ internal class DebugableFileManager
         return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
     }
 
-    public void AddBitMagicFilesToSdCard(SdCard sdCard)
+    public void AddBitMagicFilesToSdCard(SdCard sdCard, IList<string> excludes)
     {
         foreach (var i in GetBitMagicFiles())
         {
-            sdCard.AddCompiledFile(i.Filename, i.Data);
+            if (!excludes.Contains(i.Filename))
+                sdCard.AddCompiledFile(i.Filename, i.Data);
         }
     }
 

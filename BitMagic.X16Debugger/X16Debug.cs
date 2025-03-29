@@ -20,6 +20,7 @@ using BitMagic.Common.Address;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Debugger.Variables;
+using CodingSeb.ExpressionEvaluator;
 
 namespace BitMagic.X16Debugger;
 
@@ -61,7 +62,7 @@ public class X16Debug : DebugAdapterBase
 
 
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false,  string officialEmulatorParams = "", IEmulatorLogger? logger = null)
+    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false, string officialEmulatorParams = "", IEmulatorLogger? logger = null)
     {
         Logger = logger ?? new DebugLogger(this);
         _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
@@ -71,7 +72,7 @@ public class X16Debug : DebugAdapterBase
         OfficialEmulatorParams = officialEmulatorParams;
 
         _defaultRomFile = romFile;
-       
+
         InitializeProtocolClient(stdIn, stdOut);
 
 #if SHOWDAP
@@ -246,9 +247,24 @@ public class X16Debug : DebugAdapterBase
 
         if (!string.IsNullOrWhiteSpace(_debugProject.RomFile))
         {
+            var foundRom = false;
             if (File.Exists(_debugProject.RomFile))
+            {
                 rom = _debugProject.RomFile;
-            else
+                foundRom = true;
+            }
+
+            if (!foundRom)
+            {
+                var thisPath = Path.Combine(_debugProject.BasePath, _debugProject.RomFile);
+                if (File.Exists(thisPath))
+                {
+                    rom = thisPath;
+                    foundRom = true;
+                }
+            }
+
+            if (!foundRom)
                 Logger.LogError($"*** Project Rom file not found: {_debugProject.RomFile}");
         }
 
@@ -337,11 +353,17 @@ public class X16Debug : DebugAdapterBase
                 }
 
                 if (string.IsNullOrEmpty(filename))
+                {
                     filename = Path.Combine(_debugProject.EmulatorDirectory, _debugProject.RomBankNames[i].ToLower() + ".sym");
+                }
+                else if (!File.Exists(filename))
+                {
+                    filename = Path.Combine(_debugProject.BasePath, filename);
+                }
 
                 if (!File.Exists(filename))
                 {
-                    Logger.LogLine($"Default symbols file {filename} doesn't exist.");
+                    Logger.LogLine($"Warning: Symbols file '{filename}' doesn't exist.");
                     continue;
                 }
 
@@ -371,48 +393,6 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Symbols = symbolsList.ToArray();
         }
 
-        foreach (var symbols in _debugProject!.Symbols)
-        {
-            Logger.Log($"Loading Symbols {symbols.Symbols}... ");
-            try
-            {
-                var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
-                _serviceManager.SourceMapManager.LoadSymbols(symbols);
-                _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
-
-                Logger.Log($"Decompiling... ");
-
-                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
-
-                Logger.LogLine("Done.");
-            }
-            catch (SymbolsFileNotFound)
-            {
-                Logger.LogLine("Not Found.");
-            }
-            catch (Exception e)
-            {
-                throw new ProtocolException(e.Message);
-            }
-        }
-
-        // disassemble rom banks if the symbols weren't set
-        for (var i = 0; i < _debugProject.RomBankNames.Length; i++)
-        {
-            if (string.IsNullOrWhiteSpace(_debugProject.RomBankNames[i]))
-                continue;
-
-            if (_serviceManager.DisassemblerManager.IsRomDecompiled(i))
-                continue;
-
-            var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
-
-            Logger.Log($"Decompiling Rom Bank {i}... ");
-
-            _serviceManager.DisassemblerManager.DecompileRomBank(bankData, i);
-
-            Logger.LogLine("Done.");
-        }
 
         // Keyboard buffer
         if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any())
@@ -496,28 +476,47 @@ public class X16Debug : DebugAdapterBase
             _emulator.LoadSdCard(sdCard);
         }
 
+        // default compiler options
+        if (_debugProject.CompileOptions == null)
+            _debugProject.CompileOptions = new Compiler.CompileOptions()
+            {
+                BinFolder = "bin",
+            };
+
         var autobootFile = _debugProject.AutobootFile;
 
         try
         {
             foreach (var i in _debugProject.Files)
             {
-                if (i is BitMagicProjectFile bitmagicFile)
+                if (i is BitmagicInputFile bitmagicFile)
                 {
+                    var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
+                    if (result != null)
+                    {
+                        _serviceManager.ExpressionManager.SetState(state);
+
+                        var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+
+                        if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
+                        {
+                            autobootFile = prg.Name;
+                        }
+                    }
 
                     continue;
                 }
 
                 if (i is Cc65InputFile cc65File)
                 {
-                    Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath);
+                    Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
                     continue;
                 }
             }
 
             if (!string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject).GetAwaiter().GetResult();
+                var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject.Source, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
                 if (result != null)
                 {
                     _serviceManager.ExpressionManager.SetState(state);
@@ -542,24 +541,6 @@ public class X16Debug : DebugAdapterBase
                         _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
                     }
 
-                    if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
-                    {
-                        foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
-                        {
-                            string path = "";
-                            if (Path.IsPathRooted(_debugProject.OutputFolder))
-                            {
-                                path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
-                            }
-                            else
-                            {
-                                path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
-                            }
-                            Logger.Log($"Writing to '{path}'... ");
-                            File.WriteAllBytes(path, f.Data.ToArray());
-                            Logger.LogLine("Done.");
-                        }
-                    }
                 }
                 else
                 {
@@ -571,6 +552,24 @@ public class X16Debug : DebugAdapterBase
                 _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
             }
 
+            if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
+            {
+                foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
+                {
+                    string path = "";
+                    if (Path.IsPathRooted(_debugProject.OutputFolder))
+                    {
+                        path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
+                    }
+                    else
+                    {
+                        path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
+                    }
+                    Logger.Log($"Writing to '{path}'... ");
+                    File.WriteAllBytes(path, f.Data.ToArray());
+                    Logger.LogLine("Done.");
+                }
+            }
         }
         catch (CompilerLineException e)
         {
@@ -582,11 +581,18 @@ public class X16Debug : DebugAdapterBase
 
             var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
 
-            var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
+            try
+            {
+                var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
 
-            var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
+                var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
 
-            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
+                Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
+            }
+            catch
+            {
+                Logger.LogLine($"ERROR: \"??\" \"{e.Message}\"");
+            }
 
             Protocol.SendEvent(new TerminatedEvent() { Restart = false });
 
@@ -666,7 +672,136 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"));
+        // ROM Patching
+        var romfiles = new List<string>();
+        if (_debugProject.RomSource != null)
+        {
+            var evaluator = new BaseExpressionEvaluator();
+
+            foreach (var i in _debugProject.RomSource)
+            {
+                var thisFile = Path.GetFileName(i.Filename);
+                romfiles.Add(thisFile);
+                var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(thisFile);
+
+                if (debugableFile == null)
+                {
+                    Logger.LogError($"Cannot find '{i.Filename}'.");
+                    continue;
+                }
+
+                int address;
+                if (i.Address is int)
+                {
+                    address = (int)i.Address;
+                }
+                else if (i.Address is string v)
+                {
+                    try
+                    {
+                        address = evaluator.Evaluate<int>(v);
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.LogError($"Cannot parse address '{v}' for '{i.Filename}' ({e.Message})  so skipping.");
+                        continue;
+                    }
+                }
+                else
+                {
+                    Logger.LogError($"Cannot parse address for '{i.Filename}' so skipping.");
+                    continue;
+                }
+
+                if (address < 0xc000 || address >= 0x10000)
+                {
+                    Logger.LogError($"Address for '{i.Filename}' {address:X4} is not in the ROM area.");
+                    continue;
+                }
+
+                Logger.Log($"Loading debugger info for '{i.Filename}' into ROM at 0x{i.Bank:X2}{address:X4}... ");
+
+                var actFilename = FileHelper.GetFilename(i.Filename, _debugProject, workspaceFolder);
+
+                if (actFilename != null)
+                {
+                    var data = File.ReadAllBytes(actFilename);
+                    var baseAddress = i.Bank * 0x4000 + address - 0xc000;
+
+                    for (var idx = 0; idx < data.Length; idx++)
+                    {
+                        if (_emulator.RomBankAct == i.Bank)
+                            _emulator.Memory[address + idx] = data[idx];
+
+                        _emulator.RomBank[baseAddress + idx] = data[idx];
+                    }
+
+                    var actualAddress = AddressFunctions.GetDebuggerAddress(address, 0, i.Bank);
+
+                    var currentBank = _emulator.RomBankAct;
+                    _emulator.RomBankAct = (uint)i.Bank;
+                    var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, false, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                    _emulator.RomBankAct = currentBank;
+
+                    Logger.LogLine("Done");
+
+                    foreach (var breakpoint in breakpoints)
+                    {
+                        Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
+                    }
+                }
+                else
+                {
+                    Logger.LogError($"Could not find file '{i.Filename}'");
+                }
+            }
+        }
+
+        // ROM Disassembly
+        foreach (var symbols in _debugProject!.Symbols)
+        {
+            Logger.Log($"Loading Symbols {symbols.Symbols}... ");
+            try
+            {
+                var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
+                _serviceManager.SourceMapManager.LoadSymbols(symbols);
+                _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
+
+                Logger.Log($"Decompiling... ");
+
+                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
+
+                Logger.LogLine("Done.");
+            }
+            catch (SymbolsFileNotFound)
+            {
+                Logger.LogLine("Not Found.");
+            }
+            catch (Exception e)
+            {
+                throw new ProtocolException(e.Message);
+            }
+        }
+
+        // disassemble rom banks if the symbols weren't set
+        for (var i = 0; i < 256; i++)
+        {
+            if (_debugProject.RomBankNames.Length > i && string.IsNullOrWhiteSpace(_debugProject.RomBankNames[i]))
+                continue;
+
+            if (_serviceManager.DisassemblerManager.IsRomDecompiled(i))
+                continue;
+
+            var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
+
+            //            Logger.Log($"Decompiling Rom Bank {i}... ");
+
+            _serviceManager.DisassemblerManager.DecompileRomBank(bankData, i);
+
+            //            Logger.LogLine("Done.");
+        }
+
+        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"), romfiles);
 
         if (_runInOfficialEmulator)
         {
@@ -763,7 +898,7 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
-    protected override SetFunctionBreakpointsResponse HandleSetFunctionBreakpointsRequest(SetFunctionBreakpointsArguments arguments) 
+    protected override SetFunctionBreakpointsResponse HandleSetFunctionBreakpointsRequest(SetFunctionBreakpointsArguments arguments)
         => _serviceManager.BreakpointManager.HandleFunctionBreakpointsRequest(arguments);
 
     #endregion
@@ -1394,8 +1529,8 @@ public class X16Debug : DebugAdapterBase
             else
             {
                 var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
-                    if (_setlfs_secondaryaddress < 2)
-                        fileLength = -2;
+                if (_setlfs_secondaryaddress < 2)
+                    fileLength = -2;
 
                 if (fileLength > 0)
                 {
@@ -1696,7 +1831,7 @@ public class X16Debug : DebugAdapterBase
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
-//            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
+            //            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
             "spriteView" => SpriteRequestHandler.HandleRequest(requestArgs as SpriteRequestArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };

@@ -127,11 +127,15 @@ internal class SourceMapManager
         // todo: remap according to where the file was actually loaded.
         if (debuggerAddress != source.BaseAddress)
         {
-            _logger.LogLine("");
-            _logger.LogLine($"Warning: {source.Name} loaded to a different address than expected. Expected 0x{source.BaseAddress:X6}, Actual 0x{debuggerAddress:X6}");
+            if ((debuggerAddress & 0xffff) != (source.BaseAddress & 0xffff)) // dont warn for bank changes, but apply relocate
+            {
+                _logger.LogLine("");
+                _logger.LogLine($"Warning: {source.Name} loaded to a different address than expected. Expected 0x{source.BaseAddress:X6}, Actual 0x{debuggerAddress:X6}");
+            }
+            source.Relocate(debuggerAddress);
         }
 
-       // var debuggerAddress = loadedDebuggerAddress; // AddressFunctions.GetDebuggerAddress(loadedDebuggerAddress, _emulator);
+        // var debuggerAddress = loadedDebuggerAddress; // AddressFunctions.GetDebuggerAddress(loadedDebuggerAddress, _emulator);
 
         for (var i = hasHeader ? 2 : 0; i < source.Data.Count; i++)
         {

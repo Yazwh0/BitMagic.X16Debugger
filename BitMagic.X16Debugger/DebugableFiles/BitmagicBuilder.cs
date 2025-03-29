@@ -4,6 +4,7 @@ using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.Extensions;
+using NuGet.Protocol.Plugins;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 
@@ -25,16 +26,16 @@ internal class BitmagicBuilder
     /// </summary>
     /// <param name="debugProject"></param>
     /// <returns>Binary file for the main segment</returns>
-    public async Task<(DebugWrapper?, CompileState)> Build(X16DebugProject debugProject)
+    public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions)// X16DebugProject debugProject)
     {
         var project = new Project();
-        _logger.LogLine($"Compiling {debugProject.Source} ");
+        _logger.LogLine($"Compiling {source} ");
 
-        if (debugProject.CompileOptions != null)
-            project.CompileOptions = debugProject.CompileOptions;
+        if (compileOptions != null)
+            project.CompileOptions = compileOptions;
 
-        debugProject.Source = Path.GetFullPath(Path.Combine(debugProject.BasePath, debugProject.Source));
-        var codeFile = new BitMagicProjectFile(debugProject.Source);
+        source = Path.GetFullPath(Path.Combine(basePath, source));
+        var codeFile = new BitMagicProjectFile(source);
         project.Code = codeFile;
         await codeFile.Load();
 
@@ -43,16 +44,16 @@ internal class BitmagicBuilder
 
         if (content.Any()) // ??
         {
-            var templateOptions = debugProject.CompileOptions!.AsTemplateOptions(debugProject.BasePath);
-            var templateResult = engine.ProcessFile(project.Code, debugProject.Source, templateOptions, _logger).GetAwaiter().GetResult();
+            var templateOptions = project.CompileOptions!.AsTemplateOptions(basePath);
+            var templateResult = engine.ProcessFile(project.Code, source, templateOptions, _logger).GetAwaiter().GetResult();
 
-            templateResult.ReferenceId = _codeGeneratorManager.Register(debugProject.Source, templateResult);
-            var filename = (Path.GetFileNameWithoutExtension(debugProject.Source) + ".generated.bmasm"); //.FixFilename();
+            templateResult.ReferenceId = _codeGeneratorManager.Register(source, templateResult);
+            var filename = (Path.GetFileNameWithoutExtension(source) + ".generated.bmasm"); //.FixFilename();
 
             templateResult.SetName(filename);
             templateResult.SetParentAndMap(project.Code);
 
-            if (debugProject.CompileOptions != null && debugProject.CompileOptions.SaveGeneratedBmasm)
+            if (project.CompileOptions != null && project.CompileOptions.SaveGeneratedBmasm)
             {
                 File.WriteAllText(Path.Combine(templateOptions.BinFolder, filename), templateResult.Source.Code);
             }

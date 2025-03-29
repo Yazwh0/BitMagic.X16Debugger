@@ -200,7 +200,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("breakpoints")]
     [Description("Breakpoints to be set at system startup.")]
-    public int[] Breakpoints { get; set; } = Array.Empty<int>();
+    public int[] Breakpoints { get; set; } = [];
 
     /// <summary>
     /// Size of the history buffer for the history view. Must be a power of 2.
@@ -215,6 +215,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("windowScale")]
     [Description("Multiplier to scale the display window.")]
     public float WindowScale { get; set; } = 0x01;
+
+    /// <summary>
+    /// Files to be loaded into ROM
+    /// </summary>
+    [JsonProperty("romSource")]
+    [Description("Files to be loaded into ROM.")]
+    public RomSource[] RomSource { get; set; } = [];
 }
 
 
@@ -277,8 +284,8 @@ public class Cc65InputFile : IDebugProjectFile
     [JsonProperty("outputs")]
     public Cc65InputFileOutput[] Outputs { get; set; } = [];
 
-    [JsonProperty("objectFile")]
-    public string ObjectFile { get; set; } = "";
+    [JsonProperty("objectFiles")]
+    public string[] ObjectFiles { get; set; } = [];
 
     [JsonProperty("config")]
     public string Config { get; set; } = "";
@@ -294,6 +301,9 @@ public class Cc65InputFile : IDebugProjectFile
 
     [JsonProperty("basepath")]
     public string BasePath { get; set; } = "";
+
+    [JsonProperty("defaultOutputFile")]
+    public string DefaultOuputFile { get; set; } = "";
 }
 
 public class Cc65InputFileOutput
@@ -308,7 +318,12 @@ public class Cc65InputFileOutput
     public bool Default { get; set; } = false;
 
     [JsonProperty("hasHeader")]
+    [Description("If the file as a two byte header.")]
     public bool HasHeader { get; set; } = true;
+
+    [JsonProperty("referenceFile")]
+    [Description("The source file that will be used to compare the generated data against.")]
+    public string ReferenceFile { get; set; } = "";
 }
 
 public class Cc65InputFileMap
@@ -418,4 +433,12 @@ public class RangeDefinition
     [JsonProperty("type")]
     [Description("Type of definition, supported : 'jumptable'")]
     public string Type { get; set; } = "jumptable";
+}
+
+[JsonObject("romSource")]
+public class RomSource
+{
+    public string Filename { get; set; } = "";
+    public int Bank { get; set; }
+    public object Address { get; set; } = "0";
 }

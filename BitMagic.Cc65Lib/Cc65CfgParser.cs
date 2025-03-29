@@ -15,7 +15,7 @@ public static class Cc65CfgParser
     private static readonly object _lock = new();
     private static Cc65Cfg? _returning;
 
-    public static Cc65Cfg Parse(string filename, string defaultOutputPath, int? fileStartAddress)
+    public static Cc65Cfg Parse(string filename, string? defaultOutputFile, string defaultOutputPath, int? fileStartAddress)
     {
         lock (_lock)
         {
@@ -83,7 +83,7 @@ public static class Cc65CfgParser
             {
                 var names = match.Groups["name"];
                 var value = match.Groups["value"];
-                var outputFile = (string?)null;
+                var outputFile = defaultOutputFile;
                 var startAddress = (int?)null;
                 var size = (int?)null;
                 var bank = (int?)null;
@@ -166,6 +166,7 @@ public static class Cc65CfgParser
                 var area = (string?)null;
                 var areaType = (string?)null;
                 var startAddress = (int?)null;
+                var align = (int?)null;
                 bool optional = false;
 
                 for (var i = 0; i < names.Captures.Count; i++)
@@ -192,6 +193,12 @@ public static class Cc65CfgParser
                     {
                         optional = string.Equals(value.Captures[i].Value, "yes", StringComparison.InvariantCultureIgnoreCase);
                     }
+                    else if (string.Equals(names.Captures[i].Value, "align", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        var s = evaluator.Evaluate(value.Captures[i].Value);
+
+                        align = Convert.ToInt32(s);
+                    }
                 }
 
                 if (area == null || areaType == null)
@@ -214,7 +221,7 @@ public static class Cc65CfgParser
 
                 var memoryArea = toReturn.Areas[area];
 
-                memoryArea.Segments.Add(segmentName, new Cc65Segment() { Name = area, StartAddress = startAddress, Optional = optional });
+                memoryArea.Segments.Add(segmentName, new Cc65Segment() { Name = area, StartAddress = startAddress, Optional = optional, Align = align });
             }
             return toReturn;
         }
@@ -259,4 +266,5 @@ public class Cc65Segment
     public string Name { get; set; } = "";
     public int? StartAddress { get; set; } = null;
     public bool Optional { get; set; }
+    public int? Align { get; set; }
 }

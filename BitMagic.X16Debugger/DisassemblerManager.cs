@@ -330,7 +330,7 @@ internal class DisassemblerManager
         var id = _idManager.AddObject(result, ObjectType.DecompiledData);
         BankToId.Add((NotSet, bank), id);
 
-        var name = _project?.RomBankNames.Length >= bank ? _project.RomBankNames[bank] : "";
+        var name = _project?.RomBankNames.Length > bank ? _project.RomBankNames[bank] : "";
 
         if (string.IsNullOrWhiteSpace(name))
             name = $"RomBank_{bank}.bmasm";
