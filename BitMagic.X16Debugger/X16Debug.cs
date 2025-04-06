@@ -191,6 +191,7 @@ public class X16Debug : DebugAdapterBase
 
             try
             {
+                DebugProjectFileConverter._logger = Logger;
                 _debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(toCompile));
                 if (_debugProject == null)
                     throw new ProtocolException($"Could not deseralise {toCompile} into a X16DebugProject.");
@@ -487,30 +488,33 @@ public class X16Debug : DebugAdapterBase
 
         try
         {
-            foreach (var i in _debugProject.Files)
+            if (_debugProject.Files != null)
             {
-                if (i is BitmagicInputFile bitmagicFile)
+                foreach (var i in _debugProject.Files)
                 {
-                    var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
-                    if (result != null)
+                    if (i is BitmagicInputFile bitmagicFile)
                     {
-                        _serviceManager.ExpressionManager.SetState(state);
-
-                        var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
-
-                        if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
+                        var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
+                        if (result != null)
                         {
-                            autobootFile = prg.Name;
+                            _serviceManager.ExpressionManager.SetState(state);
+
+                            var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+
+                            if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
+                            {
+                                autobootFile = prg.Name;
+                            }
                         }
+
+                        continue;
                     }
 
-                    continue;
-                }
-
-                if (i is Cc65InputFile cc65File)
-                {
-                    Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
-                    continue;
+                    if (i is Cc65InputFile cc65File)
+                    {
+                        Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
+                        continue;
+                    }
                 }
             }
 

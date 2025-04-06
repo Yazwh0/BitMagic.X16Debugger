@@ -1,4 +1,5 @@
-﻿using BitMagic.Compiler;
+﻿using BitMagic.Common;
+using BitMagic.Compiler;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.ComponentModel;
@@ -235,6 +236,9 @@ public class SdCardFile
 
 public class DebugProjectFileConverter : JsonConverter
 {
+    // NewtonSoft will not take an instance of the converter. No idea why
+    internal static IEmulatorLogger? _logger = null;
+
     public override bool CanConvert(Type objectType) => typeof(IDebugProjectFile).IsAssignableFrom(objectType);
 
     public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
@@ -246,7 +250,9 @@ public class DebugProjectFileConverter : JsonConverter
         {
             JObject obj = JObject.Load(i.CreateReader());
 
-            IDebugProjectFile? item = obj["type"]?.ToString() switch
+            var fileType = obj["type"]?.ToString().ToLower();
+
+            IDebugProjectFile? item = fileType switch
             {
                 "cc65" => new Cc65InputFile(),
                 "bitmagic" => new BitmagicInputFile(),
@@ -254,7 +260,10 @@ public class DebugProjectFileConverter : JsonConverter
             };
 
             if (item == null)
-                return null;
+            {
+                _logger?.LogError($"Unknown project filetype '{fileType}'");
+                continue;
+            }
 
             serializer.Populate(obj.CreateReader(), item);
             toReturn.Add(item);
