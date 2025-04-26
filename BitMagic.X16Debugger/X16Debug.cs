@@ -1650,6 +1650,9 @@ public class X16Debug : DebugAdapterBase
                 case "sdcard":
                     data = _emulator.SdCard.Image;
                     break;
+                case "sdcardblock":
+                    data = _emulator.SpiOutboundBuffer.Slice(0, (int)_emulator.Spi.SendLength);
+                    break;
                 default:
                     throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
             }
