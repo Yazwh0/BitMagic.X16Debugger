@@ -532,6 +532,7 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Auto TX", "bool", () => _emulator.Spi.AutoTx.ToString(), () => _emulator.Spi.AutoTx));
         scope.AddVariable(new VariableMap("Receive Count", "uint", () => $"0x{_emulator.Spi.ReceiveCount:X8}", () => _emulator.Spi.ReceiveCount));
         scope.AddVariable(new VariableMap("Send Count", "uint", () => $"0x{_emulator.Spi.SendCount:X8}", () => _emulator.Spi.SendCount));
+        scope.AddVariable(new VariableMap("Send Length", "uint", () => $"0x{_emulator.Spi.SendLength:X8}", () => _emulator.Spi.SendLength));
         scope.AddVariable(new VariableMap("Idle", "bool", () => _emulator.Spi.Idle.ToString(), () => _emulator.Spi.Idle));
         //scope.AddVariable(new VariableMap("Command Next", "byte", () => $"0x{_emulator.Spi.CommandNext:X2}", () => _emulator.Spi.CommandNext));
         scope.AddVariable(new VariableMap("Previous Value", "uint", () => $"0x{_emulator.Spi.PreviousValue:X8}", () => _emulator.Spi.PreviousValue));
