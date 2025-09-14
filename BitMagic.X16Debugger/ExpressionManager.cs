@@ -51,6 +51,26 @@ internal class ExpressionManager
 
     private void _evaluator_EvaluateVariable(object? sender, VariableEvaluationEventArg e)
     {
+        var scope = e.This as Dictionary<string, object>;
+
+        if (scope != null)
+        {
+            foreach (var kv in scope)
+            {
+                if (kv.Key.Replace(" ", "") == e.Name)
+                {
+                    var f = kv.Value as Func<object>;
+
+                    if (f != null)
+                        e.Value = f();
+                    else
+                        e.Value = kv.Value;
+                    return;
+                }
+            }
+            return; // if there is scope, then we shouldn't consider variables???
+        }
+
         var tree = _variableManager.ObjectTree;
 
         if (tree.ContainsKey(e.Name))

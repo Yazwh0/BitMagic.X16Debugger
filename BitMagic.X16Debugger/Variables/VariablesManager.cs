@@ -241,7 +241,7 @@ internal class VariableManager
             Register(
                 new VariableChildren("Data 0", () => $"0x{_emulator.Memory[0x9F23]:X2}", "int",
                 new[] {
-                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => _emulator.Vera.Data0_Address),
+                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => (uint)_emulator.Vera.Data0_Address),
                     new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step)
                 }
             )));
@@ -250,7 +250,7 @@ internal class VariableManager
             Register(
                 new VariableChildren("Data 1", () => $"0x{_emulator.Memory[0x9F24]:X2}", "int",
                 new[] {
-                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => _emulator.Vera.Data1_Address),
+                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => (uint)_emulator.Vera.Data1_Address),
                     new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step)
                 }
             )));

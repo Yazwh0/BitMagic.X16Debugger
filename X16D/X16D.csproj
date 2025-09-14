@@ -10,6 +10,7 @@
     <PackageProjectUrl>https://github.com/Yazwh0/BitMagic</PackageProjectUrl>
     <PackageIcon>butterfly.jpg</PackageIcon>
     <Version>0.0.0.1</Version>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
