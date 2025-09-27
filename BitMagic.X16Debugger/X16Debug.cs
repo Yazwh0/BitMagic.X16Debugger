@@ -1344,7 +1344,7 @@ public class X16Debug : DebugAdapterBase
         {
             if (_emulator.Carry && _emulator.A != 0 && _serviceManager.ExceptionManager.IsSet("FIO"))
             {
-                var stopMessage = $"LOAD returned error code 0x{_emulator.A:X2} : {BasicErrors.GetErrorString(_emulator.A)}";
+                var stopMessage = $"LOAD returned error code 0x{_emulator.A:X2} : {BasicErrors.GetErrorString(_emulator.A)} '{_setnam_value}'";
                 Logger.LogError(stopMessage);
 
                 _serviceManager.ExceptionManager.LastException = "FIO";
