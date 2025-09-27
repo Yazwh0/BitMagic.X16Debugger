@@ -1095,7 +1095,7 @@ public class X16Debug : DebugAdapterBase
                     }
                     if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Stack) != 0)
                     {
-                        HandleSourceBreakpointHit();
+                        HandleStackbreakpointHit();
                     }
                     if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Vram) != 0)
                     {
@@ -1338,6 +1338,28 @@ public class X16Debug : DebugAdapterBase
         }
     }
 
+    private void HandleStackbreakpointHit()
+    {
+        if (_emulator.State.StackBreakpointHit == DebugConstants.LoadCheck)
+        {
+            if (_emulator.Carry && _emulator.A != 0 && _serviceManager.ExceptionManager.IsSet("FIO"))
+            {
+                var stopMessage = $"LOAD returned error code 0x{_emulator.A:X2} : {BasicErrors.GetErrorString(_emulator.A)}";
+                Logger.LogError(stopMessage);
+
+                _serviceManager.ExceptionManager.LastException = "FIO";
+                _serviceManager.ExceptionManager.LastExceptionMessage = stopMessage;
+                this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, stopMessage, 0, null, true));
+                _emulator.Stepping = true;
+                return;
+            }
+        }
+
+        if ((_emulator.State.StackBreakpointHit ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
+        {
+            _emulator.Stepping = false;
+        }
+    }
 
     // Should this be moved to the breakpoint manager??
     private void HandleSourceBreakpointHit()
@@ -1491,6 +1513,10 @@ public class X16Debug : DebugAdapterBase
 
         if (_emulator.Pc == KERNEL_Load) // load
         {
+            // inject a stop in the stack so we can hook the return
+            if (_serviceManager.ExceptionManager.IsSet("FIO"))
+                _serviceManager.StackManager.SetBreakpointOnManagedCaller((byte)DebugConstants.LoadCheck);
+
             if (!_setnam_fileexists)
             {
                 Logger.LogLine($"LOAD called but file does not exist.");

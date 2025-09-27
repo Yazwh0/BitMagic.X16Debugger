@@ -1,0 +1,50 @@
+﻿namespace BitMagic.X16Debugger;
+
+internal static class BasicErrors
+{
+    public static string GetErrorString(int errorCode) => errorCode switch
+    {
+        0 => "",
+        1 => "Too many files",
+        2 => "File open",
+        3 => "File not open",
+        4 => "File not found",
+        5 => "Device not present",
+        6 => "Not input file",
+        7 => "Not output file",
+        8 => "Missing file name",
+        9 => "Illegal device number",
+        10 => "Next without for",
+        11 => "Syntax error",
+        12 => "Return without gosub",
+        13 => "Out of data",
+        14 => "Illegal quantity",
+        15 => "Overflow",
+        16 => "Out of memory",
+        17 => "Undefied statement",
+        18 => "Bad subscript",
+        19 => "Redimensioned array",
+        20 => "Division by zero",
+        21 => "Illegal direct",
+        22 => "Type mismatch",
+        23 => "String too long",
+        24 => "File data",
+        25 => "Formula too complex",
+        26 => "Can't continue",
+        27 => "Undefined function",
+        28 => "Verify",
+        29 => "Load",
+        30 => "Break",
+        31 => "Not graphics mode",
+        32 => "Channel", 
+        33 => "Instrument",
+        34 => "Octave",
+        35 => "Volume",
+        36 => "Drum",
+        37 => "Depth",
+        38 => "Frequency",
+        39 => "Pan",
+        40 => "Machine Capability",
+        _ => "Unknown error"
+    };
+}

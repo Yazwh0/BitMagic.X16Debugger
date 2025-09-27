@@ -10,6 +10,7 @@ internal class ExceptionManager
     private readonly Dictionary<string, Breakpoint> _setBreakpoints = new();
 
     public string LastException { get; set; } = "";
+    public string LastExceptionMessage { get; set; } = "";
 
     public ExceptionManager(Emulator emulator, IdManager idManager)
     {
@@ -18,7 +19,8 @@ internal class ExceptionManager
         _breakpoints = new Dictionary<string, Breakpoint>()
         {
             { "BRK", new Breakpoint() { Id = idManager.GetId(), Verified = true } },
-            { "EXP", new Breakpoint() { Id = idManager.GetId(), Verified = true } }
+            { "EXP", new Breakpoint() { Id = idManager.GetId(), Verified = true } },
+            { "FIO", new Breakpoint() { Id = idManager.GetId(), Verified = true } }
         };
     }
 
@@ -41,6 +43,15 @@ internal class ExceptionManager
             Default = true,
             SupportsCondition = false,
             ConditionDescription = ""
+        },
+        new ExceptionBreakpointsFilter()
+        {
+            Filter = "FIO",
+            Label = "File IO Exception",
+            Description = "LOAD returned an error code.",
+            Default = true,
+            SupportsCondition = false,
+            ConditionDescription = ""
         }
     };
 
@@ -58,6 +69,7 @@ internal class ExceptionManager
             {
                 case "BRK":
                 case "EXP":
+                case "FIO":
                     _setBreakpoints.Add(i, _breakpoints[i]);
                     break;
                 default:
@@ -80,6 +92,7 @@ internal class ExceptionManager
         {
             "BRK" => new ExceptionInfoResponse() { Description = "BRK has been hit.", ExceptionId = "BRK" },
             "EXP" => new ExceptionInfoResponse() { Description = "Exception raised within code.", ExceptionId = "EXP" },
+            "FIO" => new ExceptionInfoResponse() { Description = string.IsNullOrWhiteSpace(LastExceptionMessage) ? "File IO Exception." : LastExceptionMessage, ExceptionId = "FIO" },
             _ => new ExceptionInfoResponse() { Description = "Unknown exception", ExceptionId = "UNK" }
         };
 

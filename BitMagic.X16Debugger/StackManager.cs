@@ -6,6 +6,8 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
+using System.Collections.Generic;
+using System.Net;
 
 
 namespace BitMagic.X16Debugger;
@@ -131,14 +133,36 @@ internal class StackManager
     }
 
     // Sets a breakpoint on the caller on the stack breakpoint list. If no called can be found, it will do nothing.
-    public void SetBreakpointOnCaller()
+    public StackItem? SetBreakpointOnCaller(byte breakpointType = 0x01)
     {
         var first = GenerateFrames().FirstOrDefault();
 
         if (first == null)
-            return;
+            return null;
 
-        _emulator.StackBreakpoints[first.StackPointer + 1] = 0x01;
+        _emulator.StackBreakpoints[first.StackPointer + 1] = breakpointType;
+
+        return first;
+    }
+
+    // Sets a breakpoint on the caller on the stack breakpoint list. If no called can be found, it will do nothing.
+    public StackItem? SetBreakpointOnManagedCaller(byte breakpointType = 0x01)
+    {
+        foreach (var frame in GenerateFrames())
+        {
+            var debuggerAddress = AddressFunctions.GetDebuggerAddress(frame.Address, frame.RamBank, frame.RomBank);
+
+            var instruction = _sourceMapManager.GetSourceMap(debuggerAddress);
+
+            if (instruction != null)
+            {
+                _emulator.StackBreakpoints[frame.StackPointer + 1] = breakpointType;
+
+                return frame;
+            }
+        }
+
+        return null;
     }
 
     private StackFrameState GenerateFrame(StackItem parameters)
