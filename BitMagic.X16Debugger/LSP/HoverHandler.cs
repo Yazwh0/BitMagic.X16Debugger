@@ -38,18 +38,20 @@ internal class HoverHandler(DocumentCache documentCache, TokenDescriptionService
             };
         }
 
-        var hoverContent = new MarkedStringsOrMarkupContent(
-            new MarkupContent
-            {
-                Kind = MarkupKind.Markdown,
-                Value = $"**Hover Info**\nYou hovered over `{request.Position.Line}:{request.Position.Character}` word: `{word}` line `{file[request.Position.Line]}`"
-            });
+        return null;
 
-        return new Hover
-        {
-            Contents = hoverContent,
-            Range = new Range(request.Position, request.Position)
-        };
+        //var hoverContent = new MarkedStringsOrMarkupContent(
+        //    new MarkupContent
+        //    {
+        //        Kind = MarkupKind.Markdown,
+        //        Value = $"**Hover Info**\nYou hovered over `{request.Position.Line}:{request.Position.Character}` word: `{word}` line `{file[request.Position.Line]}`"
+        //    });
+
+        //return new Hover
+        //{
+        //    Contents = hoverContent,
+        //    Range = new Range(request.Position, request.Position)
+        //};
     }
 
     private static string? GetWordAtCharIndex(string input, int index)
