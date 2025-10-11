@@ -4,7 +4,6 @@ using BitMagic.Compiler;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.Extensions;
-using NuGet.Protocol.Plugins;
 
 namespace BitMagic.X16Debugger.DebugableFiles;
 

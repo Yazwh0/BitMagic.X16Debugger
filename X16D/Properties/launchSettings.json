@@ -3,8 +3,8 @@
     "X16D": {
       "commandName": "Project",
       "nativeDebugging": true,
-      "xcommandLineArgs": "--port 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48",
-      "commandLineArgs": "--port 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48"
+      "xcommandLineArgs": "--dapport 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48",
+      "commandLineArgs": "--dapport 2563 --officialEmulator c:\\Users\\benju\\AppData\\Roaming\\Code\\User\\globalStorage\\yazwh0.bitmagic\\file-downloader-downloads\\r48"
 
     }
   }

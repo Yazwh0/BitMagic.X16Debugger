@@ -555,25 +555,6 @@ public class X16Debug : DebugAdapterBase
             {
                 _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
             }
-
-            if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
-            {
-                foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
-                {
-                    string path = "";
-                    if (Path.IsPathRooted(_debugProject.OutputFolder))
-                    {
-                        path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
-                    }
-                    else
-                    {
-                        path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
-                    }
-                    Logger.Log($"Writing to '{path}'... ");
-                    File.WriteAllBytes(path, f.Data.ToArray());
-                    Logger.LogLine("Done.");
-                }
-            }
         }
         catch (CompilerLineException e)
         {
@@ -660,6 +641,25 @@ public class X16Debug : DebugAdapterBase
             Logger.LogError(e.StackTrace);
 
             throw new ProtocolException(e.Message);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
+        {
+            foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
+            {
+                string path = "";
+                if (Path.IsPathRooted(_debugProject.OutputFolder))
+                {
+                    path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
+                }
+                else
+                {
+                    path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
+                }
+                Logger.Log($"Writing to '{path}'... ");
+                File.WriteAllBytes(path, f.Data.ToArray());
+                Logger.LogLine("Done.");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(autobootFile))

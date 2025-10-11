@@ -3,12 +3,9 @@ using BitMagic.X16Debugger.LSP;
 using BitMagic.X16Emulator;
 using CommandLine;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
-using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text;
 using Thread = System.Threading.Thread;
@@ -29,8 +26,11 @@ static class Program
         [Option("nodebug", Default = false, Required = false)]
         public bool NoDebug { get; set; }
 
-        [Option("port", Default = 0, Required = false)]
-        public int ServerPort { get; set; }
+        [Option("dapport", Default = 0, Required = false)]
+        public int DapServerPort { get; set; }
+        
+        [Option("lspport", Default = 0, Required = false)]
+        public int LspServerPort { get; set; }
 
         [Option("stepOnEnter", Default = false, Required = false)]
         public bool StepOnEnter { get; set; }
@@ -62,7 +62,7 @@ static class Program
             Console.WriteLine(ex.Message);
         }
 
-        var options = argumentsResult?.Value ?? new Options() { ServerPort = 2563 };
+        var options = argumentsResult?.Value ?? new Options() { DapServerPort = 2563 };
 
         var rom = "rom.bin";
 
@@ -117,8 +117,8 @@ static class Program
 
         try
         {
-            if (options.ServerPort != 0)
-                RunAsServer(getEmulator, options.ServerPort, rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
+            if (options.DapServerPort != 0)
+                RunAsServer(getEmulator, options.DapServerPort, options.LspServerPort, rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
             else
             {
                 Console.WriteLine(@"Running using stdin\stdout.");
@@ -152,24 +152,24 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int port, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
+    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int dapPort, int lspPort, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
     {
-        Console.WriteLine($"Listening on port {port}.");
+        Console.WriteLine($"DAP Listening on port {dapPort}.");
+        Console.WriteLine($"LSP Listening on port {lspPort}.");
         X16Debug? debugger;
         LspServer? lspServer;
 
-        Thread listenThread = new Thread(() =>
+        var listenThread = new Thread(() =>
         {
-            TcpListener listener = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
+            var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), dapPort);
             listener.Start();
 
             while (true)
             {
-                //var proxy = new StreamProxy();
-                Socket clientSocket = listener.AcceptSocket();
+                var clientSocket = listener.AcceptSocket();
                 var inputStream = new NetworkStream(clientSocket);
 
-                Thread clientThread = new Thread(() =>
+                var clientThread = new Thread(() =>
                 {
                     Console.WriteLine("DAP Accepted connection");
 
@@ -187,39 +187,36 @@ static class Program
                     Console.WriteLine("DAP Connection closed");
                 });
 
-                //Thread streamProxy = new Thread(async () =>
-                //    {
-                //        proxy.Start(inputStream);
-                //    });
-
                 clientThread.Name = "DebugServer connection thread";
                 clientThread.Start();
-
-                //streamProxy.Name = "DebugServer stream proxy thread";
-                //streamProxy.Start();
             }
         });
 
         Thread lspListenThread = new Thread(() =>
         {
-            TcpListener listener = new TcpListener(IPAddress.Parse("127.0.0.1"), 2564);
+            var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), lspPort);
             listener.Start();
-
-            while (true)
+            try
             {
-                Socket clientSocket = listener.AcceptSocket();
-                var inputStream = new NetworkStream(clientSocket);
-
-                Thread clientThread = new Thread(() =>
+                while (true)
                 {
-                    Console.WriteLine("LSP Accepted connection");
+                    var clientSocket = listener.AcceptSocket();
+                    var inputStream = new NetworkStream(clientSocket);
 
-                    lspServer = new(inputStream, inputStream);
-                });
+                    lspServer = new LspServer(inputStream, inputStream);
+                    lspServer.Run();
 
-                Console.WriteLine("LSP Connection closed");
+                    Console.WriteLine("LSP Connection closed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"LSP Exception: {ex.Message}");
             }
         });
+
+        lspListenThread.Name = "LSP listener thread";
+        lspListenThread.Start();
 
         listenThread.Name = "DebugServer listener thread";
         listenThread.Start();
