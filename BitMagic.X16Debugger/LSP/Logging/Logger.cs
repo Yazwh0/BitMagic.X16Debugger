@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using BitMagic.Common;
+using Microsoft.Extensions.Logging;
 
 namespace BitMagic.X16Debugger.LSP.Logging;
 
-public class Logger : ILogger
+public class Logger : ILogger, IEmulatorLogger
 {
     public IDisposable BeginScope<TState>(TState state) where TState : notnull
     {
@@ -25,4 +26,42 @@ public class Logger : ILogger
         }
     }
 
+    private IEmulatorLogger? _secondaryLogger;
+
+    public void AddSecondaryLogger(IEmulatorLogger? secondaryLogger)
+    {
+        _secondaryLogger = secondaryLogger;
+    }
+
+    public void Log(string message)
+    {
+        Console.Write(message);
+
+        if (_secondaryLogger != null) _secondaryLogger.Log(message);
+    }
+
+    public void LogError(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine(message);
+        Console.ResetColor();
+
+        if (_secondaryLogger != null) _secondaryLogger.LogError(message);
+    }
+
+    public void LogError(string message, ISourceFile source, int lineNumber)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine(message);
+        Console.ResetColor();
+
+        if (_secondaryLogger != null) _secondaryLogger.LogError(message, source, lineNumber);
+    }
+
+    public void LogLine(string message)
+    {
+        Console.WriteLine(message);
+
+        if (_secondaryLogger != null) _secondaryLogger.LogLine(message);
+    }
 }

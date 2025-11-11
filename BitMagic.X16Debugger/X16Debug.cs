@@ -1,26 +1,27 @@
 ﻿//#define SHOWDAP
 
-using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
+using BitMagic.Common.Address;
 using BitMagic.Compiler.Exceptions;
+using BitMagic.Compiler.Files;
 using BitMagic.Decompiler;
 using BitMagic.Machines;
+using BitMagic.TemplateEngine.Compiler;
+using BitMagic.X16Debugger.Builder;
 using BitMagic.X16Debugger.CustomMessage;
+using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Exceptions;
+using BitMagic.X16Debugger.Extensions;
+using BitMagic.X16Debugger.LSP;
+using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
 using BitMagic.X16Emulator.Snapshot;
+using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
-using Newtonsoft.Json;
 using SysThread = System.Threading.Thread;
-using BitMagic.Compiler.Files;
-using BitMagic.X16Debugger.DebugableFiles;
-using BitMagic.Common.Address;
-using BitMagic.X16Debugger.Extensions;
-using BitMagic.X16Debugger.Exceptions;
-using BitMagic.X16Debugger.Variables;
-using CodingSeb.ExpressionEvaluator;
 
 namespace BitMagic.X16Debugger;
 
@@ -65,7 +66,15 @@ public class X16Debug : DebugAdapterBase
     public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false, string officialEmulatorParams = "", IEmulatorLogger? logger = null)
     {
         Logger = logger ?? new DebugLogger(this);
-        _serviceManager = new ServiceManager(getNewEmulatorInstance, this);
+        //_serviceManager = new ServiceManager(getNewEmulatorInstance, Logger);
+
+        if (!ServiceManagerFactory.Initialized())
+            ServiceManagerFactory.SetServiceManager(new ServiceManager(getNewEmulatorInstance, Logger));
+
+        _serviceManager = ServiceManagerFactory.GetSeviceMangager();
+
+        _serviceManager.BreakpointManager.BreakpointsUpdated += this.BreakpointManager_BreakpointsUpdated;
+
         _emulator = _serviceManager.Emulator;
         OfficialEmulatorLocation = officialEmulatorLocation;
         _runInOfficialEmulator = runInOfficialEmulator;
@@ -191,10 +200,8 @@ public class X16Debug : DebugAdapterBase
 
             try
             {
-                DebugProjectFileConverter._logger = Logger;
-                _debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(toCompile));
-                if (_debugProject == null)
-                    throw new ProtocolException($"Could not deseralise {toCompile} into a X16DebugProject.");
+                DebugProjectFileConverter.SetLogger(Logger);
+                _debugProject = X16DebugProject.Load(toCompile, workspaceFolder);
             }
             catch (Exception e)
             {
@@ -207,10 +214,6 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
-        if (string.IsNullOrWhiteSpace(_debugProject.BasePath))
-        {
-            _debugProject.BasePath = workspaceFolder;
-        }
 
         // EmulatorOptions
         var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
@@ -488,73 +491,95 @@ public class X16Debug : DebugAdapterBase
 
         try
         {
-            if (_debugProject.Files != null)
+            var projectService = new ProjectService();
+            projectService.SetProject(_debugProject);
+
+            var builder = new ProjectBuilder(projectService, _serviceManager, Logger);
+
+            builder.Build().GetAwaiter().GetResult();
+
+            _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+            autobootFile = _debugProject.AutobootFile;
+
+            if (_debugProject.DirectRun && !string.IsNullOrWhiteSpace(_debugProject.Source))
             {
-                foreach (var i in _debugProject.Files)
-                {
-                    if (i is BitmagicInputFile bitmagicFile)
-                    {
-                        var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
-                        if (result != null)
-                        {
-                            _serviceManager.ExpressionManager.SetState(state);
+                var result = _serviceManager.DebugableFileManager.GetFile_New(_debugProject.Source) ?? throw new Exception("Source file not found");
+                var prg = result as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
 
-                            var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+                _emulator.LoadIntoMemory(prg.Data, 0x801, true);
+                result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
 
-                            if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
-                            {
-                                autobootFile = prg.Name;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    if (i is Cc65InputFile cc65File)
-                    {
-                        Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
-                        continue;
-                    }
-                }
+                _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
+                Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
             }
 
-            if (!string.IsNullOrWhiteSpace(_debugProject.Source))
-            {
-                var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject.Source, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
-                if (result != null)
-                {
-                    _serviceManager.ExpressionManager.SetState(state);
+            //if (_debugProject.Files != null)
+            //{
+            //    foreach (var i in _debugProject.Files)
+            //    {
+            //        if (i is BitmagicInputFile bitmagicFile)
+            //        {
+            //            var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
+            //            if (result != null)
+            //            {
+            //                _serviceManager.ExpressionManager.SetState(state);
 
-                    var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+            //                var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
 
-                    if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
-                    {
-                        autobootFile = prg.Name;
-                    }
+            //                if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
+            //                {
+            //                    autobootFile = prg.Name;
+            //                }
+            //            }
 
-                    if (_debugProject.DirectRun && result != null)
-                    {
-                        _emulator.LoadIntoMemory(prg.Data, 0x801, true);
-                        result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+            //            continue;
+            //        }
 
-                        _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
-                        Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
-                    }
-                    else
-                    {
-                        _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-                    }
+            //        if (i is Cc65InputFile cc65File)
+            //        {
+            //            Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
+            //            continue;
+            //        }
+            //    }
+            //}
 
-                }
-                else
-                {
-                    Logger.LogLine("Build didn't result in a result.");
-                }
-            }
-            else
-            {
-                _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-            }
+            //if (!string.IsNullOrWhiteSpace(_debugProject.Source))
+            //{
+            //    var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject.Source, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
+            //    if (result != null)
+            //    {
+            //        _serviceManager.ExpressionManager.SetState(state);
+
+            //        var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
+
+            //        if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
+            //        {
+            //            autobootFile = prg.Name;
+            //        }
+
+            //        if (_debugProject.DirectRun && result != null)
+            //        {
+            //            _emulator.LoadIntoMemory(prg.Data, 0x801, true);
+            //            result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+
+            //            _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
+            //            Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
+            //        }
+            //        else
+            //        {
+            //            _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+            //        }
+
+            //    }
+            //    else
+            //    {
+            //        Logger.LogLine("Build didn't result in a result.");
+            //    }
+            //}
+            //else
+            //{
+            //    _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
+            //}
         }
         catch (CompilerLineException e)
         {

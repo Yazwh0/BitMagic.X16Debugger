@@ -1,27 +1,35 @@
-﻿using BitMagic.X16Debugger.LSP.Logging;
-using MediatR;
+﻿using BitMagic.Common;
+using BitMagic.X16Debugger.Builder;
+using BitMagic.X16Debugger.LSP.Logging;
+using BitMagic.X16Emulator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
-using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
-using SixLabors.ImageSharp;
+using static BitMagic.X16Debugger.LSP.PreviewHandler;
 
 namespace BitMagic.X16Debugger.LSP;
 
 public class LspServer(Stream inputStream, Stream outputStream)
 {
-    public void Run()
+    private LanguageServer? _server;
+
+    public async Task Run()
     {
-        var server = LanguageServer.From(options =>
+        _server = await LanguageServer.From(options =>
         {
             options.Services
                 .AddSingleton<DocumentCache>()
                 .AddSingleton<TokenDescriptionService>()
                 .AddSingleton<ITokenDescriptionProvider, X16KernelDocumentation>()
+                .AddSingleton<ProjectService>()
+                .AddSingleton<ProjectBuilder>()
+                .AddSingleton<ServiceManager>(e => new ServiceManager(GetEmulator, e.GetService<IEmulatorLogger>()))
+                .AddSingleton<FileChangeHandler>()
+                .AddSingleton<PreviewHandler>()
+                .AddSingleton<ClientNotificationService>()
+                .AddSingleton<IEmulatorLogger, Logger>()
                 ;
 
             options
@@ -29,32 +37,67 @@ public class LspServer(Stream inputStream, Stream outputStream)
                 //.WithOutput(new LoggingStreamWrapper(outputStream, "output"))
                 .WithInput(inputStream)
                 .WithOutput(outputStream)
+                .WithHandler<PreviewHandler>()
                 .WithHandler<HoverHandler>()
                 .WithHandler<FileChangeHandler>()
                 .WithLoggerFactory(new LogFactory())
+                .OnRequest<PreviewParameters, PreviewResult>("bitmagic/preview", async (request, ct) => await HandlePreviewRequest(request, ct))
                 .ConfigureLogging(logging =>
                 {
-                    logging.SetMinimumLevel(LogLevel.Debug); // Trace logs everything
+                    logging.SetMinimumLevel(LogLevel.Trace); // Trace logs everything
                 })
                 .OnInitialize(OnInitialise)
                 ;
+        });
 
+        ServiceManagerFactory.SetServiceManager(_server.Services.GetRequiredService<ServiceManager>());
 
-        }).GetAwaiter().GetResult();
+        var cns = _server.Services.GetRequiredService<ClientNotificationService>();
+        cns.SetLanguageServer(_server);
 
-        server.WaitForExit.GetAwaiter().GetResult();
+        var fch = _server.Services.GetRequiredService<FileChangeHandler>();
+        fch.SetLanguageServer(_server);
+
+        DocumentCache.Instance = _server.Services.GetRequiredService<DocumentCache>();
+
+        await _server.WaitForExit;
+        
+    }
+
+    private readonly Func<EmulatorOptions?, Emulator> GetEmulator = (options) =>
+    {
+        var emulator = new Emulator(options);
+
+        emulator.FrameControl = FrameControl.Synced;
+        emulator.Stepping = true;
+
+        return emulator;
+    };
+
+    private Task<PreviewResult> HandlePreviewRequest(PreviewParameters parameters, CancellationToken cancellationToken)
+    {
+        if (_server == null)
+            throw new InvalidOperationException("LSP Server is not initialized.");
+
+        var hander = _server.Services.GetService<PreviewHandler>() ?? throw new Exception();
+
+        return hander.Handle(parameters, cancellationToken);
     }
 
     private async Task OnInitialise(ILanguageServer server, InitializeParams request, CancellationToken token)
     {
         var documentCache = server.Services.GetRequiredService<DocumentCache>();
+        var projectSerivce = server.Services.GetRequiredService<ProjectService>();
+        var fileChangeHandler = server.Services.GetRequiredService<FileChangeHandler>();
 
         if (request.WorkspaceFolders == null)
             return;
 
         var projectFile = "";
+        var workspaceFolder = "";
 
-        // todo: change this to use the project.json
+        FileCache.Clear();
+
         foreach (var folder in request.WorkspaceFolders)
         {
             Console.WriteLine($"Workspace Folder: {folder.Name} - {folder.Uri}");
@@ -63,7 +106,8 @@ public class LspServer(Stream inputStream, Stream outputStream)
                 foreach (var file in Directory.EnumerateFiles(folder.Uri.GetFileSystemPath(), "project.json", SearchOption.AllDirectories))
                 {
                     Console.WriteLine($"Project File : {file}");
-                    projectFile = file;
+                    projectFile = file.FixFilename();
+                    workspaceFolder = folder.Uri.GetFileSystemPath().FixFilename();
                     break;
                 }
             }
@@ -72,100 +116,18 @@ public class LspServer(Stream inputStream, Stream outputStream)
             foreach (var file in Directory.EnumerateFiles(folder.Uri.GetFileSystemPath(), "*.bmasm", SearchOption.AllDirectories))
             {
                 Console.WriteLine($"File : {file}");
-                await documentCache.AddFile(file);
+                await documentCache.AddFile(file.FixFilename());
             }
         }
 
-        Console.WriteLine("LSP Server Initialized");
-    }
-}
-
-internal class FileChangeHandler(DocumentCache documentCache) : IDidChangeTextDocumentHandler
-{
-    public TextDocumentChangeRegistrationOptions GetRegistrationOptions(TextSynchronizationCapability capability, ClientCapabilities clientCapabilities)
-    {
-        return new TextDocumentChangeRegistrationOptions
+        if (string.IsNullOrEmpty(projectFile))
         {
-            DocumentSelector = TextDocumentSelector.ForLanguage("bmasm"),
-            SyncKind = TextDocumentSyncKind.Incremental
-        };
-    }
-
-    public Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
-    {
-        var filename = request.TextDocument.Uri.GetFileSystemPath();
-        if (!documentCache.IsInCache(filename))
-            return Unit.Task;
-
-        var lines = documentCache.GetFile(filename);
-
-        foreach (var change in request.ContentChanges)
-        {
-            if (change.Range == null)
-            {
-                lines = change.Text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
-            }
-            else
-            {
-                lines = ApplyIncrementalChange(lines, change);
-            }
+            Console.WriteLine("LSP Server Initialized");
+            return;
         }
 
-        documentCache.SetFileContent(filename, lines);
+        projectSerivce.SetProject(X16DebugProject.Load(projectFile, workspaceFolder));
 
-        //Console.WriteLine("-----");
-        //foreach (var line in lines)
-        //    Console.WriteLine(line);
-        //Console.WriteLine("-----");
-
-        return Unit.Task;
-    }
-
-    private string[] ApplyIncrementalChange(string[] originalLines, TextDocumentContentChangeEvent change)
-    {
-        var range = change.Range!;
-        var start = range.Start;
-        var end = range.End;
-
-        var before = originalLines.Take(start.Line);
-        var after = originalLines.Skip(end.Line + 1);
-        var affected = originalLines[(start.Line)..(end.Line + 1)];
-
-        var updated = before
-                .Concat(Replace(affected, change))
-                .Concat(after).ToArray();
-
-        return updated;
-    }
-
-    private IEnumerable<string> Replace(string[] original, TextDocumentContentChangeEvent change)
-    {
-        // assume first line is the line of the change
-        var newTextLines = change.Text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
-
-        if (newTextLines.Length == 0) // full replace
-            yield break;
-
-        if (newTextLines.Length == 1) // replace part of a line
-        {
-            yield return original[0][..(change.Range!.Start.Character)] +
-                         newTextLines[0] +
-                         original[^1][(change.Range!.End.Character)..];
-            yield break;
-        }
-
-        // change the first line as required
-        yield return original[0][..(change.Range!.Start.Character)] + newTextLines[0];
-
-        if (newTextLines.Length > 2)
-        {
-            foreach (var line in newTextLines[1..^1]) // ignore first and last
-            {
-                yield return line;
-            }
-        }
-
-        // change the last line as required
-        yield return newTextLines[^1] + original[^1][(change.Range!.End.Character)..];
+        fileChangeHandler.QueueUpdateFileChanges(); // initial build
     }
 }

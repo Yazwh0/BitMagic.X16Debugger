@@ -223,8 +223,21 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("romSource")]
     [Description("Files to be loaded into ROM.")]
     public RomSource[] RomSource { get; set; } = [];
+
+    public static X16DebugProject Load(string filename, string workspaceFolder)
+    {
+        var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
+        if (debugProject == null)
+            throw new X16DebugProjectDeserialisationException(filename);
+
+        if (string.IsNullOrWhiteSpace(debugProject.BasePath))
+            debugProject.BasePath = workspaceFolder;
+
+        return debugProject;
+    }
 }
 
+public class X16DebugProjectDeserialisationException(string filename) : Exception($"Could not deserialise {filename} into a X16DebugProject.");
 
 public class SdCardFile
 {
@@ -238,6 +251,11 @@ public class DebugProjectFileConverter : JsonConverter
 {
     // NewtonSoft will not take an instance of the converter. No idea why
     internal static IEmulatorLogger? _logger = null;
+
+    public static void SetLogger(IEmulatorLogger logger)
+    { 
+        _logger = logger;
+    }
 
     public override bool CanConvert(Type objectType) => typeof(IDebugProjectFile).IsAssignableFrom(objectType);
 

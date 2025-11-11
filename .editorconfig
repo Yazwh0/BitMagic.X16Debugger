@@ -8,3 +8,6 @@ dotnet_diagnostic.S3925.severity = none
 
 # RCS1194: Implement exception constructors.
 dotnet_diagnostic.RCS1194.severity = none
+
+# VSTHRD200: Use "Async" suffix for async methods
+dotnet_diagnostic.VSTHRD200.severity = none

@@ -1,4 +1,5 @@
-﻿using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
+﻿using BitMagic.Common;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -18,9 +19,15 @@ internal class HoverHandler(DocumentCache documentCache, TokenDescriptionService
 
     public async Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
     {
-        var file = documentCache.GetFile(request.TextDocument.Uri.GetFileSystemPath());
+        var file = documentCache.GetFile(request.TextDocument.Uri.GetFileSystemPath().FixFilename());
+
+        if (file.Length == 0) // file not found
+            return null;
 
         var word = GetWordAtCharIndex(file[request.Position.Line], request.Position.Character);
+
+        if (string.IsNullOrEmpty(word))
+            return null;
 
         var tokenDescription = tokenDescriptionService.GetTokenDescription(word);
 
@@ -39,19 +46,6 @@ internal class HoverHandler(DocumentCache documentCache, TokenDescriptionService
         }
 
         return null;
-
-        //var hoverContent = new MarkedStringsOrMarkupContent(
-        //    new MarkupContent
-        //    {
-        //        Kind = MarkupKind.Markdown,
-        //        Value = $"**Hover Info**\nYou hovered over `{request.Position.Line}:{request.Position.Character}` word: `{word}` line `{file[request.Position.Line]}`"
-        //    });
-
-        //return new Hover
-        //{
-        //    Contents = hoverContent,
-        //    Range = new Range(request.Position, request.Position)
-        //};
     }
 
     private static string? GetWordAtCharIndex(string input, int index)

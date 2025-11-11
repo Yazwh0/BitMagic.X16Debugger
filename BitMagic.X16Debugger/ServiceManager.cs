@@ -1,4 +1,5 @@
-﻿using BitMagic.X16Debugger.DebugableFiles;
+﻿using BitMagic.Common;
+using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
@@ -6,11 +7,25 @@ using System.Drawing;
 
 namespace BitMagic.X16Debugger;
 
+internal static class ServiceManagerFactory
+{
+    private static ServiceManager? _serviceManager;
+
+    public static void SetServiceManager(ServiceManager serviceManager)
+    {
+        _serviceManager = serviceManager;
+    }
+
+    public static bool Initialized() => _serviceManager != null;
+
+    public static ServiceManager GetSeviceMangager() => _serviceManager ?? throw new Exception("ServiceManager not set in Factory");
+}
+
 // Not quite DI, but a place to hold all the managers and initialise in the correct order.
 internal class ServiceManager
 {
     private readonly Func<EmulatorOptions?, Emulator> _getNewEmulatorInstance;
-    private readonly X16Debug _debugger;
+    private readonly IEmulatorLogger _logger;
     public Emulator Emulator { get; private set; }
 
     public BreakpointManager BreakpointManager { get; private set; }
@@ -31,11 +46,11 @@ internal class ServiceManager
     public IdManager IdManager { get; private set; }
 
 #pragma warning disable CS8618
-    public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, X16Debug debugger)
+    public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, IEmulatorLogger logger)
 #pragma warning restore CS8618
     {
         _getNewEmulatorInstance = GetNewEmulatorInstance;
-        _debugger = debugger;
+        _logger = logger;
         Reset();
     }
 
@@ -47,7 +62,7 @@ internal class ServiceManager
 
         DebugableFileManager = new(IdManager);
 
-        SourceMapManager = new(Emulator, _debugger.Logger);
+        SourceMapManager = new(Emulator, _logger);
         ScopeManager = new(IdManager);
         ExceptionManager = new(Emulator, IdManager);
 
@@ -62,12 +77,11 @@ internal class ServiceManager
         PsgManager = new(Emulator);
         VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
         ExpressionManager = new(VariableManager, Emulator);
-        BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _debugger.Logger);
+        BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _logger);
 
         VariableManager.SetExpressionManager(ExpressionManager);
         BreakpointManager.SetExpressionManager(ExpressionManager);
 
-        BreakpointManager.BreakpointsUpdated += _debugger.BreakpointManager_BreakpointsUpdated;
 
         //var colours = Emulator.DebugSpriteColours;
 

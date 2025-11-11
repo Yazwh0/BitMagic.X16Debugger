@@ -21,9 +21,35 @@ internal class DebugableFileManager
         _breakpointManager = breakpointManager;
     }
 
+    public void ClearFiles(ISourceFile file)
+    {
+        var allFiles = GetAllFilesFromSourceFile(file, null);
+
+        foreach(var i in allFiles)
+            AllFiles.Remove(i);
+    }
+
+    private HashSet<string> GetAllFilesFromSourceFile(ISourceFile file, HashSet<string>? collected)
+    {
+        if (collected == null)
+            collected = new HashSet<string>();
+
+        if (collected.Contains(file.Path))
+            return collected;
+
+        collected.Add(file.Path);
+
+        foreach (var p in file.Parents)
+            GetAllFilesFromSourceFile(p, collected);
+        foreach (var c in file.Children)
+            GetAllFilesFromSourceFile(c, collected);
+
+        return collected;
+    }
+
     public void AddFiles(ISourceFile file)
     {
-        if (AllFiles.ContainsKey(file.Path))
+        if (AllFiles.ContainsKey(file.Path)) // important as we call this recusivley.
             return;
 
         var wrapper = new DebugWrapper(file, _breakpointManager ?? throw new Exception());
@@ -46,6 +72,12 @@ internal class DebugableFileManager
             return AllFiles[filename];
 
         return null;
+    }
+
+    public IEnumerable<string> AllFilenames()
+    {
+        foreach(var i in AllFiles.Keys)
+            yield return i;
     }
 
     public DebugWrapper? GetFileSource(Source source)

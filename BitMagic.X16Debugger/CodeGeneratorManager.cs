@@ -16,7 +16,12 @@ internal class CodeGeneratorManager
     public int Register(string path, MacroAssembler.ProcessResult templateResult)
     {
         var id = _idManager.AddObject(templateResult, ObjectType.DecompiledData);
-        Templates.Add(path.FixFilename(), new TemplateReference(id, templateResult));
+        var filename = path.FixFilename();
+
+        // this shouldn't be needed
+        // todo: fix compilation for files that already exist
+        Templates.Remove(filename);
+        Templates.Add(filename, new TemplateReference(id, templateResult));
 
         return id;
     }

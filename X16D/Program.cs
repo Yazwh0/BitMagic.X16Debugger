@@ -29,7 +29,7 @@ static class Program
         [Option("dapport", Default = 0, Required = false)]
         public int DapServerPort { get; set; }
         
-        [Option("lspport", Default = 0, Required = false)]
+        [Option("lspport", Default = 2564, Required = false)]
         public int LspServerPort { get; set; }
 
         [Option("stepOnEnter", Default = false, Required = false)]
@@ -192,7 +192,7 @@ static class Program
             }
         });
 
-        Thread lspListenThread = new Thread(() =>
+        Thread lspListenThread = new Thread(async () =>
         {
             var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), lspPort);
             listener.Start();

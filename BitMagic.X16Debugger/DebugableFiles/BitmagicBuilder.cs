@@ -33,7 +33,7 @@ internal class BitmagicBuilder
         if (compileOptions != null)
             project.CompileOptions = compileOptions;
 
-        source = Path.GetFullPath(Path.Combine(basePath, source));
+        source = Path.GetFullPath(Path.Combine(basePath, source)).FixFilename();
         var codeFile = new BitMagicProjectFile(source);
         project.Code = codeFile;
         await codeFile.Load();
@@ -44,7 +44,7 @@ internal class BitmagicBuilder
         if (content.Any()) // ??
         {
             var templateOptions = project.CompileOptions!.AsTemplateOptions(basePath);
-            var templateResult = engine.ProcessFile(project.Code, source, templateOptions, _logger).GetAwaiter().GetResult();
+            var templateResult = await engine.ProcessFile(project.Code, source, templateOptions, _logger); ;
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(source, templateResult);
             var filename = (Path.GetFileNameWithoutExtension(source) + ".generated.bmasm"); //.FixFilename();
@@ -67,6 +67,7 @@ internal class BitmagicBuilder
         compileResult.CreateBinarySourceFiles();
         project.Code.MapChildren();
 
+        _fileManager.ClearFiles(project.Code); // clear everything out ready to replace it.
         _fileManager.AddFiles(project.Code); // loads whole family and sets their ID
 
         var mainFile = compileResult.Data.Values.FirstOrDefault(i => i.IsMain);
