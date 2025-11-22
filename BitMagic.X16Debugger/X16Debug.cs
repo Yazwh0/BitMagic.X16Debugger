@@ -793,12 +793,12 @@ public class X16Debug : DebugAdapterBase
             try
             {
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
-                _serviceManager.SourceMapManager.LoadSymbols(symbols);
-                _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData);
+                _serviceManager.SourceMapManager.LoadSymbols(symbols);                                                            // cache
+                _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData); // dont cache
 
                 Logger.Log($"Decompiling... ");
 
-                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);
+                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);                             // cache
 
                 Logger.LogLine("Done.");
             }

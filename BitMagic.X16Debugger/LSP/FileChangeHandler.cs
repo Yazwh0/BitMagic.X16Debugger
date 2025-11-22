@@ -110,6 +110,8 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 
             var ul = wrapper.FindUltimateSource(lineNumber, serviceManager.DebugableFileManager);
 
+            sourceFile = ul.SourceFile ?? sourceFile; // use ultimate source if available
+
             string path;
             if (sourceFile.Path.EndsWith(".generated.bmasm"))
                 path = "bitmagic:generated/" + sourceFile.Path;
@@ -146,6 +148,8 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
             var wrapper = serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
 
             var ul = wrapper.FindUltimateSource(lineNumber, serviceManager.DebugableFileManager);
+
+            sourceFile = ul.SourceFile ?? sourceFile; // use ultimate source if available
 
             string path;
             if (sourceFile.Path.EndsWith(".generated.bmasm"))
