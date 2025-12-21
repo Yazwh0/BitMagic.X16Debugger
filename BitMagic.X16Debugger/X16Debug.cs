@@ -1379,10 +1379,15 @@ public class X16Debug : DebugAdapterBase
                 return;
             }
         }
-        _emulator.Stepping = true;
+
         if ((_emulator.State.StackBreakpointHit ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
         {
             _emulator.Stepping = false;
+        }
+        else
+        {
+            this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Step, "Stepping", 0, null, true));
+            _emulator.Stepping = true;
         }
     }
 
