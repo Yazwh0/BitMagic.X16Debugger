@@ -12,40 +12,48 @@ internal static class IAsmVariableExtensions
     internal static int MemoryOffset(this IAsmVariable variable, int index) =>
         variable.Value + index * VariableDataTypeLength(variable);
 
-    internal static Func<string> ToStringFunction(this IAsmVariable variable, MemoryWrapper memory, int index = 0) =>
-        variable.VariableDataType switch
+    internal static Func<string> ToStringFunction(this IAsmVariable variable, MemoryWrapper memory, int index = 0)
+    {
+        try
         {
-            VariableDataType.Constant => () => $"{variable.Value}",
-            VariableDataType.ProcStart => () => $"0x{variable.Value:X4}",
-            VariableDataType.ProcEnd => () => $"0x{variable.Value:X4}",
-            VariableDataType.SegmentStart => () => $"0x{variable.Value:X4}",
-            VariableDataType.LabelPointer => () => $"0x{variable.Value:X4}",
-            VariableDataType.Byte => () => $"0x{memory[MemoryOffset(variable, index)].Byte:X2}",
-            VariableDataType.Sbyte => () => $"{memory[MemoryOffset(variable, index)].Sbyte:0}",
-            VariableDataType.Short => () => $"{memory[MemoryOffset(variable, index)].Short:0}",
-            VariableDataType.Ushort => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4}",
-            VariableDataType.Int => () => $"{memory[MemoryOffset(variable, index)].Int:0}",
-            VariableDataType.Uint => () => $"0x{memory[MemoryOffset(variable, index)].Uint:X8}",
-            VariableDataType.Long => () => $"{memory[MemoryOffset(variable, index)].Long:0}",
-            VariableDataType.Ulong => () => $"0x{memory[MemoryOffset(variable, index)].Ulong:X16}",
-            VariableDataType.String => () => memory[MemoryOffset(variable, index)].String,
-            VariableDataType.FixedStrings => () => memory[MemoryOffset(variable, index)].FixedString(variable.Length),
+            return variable.VariableDataType switch
+            {
+                VariableDataType.Constant => () => $"{variable.Value}",
+                VariableDataType.ProcStart => () => $"0x{variable.Value:X4}",
+                VariableDataType.ProcEnd => () => $"0x{variable.Value:X4}",
+                VariableDataType.SegmentStart => () => $"0x{variable.Value:X4}",
+                VariableDataType.LabelPointer => () => $"0x{variable.Value:X4}",
+                VariableDataType.Byte => () => $"0x{memory[MemoryOffset(variable, index)].Byte:X2}",
+                VariableDataType.Sbyte => () => $"{memory[MemoryOffset(variable, index)].Sbyte:0}",
+                VariableDataType.Short => () => $"{memory[MemoryOffset(variable, index)].Short:0}",
+                VariableDataType.Ushort => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4}",
+                VariableDataType.Int => () => $"{memory[MemoryOffset(variable, index)].Int:0}",
+                VariableDataType.Uint => () => $"0x{memory[MemoryOffset(variable, index)].Uint:X8}",
+                VariableDataType.Long => () => $"{memory[MemoryOffset(variable, index)].Long:0}",
+                VariableDataType.Ulong => () => $"0x{memory[MemoryOffset(variable, index)].Ulong:X16}",
+                VariableDataType.String => () => memory[MemoryOffset(variable, index)].String,
+                VariableDataType.FixedStrings => () => memory[MemoryOffset(variable, index)].FixedString(variable.Length),
 
-            VariableDataType.Ptr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4}",
+                VariableDataType.Ptr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4}",
 
-            VariableDataType.BytePtr => () => $"{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Byte:X2}",
-            VariableDataType.SbytePtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Sbyte:0}",
-            VariableDataType.ShortPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Short:0}",
-            VariableDataType.UshortPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Ushort:X4}",
-            VariableDataType.IntPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Int:0}",
-            VariableDataType.UintPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Uint:X8}",
-            VariableDataType.LongPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Long:0}",
-            VariableDataType.UlongPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Ulong:X16}",
-            VariableDataType.StringPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].String}",
-            VariableDataType.FixedStringsPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].FixedString(variable.Length)}",
+                VariableDataType.BytePtr => () => $"{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Byte:X2}",
+                VariableDataType.SbytePtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Sbyte:0}",
+                VariableDataType.ShortPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Short:0}",
+                VariableDataType.UshortPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Ushort:X4}",
+                VariableDataType.IntPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Int:0}",
+                VariableDataType.UintPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Uint:X8}",
+                VariableDataType.LongPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].Long:0}",
+                VariableDataType.UlongPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> 0x{memory[memory[MemoryOffset(variable, index)].Ushort].Ulong:X16}",
+                VariableDataType.StringPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].String}",
+                VariableDataType.FixedStringsPtr => () => $"0x{memory[MemoryOffset(variable, index)].Ushort:X4} -> {memory[memory[MemoryOffset(variable, index)].Ushort].FixedString(variable.Length)}",
 
-            _ => () => "Unhandled"
-        };
+                _ => () => "Unhandled"
+            };
+        } catch (Exception e)
+        {
+            return () => $"Error ({e.Message})";
+        }
+    }
 
     //private static Func<string> ToStringValue(int value, int length, VariableDataType dataType, MemoryWrapper memory) =>
     //   dataType switch

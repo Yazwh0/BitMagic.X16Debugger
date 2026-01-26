@@ -40,7 +40,14 @@ internal class VariableMap : IVariableItem
 
     public Variable GetVariable()
     {
-        _variable.Value = ExpressionManager.Stringify(GetValue());
+        try
+        {
+            _variable.Value = ExpressionManager.Stringify(GetValue());
+        }
+        catch (Exception e)
+        {
+            _variable.Value = $"Error: {e.Message}";
+        }
         return _variable;
     }
 
