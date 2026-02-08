@@ -358,6 +358,8 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
     internal byte[] Data { get; set; } = Array.Empty<byte>();
     IReadOnlyList<byte> IBinaryFile.Data => Data;
 
+    public bool Written { get; private set; }
+
     public void LoadDebugData(Emulator emulator, SourceMapManager sourceMapManager, int debuggerAddress)
     {
         for (int i = 0; i < _parentMap.Length; i++)
@@ -396,5 +398,10 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
     public void Relocate(int newBaseAddress)
     {
         BaseAddress = newBaseAddress;
+    }
+
+    public void SetWritten()
+    {
+        Written = true;
     }
 }

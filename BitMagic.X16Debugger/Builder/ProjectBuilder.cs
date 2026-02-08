@@ -33,6 +33,28 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
                 {
                     Cc65BinaryFileFactory.BuildAndAdd(cc65File, serviceManager, project.BasePath, Logger);
                 }
+
+                // write files after each step incase there is a pre-requisite.
+                if (!string.IsNullOrWhiteSpace(project.OutputFolder))
+                {
+                    foreach (var f in serviceManager.DebugableFileManager.GetBitMagicFilesToWrite().Where(i => !i.Written))
+                    {
+                        string path = "";
+                        if (Path.IsPathRooted(project.OutputFolder))
+                        {
+                            path = Path.GetFullPath(Path.Combine(project.OutputFolder, f.Path));
+                        }
+                        else
+                        {
+                            path = Path.GetFullPath(Path.Combine(projectService.WorkspaceFolder ?? "", project.OutputFolder, f.Path));
+                        }
+
+                        Logger.Log($"Writing to '{path}'... ");
+                        File.WriteAllBytes(path, f.Data.ToArray());
+                        Logger.LogLine("Done.");
+                        f.SetWritten();
+                   }
+                }
             }
         }
 
@@ -53,25 +75,6 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
             else
             {
                 Logger.LogLine("Build didn't result in a result.");
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(project.OutputFolder))
-        {
-            foreach (var f in serviceManager.DebugableFileManager.GetBitMagicFiles())
-            {
-                string path = "";
-                if (Path.IsPathRooted(project.OutputFolder))
-                {
-                    path = Path.GetFullPath(Path.Combine(project.OutputFolder, f.Filename));
-                }
-                else
-                {
-                    path = Path.GetFullPath(Path.Combine(projectService.WorkspaceFolder ?? "", project.OutputFolder, f.Filename));
-                }
-                Logger.Log($"Writing to '{path}'... ");
-                File.WriteAllBytes(path, f.Data.ToArray());
-                Logger.LogLine("Done.");
             }
         }
     }

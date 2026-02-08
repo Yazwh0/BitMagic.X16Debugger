@@ -38,6 +38,8 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
     private readonly CompileResult _result;
     public FileHeader HasHeader { get; }
 
+    public bool Written { get; private set; }
+
     /// <summary>
     /// A binary file from a BitMagic project
     /// </summary>
@@ -189,5 +191,10 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
             //    MapProcForParents(defaultProc);
             //}
         }
+    }
+
+    public void SetWritten()
+    {
+        Written = true;
     }
 }

@@ -115,4 +115,6 @@ internal class DebugableFileManager
             yield return (i.Path, i.Data.ToArray());
         }
     }
+    public IEnumerable<IBinaryFile> GetBitMagicFilesToWrite() => 
+        AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>();
 }

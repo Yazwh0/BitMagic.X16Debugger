@@ -730,7 +730,7 @@ public class X16Debug : DebugAdapterBase
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData); // dont cache
 
                 if (_debugProject.CompileOptions.DisplaySymbols)
-                    Logger.Log($"Decompiling... ");
+                    Logger.Log("Decompiling... ");
 
                 _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);                             // cache
 

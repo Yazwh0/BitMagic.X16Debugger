@@ -10,4 +10,6 @@ internal interface IBinaryFile : ISourceFile
     void LoadDebugData(Emulator emulator, SourceMapManager sourceMapManager, int debuggerAddress);
     IReadOnlyList<byte> Data { get; }
     void Relocate(int newBaseAddress);
+    bool Written { get; }
+    void SetWritten();
 }
