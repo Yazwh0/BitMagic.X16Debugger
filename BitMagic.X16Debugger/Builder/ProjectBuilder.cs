@@ -55,6 +55,25 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
                 Logger.LogLine("Build didn't result in a result.");
             }
         }
+
+        if (!string.IsNullOrWhiteSpace(project.OutputFolder))
+        {
+            foreach (var f in serviceManager.DebugableFileManager.GetBitMagicFiles())
+            {
+                string path = "";
+                if (Path.IsPathRooted(project.OutputFolder))
+                {
+                    path = Path.GetFullPath(Path.Combine(project.OutputFolder, f.Filename));
+                }
+                else
+                {
+                    path = Path.GetFullPath(Path.Combine(projectService.WorkspaceFolder ?? "", project.OutputFolder, f.Filename));
+                }
+                Logger.Log($"Writing to '{path}'... ");
+                File.WriteAllBytes(path, f.Data.ToArray());
+                Logger.LogLine("Done.");
+            }
+        }
     }
 }
 

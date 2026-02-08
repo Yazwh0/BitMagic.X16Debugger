@@ -126,7 +126,7 @@ public class LspServer(Stream inputStream, Stream outputStream)
             return;
         }
 
-        projectSerivce.SetProject(X16DebugProject.Load(projectFile, workspaceFolder));
+        projectSerivce.SetProject(X16DebugProject.Load(projectFile, workspaceFolder), workspaceFolder);
 
         fileChangeHandler.QueueUpdateFileChanges(); // initial build
     }

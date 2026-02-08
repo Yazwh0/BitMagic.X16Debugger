@@ -20,11 +20,11 @@ static class Program
 
     internal class Options
     {
-        [Option("debug", Default = false, Required = false)]
-        public bool Debug { get; set; }
+        //[Option("debug", Default = false, Required = false)]
+        //public bool Debug { get; set; }
 
-        [Option("nodebug", Default = false, Required = false)]
-        public bool NoDebug { get; set; }
+        //[Option("nodebug", Default = false, Required = false)]
+        //public bool NoDebug { get; set; }
 
         [Option("dapport", Default = 0, Required = false)]
         public int DapServerPort { get; set; }
@@ -43,6 +43,9 @@ static class Program
 
         [Option("officialEmulatorParameters", Default = "", Required = false)]
         public string OfficialEmulatorParameters { get; set; } = "";
+
+        [Option("buildOnly", Default = false, Required = false)]
+        public bool BuildOnly { get; set; }
     }
 
     private const string RomEnvironmentVariable = "BITMAGIC_ROM";

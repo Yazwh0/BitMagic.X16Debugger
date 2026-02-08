@@ -492,7 +492,7 @@ public class X16Debug : DebugAdapterBase
         try
         {
             var projectService = new ProjectService();
-            projectService.SetProject(_debugProject);
+            projectService.SetProject(_debugProject, workspaceFolder);
 
             var builder = new ProjectBuilder(projectService, _serviceManager, Logger);
 
@@ -512,74 +512,6 @@ public class X16Debug : DebugAdapterBase
                 _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
                 Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
             }
-
-            //if (_debugProject.Files != null)
-            //{
-            //    foreach (var i in _debugProject.Files)
-            //    {
-            //        if (i is BitmagicInputFile bitmagicFile)
-            //        {
-            //            var (result, state) = _serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
-            //            if (result != null)
-            //            {
-            //                _serviceManager.ExpressionManager.SetState(state);
-
-            //                var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
-
-            //                if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
-            //                {
-            //                    autobootFile = prg.Name;
-            //                }
-            //            }
-
-            //            continue;
-            //        }
-
-            //        if (i is Cc65InputFile cc65File)
-            //        {
-            //            Cc65BinaryFileFactory.BuildAndAdd(cc65File, _serviceManager, _debugProject.BasePath, Logger);
-            //            continue;
-            //        }
-            //    }
-            //}
-
-            //if (!string.IsNullOrWhiteSpace(_debugProject.Source))
-            //{
-            //    var (result, state) = _serviceManager.BitmagicBuilder.Build(_debugProject.Source, _debugProject.BasePath, _debugProject.CompileOptions).GetAwaiter().GetResult();
-            //    if (result != null)
-            //    {
-            //        _serviceManager.ExpressionManager.SetState(state);
-
-            //        var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
-
-            //        if (_debugProject.AutobootRun && string.IsNullOrWhiteSpace(autobootFile))
-            //        {
-            //            autobootFile = prg.Name;
-            //        }
-
-            //        if (_debugProject.DirectRun && result != null)
-            //        {
-            //            _emulator.LoadIntoMemory(prg.Data, 0x801, true);
-            //            result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
-
-            //            _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
-            //            Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
-            //        }
-            //        else
-            //        {
-            //            _emulator.Pc = (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-            //        }
-
-            //    }
-            //    else
-            //    {
-            //        Logger.LogLine("Build didn't result in a result.");
-            //    }
-            //}
-            //else
-            //{
-            //    _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-            //}
         }
         catch (CompilerLineException e)
         {
@@ -668,24 +600,24 @@ public class X16Debug : DebugAdapterBase
             throw new ProtocolException(e.Message);
         }
 
-        if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
-        {
-            foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
-            {
-                string path = "";
-                if (Path.IsPathRooted(_debugProject.OutputFolder))
-                {
-                    path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
-                }
-                else
-                {
-                    path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
-                }
-                Logger.Log($"Writing to '{path}'... ");
-                File.WriteAllBytes(path, f.Data.ToArray());
-                Logger.LogLine("Done.");
-            }
-        }
+        //if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
+        //{
+        //    foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
+        //    {
+        //        string path = "";
+        //        if (Path.IsPathRooted(_debugProject.OutputFolder))
+        //        {
+        //            path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
+        //        }
+        //        else
+        //        {
+        //            path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
+        //        }
+        //        Logger.Log($"Writing to '{path}'... ");
+        //        File.WriteAllBytes(path, f.Data.ToArray());
+        //        Logger.LogLine("Done.");
+        //    }
+        //}
 
         if (!string.IsNullOrWhiteSpace(autobootFile))
         {
@@ -789,22 +721,28 @@ public class X16Debug : DebugAdapterBase
         // ROM Disassembly
         foreach (var symbols in _debugProject!.Symbols)
         {
-            Logger.Log($"Loading Symbols {symbols.Symbols}... ");
+            if (_debugProject.CompileOptions.DisplaySymbols)
+                Logger.Log($"Loading Symbols {symbols.Symbols}... ");
             try
             {
                 var bankData = _emulator.RomBank.Slice((symbols.RomBank ?? 0) * 0x4000, 0x4000).ToArray();
                 _serviceManager.SourceMapManager.LoadSymbols(symbols);                                                            // cache
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData); // dont cache
 
-                Logger.Log($"Decompiling... ");
+                if (_debugProject.CompileOptions.DisplaySymbols)
+                    Logger.Log($"Decompiling... ");
 
                 _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);                             // cache
 
-                Logger.LogLine("Done.");
+                if (_debugProject.CompileOptions.DisplaySymbols)
+                    Logger.LogLine("Done.");
             }
             catch (SymbolsFileNotFound)
             {
-                Logger.LogLine("Not Found.");
+                if (_debugProject.CompileOptions.DisplaySymbols)
+                    Logger.LogLine("Not Found.");
+                else
+                    Logger.LogLine($"Symbols {symbols.Symbols} Not Found.");
             }
             catch (Exception e)
             {
