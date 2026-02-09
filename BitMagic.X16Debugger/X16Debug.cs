@@ -2,6 +2,7 @@
 
 using BitMagic.Common;
 using BitMagic.Common.Address;
+using BitMagic.Compiler;
 using BitMagic.Compiler.Exceptions;
 using BitMagic.Compiler.Files;
 using BitMagic.Decompiler;
@@ -1341,14 +1342,16 @@ public class X16Debug : DebugAdapterBase
             // debugger breakpoint
             HandleDebuggerBreakpoint(breakpointType);
 
-            if ((breakpointType ^ DebugConstants.SystemBreakpoint) == 0) // this is just a debugger breakpoint, so continue
+            // if this is just a debugger breakpoint or a debug action continue
+            if (((breakpointType & 0x0f) ^ DebugConstants.SystemBreakpoint) == 0 || 
+                ((breakpointType & 0x0f) ^ (DebugConstants.SystemBreakpoint | DebugConstants.Exception)) == 0)
             {
                 _emulator.Stepping = false;
                 return;
             }
         }
 
-        if ((breakpointType & DebugConstants.Exception) != 0)
+        if ((breakpointType & DebugConstants.Exception) != 0 && (breakpointType & DebugConstants.SystemBreakpoint) == 0)
         {
             if (_serviceManager.ExceptionManager.IsSet("EXP"))
             {
@@ -1420,6 +1423,42 @@ public class X16Debug : DebugAdapterBase
     private static bool Contains(byte[] array, byte val) => Array.IndexOf(array, val) >= 0;
     private void HandleDebuggerBreakpoint(uint breakpointType)
     {
+        if ((breakpointType & 0x0e) == DebugConstants.DebugAction)
+        {
+            // look for the action
+            var actionId = breakpointType >> 8;
+
+            var action = _serviceManager.DebugActionManager.GetAction(actionId) as DebugLoadAction;
+            if (action != null)
+            {
+                var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(action.Filename);
+                if (debugableFile != null)
+                {
+                    Logger.Log($"Loading requested debugger info for '{action.Filename}'... ");
+
+                    var actualAddress = AddressFunctions.GetDebuggerAddress(action.Address, _emulator);
+
+                    var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                    Logger.LogLine("Done");
+
+                    foreach (var breakpoint in breakpoints)
+                    {
+                        Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
+                    }
+                }
+                else
+                {
+                    Logger.LogLine($"Could not find debugger info for '{action.Filename}'.");
+                }
+            }
+            else
+            {
+                Logger.LogLine($"Error: Could not find actionId {actionId}.");
+            }
+
+            return;
+        }
+
         if (_emulator.Pc == KERNEL_SetNam) // setnam
         {
             var filenameAddress = _emulator.X + (_emulator.Y << 8);
@@ -1560,31 +1599,6 @@ public class X16Debug : DebugAdapterBase
                     }
                 }
             }
-
-            //var debugableFile = _serviceManager.DebugableFileManager.GetFile(_setnam_value);
-            //if (debugableFile != null)
-            //{
-            //    Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
-
-            //    var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
-
-            //    var breakpoints = debugableFile.LoadDebuggerInfo(actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.BreakpointManager);
-            //    Logger.LogLine("Done");
-
-            //    foreach (var breakpoint in breakpoints)
-            //    {
-            //        Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
-            //    }
-            //}
-            //else
-            //{
-            //    var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
-            //    if (_setlfs_secondaryaddress < 2)
-            //        fileLength = -2;
-
-            //    Logger.LogLine($"Clearing breakpoints from ${loadAddress:X4} to {loadAddress + fileLength:X4}");
-            //    _serviceManager.BreakpointManager.ClearBreakpoints(loadAddress, fileLength);
-            //}
 
             return;
         }

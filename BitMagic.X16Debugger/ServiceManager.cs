@@ -1,4 +1,5 @@
 ﻿using BitMagic.Common;
+using BitMagic.Compiler;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Debugger.Variables;
@@ -42,7 +43,7 @@ internal class ServiceManager
     public DebugableFileManager DebugableFileManager { get; private set; }
     public BitmagicBuilder BitmagicBuilder { get; private set; }
     public ExceptionManager ExceptionManager { get; private set; }
-
+    public DebugActionManager DebugActionManager { get; private set; }
     public IdManager IdManager { get; private set; }
 
 #pragma warning disable CS8618
@@ -59,6 +60,7 @@ internal class ServiceManager
         Emulator = _getNewEmulatorInstance(null);
 
         IdManager = new();
+        DebugActionManager = new();
 
         DebugableFileManager = new(IdManager);
 
@@ -77,7 +79,7 @@ internal class ServiceManager
         PsgManager = new(Emulator);
         VariableManager = new(IdManager, Emulator, ScopeManager, PaletteManager, SpriteManager, StackManager, PsgManager);
         ExpressionManager = new(VariableManager, Emulator);
-        BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, _logger);
+        BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, DebugActionManager, _logger);
 
         VariableManager.SetExpressionManager(ExpressionManager);
         BreakpointManager.SetExpressionManager(ExpressionManager);

@@ -11,13 +11,16 @@ internal class BitmagicBuilder
 {
     private readonly DebugableFileManager _fileManager;
     private readonly CodeGeneratorManager _codeGeneratorManager;
+    private readonly DebugActionManager _debugActionManager;
     private readonly IEmulatorLogger _logger;
 
-    public BitmagicBuilder(DebugableFileManager fileManager, CodeGeneratorManager codeGeneratorManager, IEmulatorLogger logger)
+    public BitmagicBuilder(DebugableFileManager fileManager, CodeGeneratorManager codeGeneratorManager,
+            DebugActionManager debugActionManager, IEmulatorLogger logger)
     {
         _logger = logger;
         _fileManager = fileManager;
         _codeGeneratorManager = codeGeneratorManager;
+        _debugActionManager = debugActionManager;
     }
 
     /// <summary>
@@ -60,7 +63,7 @@ internal class BitmagicBuilder
             project.Code = templateResult;
         }
 
-        var compiler = new Compiler.Compiler(project, _logger);
+        var compiler = new Compiler.Compiler(project, _debugActionManager, _logger);
 
         var compileResult = await compiler.Compile();
 
