@@ -1337,36 +1337,23 @@ public class X16Debug : DebugAdapterBase
     {
         var (breakpointState, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
-        if ((breakpointType & DebugConstants.SystemBreakpoint) != 0)
+        if ((breakpointType & DebugConstants.SystemBreakpoint) != 0 ||
+            (breakpointType & DebugConstants.DebugAction) != 0)
         {
             // debugger breakpoint
             HandleDebuggerBreakpoint(breakpointType);
 
             // if this is just a debugger breakpoint or a debug action continue
-            if (((breakpointType & 0x0f) ^ DebugConstants.SystemBreakpoint) == 0 || 
-                ((breakpointType & 0x0f) ^ (DebugConstants.SystemBreakpoint | DebugConstants.Exception)) == 0)
+            if (((breakpointType & 0x0f) ^ DebugConstants.SystemBreakpoint) == 0)
             {
-                _emulator.Stepping = false;
+                //_emulator.Stepping = false;
                 return;
             }
-        }
 
-        if ((breakpointType & DebugConstants.Exception) != 0 && (breakpointType & DebugConstants.SystemBreakpoint) == 0)
-        {
-            if (_serviceManager.ExceptionManager.IsSet("EXP"))
+            if (((breakpointType & 0x0f) ^ DebugConstants.DebugAction) == 0)
             {
-                _serviceManager.ExceptionManager.LastException = "EXP";
-                this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "Exception within code raised.", 0, null, true));
-                _emulator.Stepping = true;
+                //_emulator.Stepping = false;
                 return;
-            }
-            else
-            {
-                if ((breakpointType ^ DebugConstants.Exception) == 0) // this is just a exception breakpoint, so continue
-                {
-                    _emulator.Stepping = false;
-                    return;
-                }
             }
         }
 
@@ -1421,6 +1408,7 @@ public class X16Debug : DebugAdapterBase
 
     private static readonly byte[] InvalidBytes = "\"*+,/:;<=>?[\\]|"u8.ToArray();
     private static bool Contains(byte[] array, byte val) => Array.IndexOf(array, val) >= 0;
+
     private void HandleDebuggerBreakpoint(uint breakpointType)
     {
         if ((breakpointType & 0x0e) == DebugConstants.DebugAction)
@@ -1428,34 +1416,59 @@ public class X16Debug : DebugAdapterBase
             // look for the action
             var actionId = breakpointType >> 8;
 
-            var action = _serviceManager.DebugActionManager.GetAction(actionId) as DebugLoadAction;
-            if (action != null)
-            {
-                var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(action.Filename);
-                if (debugableFile != null)
-                {
-                    Logger.Log($"Loading requested debugger info for '{action.Filename}'... ");
+            var action = _serviceManager.DebugActionManager.GetAction(actionId);
 
-                    var actualAddress = AddressFunctions.GetDebuggerAddress(action.Address, _emulator);
-
-                    var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
-                    Logger.LogLine("Done");
-
-                    foreach (var breakpoint in breakpoints)
-                    {
-                        Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
-                    }
-                }
-                else
-                {
-                    Logger.LogLine($"Could not find debugger info for '{action.Filename}'.");
-                }
-            }
-            else
+            if (action == null)
             {
                 Logger.LogLine($"Error: Could not find actionId {actionId}.");
+                return;
             }
 
+            var wasStepping = _emulator.Stepping;
+            var stepping = wasStepping;
+
+            while (action != null)
+            {
+                if (action is DebugLoadAction debugLocalAction)
+                {
+                    var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(debugLocalAction.Filename);
+                    if (debugableFile != null)
+                    {
+                        Logger.Log($"Loading requested debugger info for '{debugLocalAction.Filename}' at ${debugLocalAction.Address:X4}... ");
+
+                        var actualAddress = AddressFunctions.GetDebuggerAddress(debugLocalAction.Address, _emulator);
+
+                        var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                        Logger.LogLine("Done");
+
+                        foreach (var breakpoint in breakpoints)
+                        {
+                            Protocol.SendEvent(new BreakpointEvent(BreakpointEvent.ReasonValue.Changed, breakpoint));
+                        }
+                    }
+                    else
+                    {
+                        Logger.LogLine($"Could not find debugger info for '{debugLocalAction.Filename}'.");
+                    }
+                    break;
+                }
+
+                if (action is ExceptionAction _)
+                {
+                    if (_serviceManager.ExceptionManager.IsSet("EXP"))
+                    {
+                        _serviceManager.ExceptionManager.LastException = "EXP";
+                        this.Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Exception, "Exception within code raised.", 0, null, true));
+                        stepping = true;
+                    }
+
+                    break;
+                }
+
+                action = action.NextAction;
+            }
+
+            _emulator.Stepping = stepping;
             return;
         }
 
