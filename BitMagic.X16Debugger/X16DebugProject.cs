@@ -208,7 +208,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// </summary>
     [JsonProperty("historySize")]
     [Description("Size of the history buffer for the history view. Must be a power of 2.")]
-    public int HistorySize { get; set; } = 0x400;
+    public int HistorySize { get; set; } = 0x800000;
 
     /// <summary>
     /// Multiplier to scale the display window.
@@ -226,7 +226,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
 
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {
-        var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
+       var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
         if (debugProject == null)
             throw new X16DebugProjectDeserialisationException(filename);
 

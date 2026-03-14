@@ -22,6 +22,9 @@ using CodingSeb.ExpressionEvaluator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Utilities;
+#if SHOWDAP
+using Newtonsoft.Json;
+#endif
 using SysThread = System.Threading.Thread;
 
 namespace BitMagic.X16Debugger;
@@ -114,6 +117,10 @@ public class X16Debug : DebugAdapterBase
         Protocol.RegisterRequestType<SpriteRequest, SpriteRequestArguments, SpriteRequestResponse>(delegate (IRequestResponder<SpriteRequestArguments, SpriteRequestResponse> r)
         {
             HandleSpriteRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<CpuProfilerRequest, CpuProfilerArguements, CpuProfilerResponse>(delegate (IRequestResponder<CpuProfilerArguements, CpuProfilerResponse> r)
+        {
+            HandlCpuProfilerRequestAsync(r);
         });
     }
 
@@ -1863,6 +1870,7 @@ public class X16Debug : DebugAdapterBase
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
             //            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
             "spriteView" => SpriteRequestHandler.HandleRequest(requestArgs as SpriteRequestArguments, _emulator),
+            "getCpuProfile" => CpuProfilerRequestHandler.HandleRequest(requestArgs as CpuProfilerArguements, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1889,6 +1897,11 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleHistoryRequestAsync(IRequestResponder<HistoryRequestArguments, HistoryRequestResponse> responder)
     {
         responder.SetResponse(HistoryRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager));
+    }
+
+    internal virtual void HandlCpuProfilerRequestAsync(IRequestResponder<CpuProfilerArguements, CpuProfilerResponse> responder)
+    {
+        responder.SetResponse(CpuProfilerRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager));
     }
 
     internal virtual void HandleSpriteRequestAsync(IRequestResponder<SpriteRequestArguments, SpriteRequestResponse> responder)

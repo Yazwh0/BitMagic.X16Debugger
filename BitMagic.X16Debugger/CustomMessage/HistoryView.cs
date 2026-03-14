@@ -5,7 +5,6 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
-using System.Xml;
 
 namespace BitMagic.X16Debugger.CustomMessage;
 
@@ -48,8 +47,6 @@ internal static class HistoryRequestHandler
         var history = emulator.History;
         var idx = getAll ? (int)(emulator.HistoryPosition - 1) : (int)(emulator.HistoryPosition - 1) - (arguments.Index * _pageSize);
         idx = idx & (emulator.Options.HistorySize - 1);
-        //if (idx == -1)
-        //    idx = emulator.Options.HistorySize - 1;
 
         for (var i = 0; i < (getAll ? emulator.Options.HistorySize - 1 : _pageSize); i++)
         {
@@ -128,7 +125,7 @@ internal static class HistoryRequestHandler
                 history[idx].Clock));
 
             if (idx <= 0)
-                idx = emulator.Options.HistorySize - 1;
+                idx = emulator.Options.HistorySize;
 
             idx--;
         }
@@ -213,5 +210,6 @@ public class HistoryRequestResponse : ResponseBody
     public bool More { get; set; }
     public int Index { get; set; }
 }
+
 
 public record class HistoryItem(string Proc, string OpCode, string RawParameter, int RamBank, int RomBank, int Pc, int A, int X, int Y, int Sp, string Flags, string SourceFile, int LineNumber, ulong Clock);
