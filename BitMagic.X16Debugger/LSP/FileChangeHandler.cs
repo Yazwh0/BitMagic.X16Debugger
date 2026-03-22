@@ -57,10 +57,10 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 
         documentCache.SetFileContent(filename, lines);
 
-        Console.WriteLine("-----");
-        foreach (var line in lines)
-            Console.WriteLine(line);
-        Console.WriteLine("-----");
+        //Console.WriteLine("-----");
+        //foreach (var line in lines)
+        //    Console.WriteLine(line);
+        //Console.WriteLine("-----");
 
         debouncer.Debounce(UpdateFileChanges);
 

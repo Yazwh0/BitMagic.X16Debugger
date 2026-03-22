@@ -65,6 +65,8 @@ public class X16Debug : DebugAdapterBase
     internal readonly string OfficialEmulatorParams;
     private readonly bool _runInOfficialEmulator;
 
+    private EmulatorWindow? _window = null;
+
 
     // This will be started on a second thread, seperate to the emulator
     public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false, string officialEmulatorParams = "", IEmulatorLogger? logger = null)
@@ -798,11 +800,15 @@ public class X16Debug : DebugAdapterBase
         _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
+        _window = new EmulatorWindow();
+
         _windowThread = new SysThread(() =>
         {
             try
             {
-                EmulatorWindow.Run(_emulator);
+                _window.Run(_emulator);
+                _window.Dispose();
+                Console.WriteLine("Emulator Window closed.");
             }
             catch (Exception e)
             {
@@ -818,7 +824,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
-        EmulatorWindow.Stop();
+        _window?.Stop();
 
         // persist anything that needs it
         // RTC NVRAM
@@ -1106,7 +1112,7 @@ public class X16Debug : DebugAdapterBase
 
             if (_emulator.Stepping)
             {
-                EmulatorWindow.PauseAudio();
+                _window.PauseAudio();
 
                 if (changes != null)
                 {
@@ -1184,7 +1190,7 @@ public class X16Debug : DebugAdapterBase
                 }
 
                 _serviceManager.StackManager.Invalidate();
-                EmulatorWindow.ContinueAudio();
+                _window.ContinueAudio();
             }
         }
     }
