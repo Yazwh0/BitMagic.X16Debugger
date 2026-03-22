@@ -10,7 +10,6 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using SixLabors.ImageSharp;
-using System.Diagnostics;
 
 namespace BitMagic.X16Debugger.LSP;
 
@@ -19,7 +18,7 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 {
     private readonly Debouncer debouncer = new Debouncer();
     private LanguageServer? languageServer = null;
-    private HashSet<string> filesWithErrors = new HashSet<string>();
+    private readonly HashSet<string> filesWithErrors = new HashSet<string>();
 
     public void SetLanguageServer(LanguageServer server)
     {
