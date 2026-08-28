@@ -226,7 +226,7 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
 
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {
-       var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
+        var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
         if (debugProject == null)
             throw new X16DebugProjectDeserialisationException(filename);
 
@@ -331,6 +331,9 @@ public class Cc65InputFile : IDebugProjectFile
 
     [JsonProperty("defaultOutputFile")]
     public string DefaultOuputFile { get; set; } = "";
+
+    [JsonProperty("debugFile")]
+    public string DebugFile { get; set; } = "";
 }
 
 public class Cc65InputFileOutput

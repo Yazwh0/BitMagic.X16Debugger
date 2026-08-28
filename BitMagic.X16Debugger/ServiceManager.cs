@@ -57,6 +57,7 @@ internal class ServiceManager
 
     public Emulator Reset()
     {
+        var old = Emulator;
         Emulator = _getNewEmulatorInstance(null);
 
         IdManager = new();
@@ -83,6 +84,15 @@ internal class ServiceManager
 
         VariableManager.SetExpressionManager(ExpressionManager);
         BreakpointManager.SetExpressionManager(ExpressionManager);
+
+        try
+        {
+            old?.Dispose();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError($"Error disposing {e}");
+        }
 
 
         //var colours = Emulator.DebugSpriteColours;

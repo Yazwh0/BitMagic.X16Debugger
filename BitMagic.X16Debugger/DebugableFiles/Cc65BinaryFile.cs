@@ -24,7 +24,7 @@ internal static class Cc65BinaryFileFactory
             throw new Exception("No default output defined");
         }
 
-        var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), inputFile.DefaultOuputFile, Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
+        var debugFile = DebugFileParser.ParseFile(Path.Combine(basePath, inputFile.DebugFile));
 
         var objects = new List<Cc65Obj>();
 
@@ -54,7 +54,7 @@ internal static class Cc65BinaryFileFactory
 
         {
             switch (Path.GetExtension(i).ToLower())
-                {
+            {
                 case ".lib":
                     libraries.Add(Cc65LibParser.ParseLib(Path.Combine(basePath, i)));
                     break;
@@ -66,6 +66,8 @@ internal static class Cc65BinaryFileFactory
                     break;
             }
         }
+
+        var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), inputFile.DefaultOuputFile, Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
 
         foreach (var file in cc65Cfg.Files.Values)
         {

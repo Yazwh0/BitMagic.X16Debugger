@@ -1,5 +1,6 @@
-﻿using BitMagic.Compiler.CodingSeb;
-using System.Runtime.CompilerServices;
+﻿using BitMagic.Common;
+using BitMagic.Compiler.CodingSeb;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace BitMagic.Cc65Lib;
@@ -10,7 +11,8 @@ public static class Cc65CfgParser
     private static Regex _removeLineComments = new Regex("#.*$", RegexOptions.Multiline | RegexOptions.Compiled);
     private static Regex _sections = new Regex("(?<name>\\w+)\\s+\\{(?<content>(\\n|\\r|\\r\\n|.)*?)\\}", RegexOptions.Multiline | RegexOptions.Compiled);
     //    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>\\w[\\S]|[^;,]+),?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
-    private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>(\"([^\"]*)\"|\\w+)|[^;,\\s]+)\\s*,?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    //private static Regex _sectionValues = new Regex("\\s*(?<section>\\w+):\\s*((?<name>\\w+)\\s*=\\s*(?<value>(\"([^\"]*)\"|\\w+)|[^;,\\s]+)\\s*,?\\s*)*\\s*;", RegexOptions.Multiline | RegexOptions.Compiled);
+    private static Regex _sectionValues = new Regex(@"\s*(?<section>\w+):\s*((?<name>\w+)\s*=\s*(?<value>[^;,]+)\s*(?:[ ,]\s*)?)*\s*", RegexOptions.Multiline | RegexOptions.Compiled);
 
     private static readonly object _lock = new();
     private static Cc65Cfg? _returning;
@@ -28,6 +30,15 @@ public static class Cc65CfgParser
 
             var toReturn = new Cc65Cfg();
             _returning = toReturn;
+
+            _returning.Strings.Add("__CC65CFG_C", "65C02");
+            _returning.Strings.Add("__CC65CFG_O", defaultOutputname);
+            _returning.Strings.Add("__CC65CFG_B", Path.GetFileNameWithoutExtension(defaultOutputname));
+            _returning.Strings.Add("__CC65CFG_D", Path.GetPathRoot(defaultOutputname) ?? "");
+            _returning.Strings.Add("__CC65CFG_E", Path.GetExtension(defaultOutputname));
+
+            _returning.Symbols.Add("__CC65CFG_S", fileStartAddress ?? 0);
+
             var evaluator = new Asm6502ExpressionEvaluator();
             evaluator.EvaluateVariable += Evaluator_EvaluateVariable;
 
@@ -89,64 +100,97 @@ public static class Cc65CfgParser
                 var bank = (int?)null;
                 bool useS = false;
 
+                Cc65File? file = null;
+
                 for (var i = 0; i < names.Captures.Count; i++)
                 {
                     if (string.Equals(names.Captures[i].Value, "file", StringComparison.InvariantCultureIgnoreCase))
                     {
                         outputFile = value.Captures[i].Value;
                         outputFile = outputFile.Replace("%O", defaultOutputname);
+
+                        if (outputFile == null)
+                            continue;
+
+                        if (outputFile == "\"\"")
+                            continue;
+
+                        if (outputFile.StartsWith('"') && outputFile.EndsWith('"'))
+                            outputFile = outputFile[1..^1];
+
+                        if (string.IsNullOrWhiteSpace(outputFile))
+                            continue;
+
+                        outputFile = outputFile.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
+                        if (!toReturn.Files.ContainsKey(outputFile))
+                            toReturn.Files.Add(outputFile, new Cc65File() { Filename = outputFile, StartAddress = useS ? fileStartAddress : startAddress });
+
+                        file = toReturn.Files[outputFile];
                     }
                     else if (string.Equals(names.Captures[i].Value, "start", StringComparison.InvariantCultureIgnoreCase))
                     {
-                        var start = value.Captures[i].Value;
+                        var toProcess = value.Captures[i].Value;
 
-                        useS = start.Contains("%S");
-                        start = start.Replace("%S", fileStartAddress.ToString());
-                        start = start.Replace("__HEADER_LAST__", fileStartAddress.ToString());
-                        start = start.Replace("__ONCE_RUN__", "$400");
+                        useS = toProcess.Contains("%S");
 
-                        var s = evaluator.Evaluate(start);
+                        toProcess = Regex.Replace(toProcess, "%([OSDEBC])", "__CC65CFG_$1");
+                        var s = evaluator.Evaluate(toProcess);
 
                         startAddress = Convert.ToInt32(s);
                     }
                     else if (string.Equals(names.Captures[i].Value, "size", StringComparison.CurrentCultureIgnoreCase))
                     {
-                        var start = value.Captures[i].Value;
+                        var toProcess = value.Captures[i].Value;
 
-                        start = start.Replace("%S", fileStartAddress.ToString());
-                        start = start.Replace("__HEADER_LAST__", fileStartAddress.ToString());
-                        start = start.Replace("__ONCE_RUN__", "$400");
+                        toProcess = Regex.Replace(toProcess, "%([OSDEBC])", "__CC65CFG_$1");
 
-                        var s = evaluator.Evaluate(start);
+                        var s = evaluator.Evaluate(toProcess);
 
                         size = Convert.ToInt32(s);
                     }
                     else if (string.Equals(names.Captures[i].Value, "bank", StringComparison.CurrentCultureIgnoreCase))
                     {
-                        var bnk_raw = value.Captures[i].Value;
-                        var b = evaluator.Evaluate(bnk_raw);
+                        var toProcess = value.Captures[i].Value;
+
+                        toProcess = Regex.Replace(toProcess, "%([OSDEBC])", "__CC65CFG_$1");
+                        var b = evaluator.Evaluate(toProcess);
+
                         bank = Convert.ToInt32(b);
                     }
                 }
 
-                if (outputFile == null)
+                //if (outputFile == null)
+                //    continue;
+
+                //if (outputFile == "\"\"")
+                //    continue;
+
+                //if (outputFile.StartsWith('"') && outputFile.EndsWith('"'))
+                //    outputFile = outputFile[1..^1];
+
+                //if (string.IsNullOrWhiteSpace(outputFile))
+                //    continue;
+
+                //outputFile = outputFile.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
+                //if (!toReturn.Files.ContainsKey(outputFile))
+                //    toReturn.Files.Add(outputFile, new Cc65File() { Filename = outputFile, StartAddress = useS ? fileStartAddress : startAddress });
+
+                //var file = toReturn.Files[outputFile];
+
+                if (file == null)
                     continue;
-
-                if (outputFile == "\"\"")
-                    continue;
-
-                if (outputFile.StartsWith('"') && outputFile.EndsWith('"'))
-                    outputFile = outputFile[1..^1];
-
-                if (string.IsNullOrWhiteSpace(outputFile))
-                    continue;
-
-                if (!toReturn.Files.ContainsKey(outputFile))
-                    toReturn.Files.Add(outputFile, new Cc65File() { Filename = outputFile, StartAddress = useS ? fileStartAddress : startAddress });
-
-                var file = toReturn.Files[outputFile];
 
                 var areaName = match.Groups["section"].Value;
+
+                var position = file.Areas.Sum(i => i.Value.Size ?? 0);
+
+                _returning.Symbols.Add($"__{areaName}_RUN__", startAddress ?? 0);
+                _returning.Symbols.Add($"__{areaName}_START__", startAddress ?? 0);
+                _returning.Symbols.Add($"__{areaName}_SIZE__", size ?? 0);
+                _returning.Symbols.Add($"__{areaName}_LOAD__", position);
+                _returning.Symbols.Add($"__{areaName}_LAST__", (startAddress ?? 0) + (size ?? 0) - 1);
 
                 if (!file.Areas.ContainsKey(areaName))
                     file.Areas.Add(areaName, new Cc65MemoryArea() { Name = areaName, StartAddress = startAddress, Size = size, Bank = bank });
@@ -223,16 +267,17 @@ public static class Cc65CfgParser
 
                 memoryArea.Segments.Add(segmentName, new Cc65Segment() { Name = area, StartAddress = startAddress, Optional = optional, Align = align });
             }
+
             return toReturn;
         }
     }
 
     private static void Evaluator_EvaluateVariable(object? sender, CodingSeb.ExpressionEvaluator.VariableEvaluationEventArg e)
     {
-        if (_returning == null) return;
-
-        if (_returning.Symbols.ContainsKey(e.Name))
-            e.Value = _returning.Symbols[e.Name];
+        if (_returning != null && _returning.Symbols.TryGetValue(e.Name, out var value))
+            e.Value = value;
+        if (_returning != null && _returning.Strings.TryGetValue(e.Name, out var stringValue))
+            e.Value = stringValue;
     }
 }
 
@@ -243,6 +288,7 @@ public class Cc65Cfg
     public HashSet<string> Imported { get; } = new();
     public HashSet<string> Zp { get; } = new();
     public Dictionary<string, int> Symbols { get; } = new();
+    public Dictionary<string, string> Strings { get; } = new();
 }
 
 public class Cc65File

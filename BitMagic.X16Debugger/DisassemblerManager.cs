@@ -323,6 +323,9 @@ internal class DisassemblerManager
 
     public void DecompileRomBank(byte[] data, int bank)
     {
+        if (IsRomDecompiled(bank))
+            return;
+
         var decompiler = new Decompiler.Decompiler();
 
         var result = decompiler.Decompile(data, 0xc000, 0xffff, bank, _sourceMapManager.Symbols);

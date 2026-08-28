@@ -826,6 +826,12 @@ public class X16Debug : DebugAdapterBase
     {
         _window?.Stop();
 
+        _running = false;
+        _emulator.Control = Control.Stop;            // unblock the in-flight blocking Emulate()
+        _runEvent.Set();
+        _debugThread?.Join(TimeSpan.FromSeconds(5));
+        _windowThread?.Join(TimeSpan.FromSeconds(5));
+
         // persist anything that needs it
         // RTC NVRAM
         if (_debugProject != null && _debugProject.NvRam != null && !string.IsNullOrWhiteSpace(_debugProject.NvRam.WriteFile))
@@ -1492,6 +1498,7 @@ public class X16Debug : DebugAdapterBase
 
             var x = new MemoryWrapper(() => _emulator.Memory.ToArray());
             var filename = x[filenameAddress].FixedString(len);
+            filename = filename.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
             _setnam_value = filename;
 
             if (string.IsNullOrWhiteSpace(_setnam_value) || _setnam_value.All(i => i == 0))
