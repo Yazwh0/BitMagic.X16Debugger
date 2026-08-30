@@ -6,7 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using OmniSharp.Extensions.LanguageServer.Protocol.Window;
 using OmniSharp.Extensions.LanguageServer.Server;
+using OmniSharp.Extensions.JsonRpc;
 using static BitMagic.X16Debugger.LSP.PreviewHandler;
 
 namespace BitMagic.X16Debugger.LSP;
@@ -14,54 +16,94 @@ namespace BitMagic.X16Debugger.LSP;
 public class LspServer(Stream inputStream, Stream outputStream)
 {
     private LanguageServer? _server;
+    private bool _faultShown;
 
     public async Task Run()
     {
-        _server = await LanguageServer.From(options =>
+        try
         {
-            options.Services
-                .AddSingleton<DocumentCache>()
-                .AddSingleton<TokenDescriptionService>()
-                .AddSingleton<ITokenDescriptionProvider, X16KernelDocumentation>()
-                .AddSingleton<ProjectService>()
-                .AddSingleton<ProjectBuilder>()
-                .AddSingleton<ServiceManager>(e => new ServiceManager(GetEmulator, e.GetService<IEmulatorLogger>()))
-                .AddSingleton<FileChangeHandler>()
-                .AddSingleton<PreviewHandler>()
-                .AddSingleton<ClientNotificationService>()
-                .AddSingleton<IEmulatorLogger, Logger>()
-                ;
+            _server = await LanguageServer.From(options =>
+            {
+                options.Services
+                    .AddSingleton<DocumentCache>()
+                    .AddSingleton<TokenDescriptionService>()
+                    .AddSingleton<ITokenDescriptionProvider, X16KernelDocumentation>()
+                    .AddSingleton<ProjectService>()
+                    .AddSingleton<ProjectBuilder>()
+                    .AddSingleton<ServiceManager>(e => new ServiceManager(GetEmulator, e.GetService<IEmulatorLogger>()))
+                    .AddSingleton<FileChangeHandler>()
+                    .AddSingleton<PreviewHandler>()
+                    .AddSingleton<ClientNotificationService>()
+                    .AddSingleton<IEmulatorLogger, Logger>()
+                    ;
 
-            options
-                //.WithInput(new LoggingStreamWrapper(inputStream, "input"))
-                //.WithOutput(new LoggingStreamWrapper(outputStream, "output"))
-                .WithInput(inputStream)
-                .WithOutput(outputStream)
-                .WithHandler<PreviewHandler>()
-                .WithHandler<HoverHandler>()
-                .WithHandler<FileChangeHandler>()
-                .WithLoggerFactory(new LogFactory())
-                .OnRequest<PreviewParameters, PreviewResult>("bitmagic/preview", async (request, ct) => await HandlePreviewRequest(request, ct))
-                .ConfigureLogging(logging =>
-                {
-                    logging.SetMinimumLevel(LogLevel.Trace); // Trace logs everything
-                })
-                .OnInitialize(OnInitialise)
-                ;
+                // Not a fluent extension in 0.19.x -- it's a settable delegate on the options.
+                options.OnUnhandledException = ex => ReportFault("LSP pipeline exception", ex);
+
+                options
+                    //.WithInput(new LoggingStreamWrapper(inputStream, "input"))
+                    //.WithOutput(new LoggingStreamWrapper(outputStream, "output"))
+                    .WithInput(inputStream)
+                    .WithOutput(outputStream)
+                    .WithHandler<PreviewHandler>()
+                    .WithHandler<HoverHandler>()
+                    .WithHandler<FileChangeHandler>()
+                    .WithMaximumRequestTimeout(TimeSpan.FromSeconds(30))
+                    .OnRequest<PreviewParameters, PreviewResult>("bitmagic/preview", async (request, ct) => await HandlePreviewRequest(request, ct))
+                    .ConfigureLogging(logging =>
+                    {
+                        logging.SetMinimumLevel(LogLevel.Warning);
+                    })
+                    .OnInitialize(OnInitialise)
+                    ;
+            });
+
+            ServiceManagerFactory.SetServiceManager(_server.Services.GetRequiredService<ServiceManager>());
+
+            var cns = _server.Services.GetRequiredService<ClientNotificationService>();
+            cns.SetLanguageServer(_server);
+
+            var fch = _server.Services.GetRequiredService<FileChangeHandler>();
+            fch.SetLanguageServer(_server);
+
+            DocumentCache.Instance = _server.Services.GetRequiredService<DocumentCache>();
+
+            await _server.WaitForExit;
+        }
+        catch (Exception ex)
+        {
+            ReportFault("LSP server terminated abnormally", ex);
+            throw; // host accept-loop logs, closes the socket, and re-accepts
+        }
+    }
+
+    // In-session faults go to the client via LSP's own window/logMessage + a one-time
+    // window/showMessage. Before the connection is up (or after it has gone) there is no
+    // client, so fall back to stderr -- which the VSCode extension pumps into its output
+    // channel.
+    private void ReportFault(string context, Exception ex)
+    {
+        Console.Error.WriteLine($"[X16D] {context}: {ex}");
+
+        var window = _server?.Window;
+        if (window == null)
+            return;
+
+        window.LogMessage(new LogMessageParams
+        {
+            Type = MessageType.Error,
+            Message = $"{context}: {ex.Message}",
         });
 
-        ServiceManagerFactory.SetServiceManager(_server.Services.GetRequiredService<ServiceManager>());
-
-        var cns = _server.Services.GetRequiredService<ClientNotificationService>();
-        cns.SetLanguageServer(_server);
-
-        var fch = _server.Services.GetRequiredService<FileChangeHandler>();
-        fch.SetLanguageServer(_server);
-
-        DocumentCache.Instance = _server.Services.GetRequiredService<DocumentCache>();
-
-        await _server.WaitForExit;
-        
+        if (!_faultShown)
+        {
+            _faultShown = true;
+            window.ShowMessage(new ShowMessageParams
+            {
+                Type = MessageType.Error,
+                Message = "BitMagic language server hit an internal error - see the 'BMASM Language Server' output for details.",
+            });
+        }
     }
 
     private readonly Func<EmulatorOptions?, Emulator> GetEmulator = (options) =>

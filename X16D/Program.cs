@@ -54,6 +54,14 @@ static class Program
     {
         Console.WriteLine("BitMagic - X16D");
 
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Console.Error.WriteLine($"[X16D] FATAL unhandled exception: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Console.Error.WriteLine($"[X16D] Unobserved task exception: {e.Exception}");
+            e.SetObserved();
+        };
+
         ParserResult<Options>? argumentsResult = null;
         try
         {
@@ -159,8 +167,6 @@ static class Program
     {
         Console.WriteLine($"DAP Listening on port {dapPort}.");
         Console.WriteLine($"LSP Listening on port {lspPort}.");
-        X16Debug? debugger;
-        LspServer? lspServer;
 
         var listenThread = new Thread(() =>
         {
@@ -170,24 +176,33 @@ static class Program
             while (true)
             {
                 var clientSocket = listener.AcceptSocket();
-                var inputStream = new NetworkStream(clientSocket);
 
                 var clientThread = new Thread(() =>
                 {
                     Console.WriteLine("DAP Accepted connection");
 
-                    var logger = new ConsoleLogger();
-                    debugger = new X16Debug(getEmulator, inputStream, inputStream, rom, emulatorLocation, runInEmulatorLocation, officialEmulatorParameters, logger);
-                    logger.AddSecondaryLogger(new DebugLogger(debugger));
-
-                    debugger.Protocol.DispatcherError += (sender, e) =>
+                    using var inputStream = new NetworkStream(clientSocket, ownsSocket: true);
+                    try
                     {
-                        Console.Error.WriteLine(e.Exception.Message);
-                    };
-                    debugger.Run();
-                    debugger = null;
+                        var logger = new ConsoleLogger();
+                        var debugger = new X16Debug(getEmulator, inputStream, inputStream, rom, emulatorLocation, runInEmulatorLocation, officialEmulatorParameters, logger);
+                        logger.AddSecondaryLogger(new DebugLogger(debugger));
 
-                    Console.WriteLine("DAP Connection closed");
+                        debugger.Protocol.DispatcherError += (sender, e) =>
+                        {
+                            Console.Error.WriteLine(e.Exception.Message);
+                        };
+                        debugger.Run();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[X16D] DAP session faulted: {ex}");
+                    }
+                    finally
+                    {
+                        try { clientSocket.Close(); } catch { }
+                        Console.WriteLine("DAP Connection closed");
+                    }
                 });
 
                 clientThread.Name = "DebugServer connection thread";
@@ -195,26 +210,41 @@ static class Program
             }
         });
 
-        Thread lspListenThread = new Thread(async () =>
+        Thread lspListenThread = new Thread(() =>
         {
             var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), lspPort);
             listener.Start();
-            try
+
+            while (true)
             {
-                while (true)
+                Socket? clientSocket = null;
+                try
                 {
-                    var clientSocket = listener.AcceptSocket();
-                    var inputStream = new NetworkStream(clientSocket);
+                    clientSocket = listener.AcceptSocket();
+                    using var stream = new NetworkStream(clientSocket, ownsSocket: true);
 
-                    lspServer = new LspServer(inputStream, inputStream);
-                    lspServer.Run();
-
+                    // One LSP session at a time (VSCode opens exactly one). Block this
+                    // thread until the session ends so the catch below sees startup /
+                    // pipeline / WaitForExit faults instead of them vanishing as an
+                    // unobserved Task.
+                    var lspServer = new LspServer(stream, stream);
+                    lspServer.Run().GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[X16D] LSP session faulted: {ex}");
+                }
+                finally
+                {
+                    // Closing the socket is the signal vscode-languageclient needs to run
+                    // its restart/reconnect logic. Without it a faulted session leaves a
+                    // live-but-silent socket and the client waits forever.
+                    try { clientSocket?.Close(); } catch { }
                     Console.WriteLine("LSP Connection closed");
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"LSP Exception: {ex.Message}");
+
+                if (clientSocket == null)
+                    Thread.Sleep(1000); // AcceptSocket itself failed; don't hot-spin
             }
         });
 

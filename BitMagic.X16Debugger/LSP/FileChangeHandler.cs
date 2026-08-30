@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
+using OmniSharp.Extensions.LanguageServer.Protocol.Window;
 using OmniSharp.Extensions.LanguageServer.Server;
 using SixLabors.ImageSharp;
 
@@ -19,6 +20,8 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
     private readonly Debouncer debouncer = new Debouncer();
     private LanguageServer? languageServer = null;
     private readonly HashSet<string> filesWithErrors = new HashSet<string>();
+    private readonly SemaphoreSlim buildGate = new(1, 1);
+    private bool infraFaultShown;
 
     public void SetLanguageServer(LanguageServer server)
     {
@@ -73,6 +76,57 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 
     internal async Task UpdateFileChanges()
     {
+        // Coalesce overlapping builds: never run two concurrent projectBuilder.Build()
+        // calls against the shared ServiceManager / file managers.
+        if (!await buildGate.WaitAsync(0))
+        {
+            QueueUpdateFileChanges(); // re-arm so the newest edit still builds
+            return;
+        }
+
+        try
+        {
+            await UpdateFileChangesCore();
+        }
+        catch (Exception ex)
+        {
+            ReportInfrastructureFault(ex);
+        }
+        finally
+        {
+            buildGate.Release();
+        }
+    }
+
+    // A fault in the build pipeline itself (not a user compile error). Surface it to the
+    // client so the LSP doesn't just silently stop producing diagnostics.
+    private void ReportInfrastructureFault(Exception ex)
+    {
+        Console.Error.WriteLine($"[X16D] LSP build pipeline fault: {ex}");
+
+        var window = languageServer?.Window;
+        if (window == null)
+            return;
+
+        window.LogMessage(new LogMessageParams
+        {
+            Type = MessageType.Error,
+            Message = $"BitMagic build pipeline fault: {ex.Message}",
+        });
+
+        if (!infraFaultShown)
+        {
+            infraFaultShown = true;
+            window.ShowMessage(new ShowMessageParams
+            {
+                Type = MessageType.Error,
+                Message = "BitMagic build pipeline hit an internal error - see the 'BMASM Language Server' output.",
+            });
+        }
+    }
+
+    private async Task UpdateFileChangesCore()
+    {
         try
         {
             if (languageServer == null)
@@ -115,7 +169,9 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
             if (sourceFile.Path.EndsWith(".generated.bmasm"))
                 path = "bitmagic:generated/" + sourceFile.Path;
             else
-                path = sourceFile != null ? Path.Combine(projectService.Project.BasePath, sourceFile.Path) : "";
+                path = sourceFile != null && projectService.Project != null
+                    ? Path.Combine(projectService.Project.BasePath, sourceFile.Path)
+                    : "";
 
             var toSend = new List<Diagnostic>() {
                 new Diagnostic()
@@ -154,7 +210,9 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
             if (sourceFile.Path.EndsWith(".generated.bmasm"))
                 path = "bitmagic:generated/" + sourceFile.Path;
             else
-                path = sourceFile != null ? Path.Combine(projectService.Project.BasePath, sourceFile.Path) : "";
+                path = sourceFile != null && projectService.Project != null
+                    ? Path.Combine(projectService.Project.BasePath, sourceFile.Path)
+                    : "";
 
             var toSend = new List<Diagnostic>();
             toSend.Add(new Diagnostic()
@@ -175,6 +233,8 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
         }
         catch (CompilerException e)
         {
+            // expected while a file is mid-edit; the specific handlers above already
+            // publish diagnostics. Nothing to report here.
         }
         catch (TemplateCompilationException e)
         {
@@ -203,10 +263,14 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
         }
         catch (TemplateException e)
         {
+            // expected while a file is mid-edit; diagnostics are published above.
         }
         catch (Exception e)
         {
-            // send any errors to the client
+            // Usually a malformed file mid-edit tripping the compiler/template engine, not
+            // an infrastructure fault - so log it (visible via the stdout drain) but don't
+            // raise it to the client as an error. Genuine pipeline faults are caught and
+            // reported by the UpdateFileChanges wrapper (ReportInfrastructureFault).
             Console.WriteLine(e.Message);
         }
     }

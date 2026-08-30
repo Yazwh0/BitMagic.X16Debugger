@@ -22,7 +22,7 @@ public sealed class Debouncer : IDisposable
         }
     }
 
-    private void OnTimerElapsed(object? state)
+    private async void OnTimerElapsed(object? state)
     {
         Func<Task>? actionToRun;
 
@@ -32,7 +32,20 @@ public sealed class Debouncer : IDisposable
             _action = null;
         }
 
-        actionToRun?.Invoke();
+        if (actionToRun == null)
+            return;
+
+        // Observe the task. Previously the returned Task was dropped, so an exception
+        // escaping the action was unobserved and the debounced pipeline died silently.
+        // The action (UpdateFileChanges) owns fault reporting; this is last-resort.
+        try
+        {
+            await actionToRun();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X16D] Debounced action faulted: {ex}");
+        }
     }
 
     public void Dispose()
