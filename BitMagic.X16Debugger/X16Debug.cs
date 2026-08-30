@@ -824,13 +824,28 @@ public class X16Debug : DebugAdapterBase
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
+        // Stop the window and emulation threads, then WAIT for both to actually exit
+        // before Reset(). Reset() disposes the emulator -- freeing its native memory and
+        // calling zimodem_host_destroy() -- which is a use-after-free if either thread is
+        // still inside Emulate() / _window.Run(), so the teardown has to stay after the
+        // joins. Join in parallel with a bounded timeout so a slow (or wedged) shutdown
+        // here can't overrun the DAP client's disconnect timeout: if it does, the client
+        // TerminateProcess()es us and none of the cleanup below (zimodem, NVRAM) runs.
         _window?.Stop();
 
         _running = false;
         _emulator.Control = Control.Stop;            // unblock the in-flight blocking Emulate()
-        _runEvent.Set();
-        _debugThread?.Join(TimeSpan.FromSeconds(5));
-        _windowThread?.Join(TimeSpan.FromSeconds(5));
+        _runEvent.Set();                             // wake DebugLoop if it's parked at a breakpoint
+
+        var joinTimeout = TimeSpan.FromSeconds(5);
+        var debugJoin = Task.Run(() => _debugThread?.Join(joinTimeout) ?? true);
+        var windowJoin = Task.Run(() => _windowThread?.Join(joinTimeout) ?? true);
+        Task.WaitAll(debugJoin, windowJoin);
+
+        if (!debugJoin.Result)
+            Logger.LogError($"Debug thread did not stop within {joinTimeout.TotalSeconds:0}s; continuing teardown regardless (native memory may still be in use).");
+        if (!windowJoin.Result)
+            Logger.LogError($"Window thread did not stop within {joinTimeout.TotalSeconds:0}s; continuing teardown regardless.");
 
         // persist anything that needs it
         // RTC NVRAM
