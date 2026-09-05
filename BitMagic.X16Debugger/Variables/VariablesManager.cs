@@ -233,6 +233,10 @@ internal class VariableManager
                 new VariableMap("YM", "bool", () => _emulator.State.Ym_Interrupt != 0),
                 new VariableMap("YM Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.Ym) != 0),
                 new VariableMap("YM Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.Ym) != 0),
+                new VariableMap("Uart Rda Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.UartRda) != 0),
+                new VariableMap("Uart Rda Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.UartRda) != 0),
+                new VariableMap("Uart Thre Int", "bool", () => (_emulator.State.Interrupt_Hit & (uint)InterruptSource.UartThre) != 0),
+                new VariableMap("Uart Thre Msk", "bool", () => (_emulator.State.Interrupt_Mask & (uint)InterruptSource.UartThre) != 0),
         })));
 
         scope = GetNewScope("VERA");
@@ -474,6 +478,45 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Keyb Write Position", "uint", () => $"0x{_emulator.Smc.SmcKeyboard_WritePosition:X2}", () => _emulator.Smc.SmcKeyboard_WritePosition));
         scope.AddVariable(new VariableMap("Keyb No Data", "bool", () => $"{_emulator.Smc.SmcKeyboard_ReadNoData != 0}", () => _emulator.Smc.SmcKeyboard_ReadNoData != 0));
 
+        scope = GetNewScope("UART");
+
+        scope.AddVariable(new VariableMap("Divisor", "uint", () => $"{_emulator.Uart.Divisor}", () => _emulator.Uart.Divisor));
+        scope.AddVariable(new VariableMap("Divisor Latch", "uint", () => $"{_emulator.Uart.DivisorLatch}", () => _emulator.Uart.DivisorLatch));
+        scope.AddVariable(new VariableMap("Stop Bits", "uint", () => $"{_emulator.Uart.StopBits}", () => _emulator.Uart.StopBits));
+        scope.AddVariable(new VariableMap("Parity", "uint", () => $"{_emulator.Uart.Parity}", () => _emulator.Uart.Parity));
+        scope.AddVariable(new VariableMap("Receive Byte", "uint", () => $"0x{_emulator.Uart.ReceiveByte:X2}", () => _emulator.Uart.ReceiveByte));
+        scope.AddVariable(new VariableMap("Rda Interrupt Enabled", "bool", () => $"{_emulator.Uart.InterruptRdaEnabled}", () => _emulator.Uart.InterruptRdaEnabled));
+        scope.AddVariable(new VariableMap("Thre Interrupt Enabled", "bool", () => $"{_emulator.Uart.InterruptThreEnabled}", () => _emulator.Uart.InterruptThreEnabled));
+        scope.AddVariable(new VariableMap("Fifo Trigger", "uint", () => $"{_emulator.Uart.FifoTrigger}", () => _emulator.Uart.FifoTrigger));
+        scope.AddVariable(new VariableMap("Cpu Ticks", "uint", () => $"{_emulator.Uart.CpuTicks}", () => _emulator.Uart.CpuTicks));
+
+        scope.AddVariable(new VariableMap("Inbound Empty", "bool", () => $"{_emulator.Uart.EmptyInbound}", () => _emulator.Uart.EmptyInbound));
+        scope.AddVariable(new VariableMap("Inbound Read Index", "uint", () => $"{_emulator.Uart.ReadIndexInbound}", () => _emulator.Uart.ReadIndexInbound));
+        scope.AddVariable(new VariableMap("Inbound Write Index", "uint", () => $"{_emulator.Uart.WriteIndexInbound}", () => _emulator.Uart.WriteIndexInbound));
+        scope.AddVariable(Register(new VariableIndex("Inbound Buffer", GetUartInboundBuffer)));
+
+        scope.AddVariable(new VariableMap("Outbound Empty", "bool", () => $"{_emulator.Uart.EmptyOutbound}", () => _emulator.Uart.EmptyOutbound));
+        scope.AddVariable(new VariableMap("Outbound Read Index", "uint", () => $"{_emulator.Uart.ReadIndexOutbound}", () => _emulator.Uart.ReadIndexOutbound));
+        scope.AddVariable(new VariableMap("Outbound Write Index", "uint", () => $"{_emulator.Uart.WriteIndexOutbound}", () => _emulator.Uart.WriteIndexOutbound));
+        scope.AddVariable(Register(new VariableIndex("Outbound Buffer", GetUartOutboundBuffer)));
+
+        scope.AddVariable(
+            Register(
+            new VariableChildren("ZiModem",
+                () => _emulator.Uart.ZiModem.Connected ? "Connected" : "Not Connected",
+                new[]
+                {
+                    new VariableMap("Connected", "bool", () => $"{_emulator.Uart.ZiModem.Connected}", () => _emulator.Uart.ZiModem.Connected),
+                    new VariableMap("Data Available", "uint", () => $"{_emulator.Uart.ZiModem.DataAvailable}", () => _emulator.Uart.ZiModem.DataAvailable),
+                    new VariableMap("Data Tx", "uint", () => $"{_emulator.Uart.ZiModem.DataTx}", () => _emulator.Uart.ZiModem.DataTx),
+                    new VariableMap("Data Tx Error", "uint", () => $"{_emulator.Uart.ZiModem.DataTxError}", () => _emulator.Uart.ZiModem.DataTxError),
+                    new VariableMap("Line Baud", "uint", () => $"{_emulator.Uart.ZiModem.LineBaud}", () => _emulator.Uart.ZiModem.LineBaud),
+                    new VariableMap("Line Data Bits", "uint", () => $"{_emulator.Uart.ZiModem.LineDataBits}", () => _emulator.Uart.ZiModem.LineDataBits),
+                    new VariableMap("Line Parity", "", () => $"{_emulator.Uart.ZiModem.LineParity}"),
+                    new VariableMap("Line Stop Bits x10", "uint", () => $"{_emulator.Uart.ZiModem.LineStopBitsX10}", () => _emulator.Uart.ZiModem.LineStopBitsX10),
+                    new VariableMap("Data Width", "uint", () => $"{_emulator.Uart.ZiModem.DataWidth}", () => _emulator.Uart.ZiModem.DataWidth),
+                })));
+
         scope = GetNewScope("RTC");
 
         scope.AddVariable(Register(new VariableIndex("NVRam", GetRtcnvRam)));
@@ -581,6 +624,41 @@ internal class VariableManager
         }
 
         return ("0x40 bytes", toReturn);
+    }
+
+    // Presents the 16-byte inbound/outbound UART ring buffers in logical order rather than
+    // raw memory order: index 0 is the next byte to be read out (at ReadIndex), the last
+    // entry is the most recently added byte (just behind WriteIndex).
+    public (string Value, ICollection<Variable> Variables) GetUartInboundBuffer() =>
+        GetUartRingBuffer(_emulator.Uart.BufferInbound, _emulator.Uart.ReadIndexInbound, _emulator.Uart.WriteIndexInbound, _emulator.Uart.EmptyInbound);
+
+    public (string Value, ICollection<Variable> Variables) GetUartOutboundBuffer() =>
+        GetUartRingBuffer(_emulator.Uart.BufferOutbound, _emulator.Uart.ReadIndexOutbound, _emulator.Uart.WriteIndexOutbound, _emulator.Uart.EmptyOutbound);
+
+    private static (string Value, ICollection<Variable> Variables) GetUartRingBuffer(Span<byte> buffer, uint readIndex, uint writeIndex, bool empty)
+    {
+        var toReturn = new List<Variable>();
+
+        if (!empty)
+        {
+            var read = (int)readIndex;
+            var write = (int)writeIndex;
+            var count = write > read ? write - read : write < read ? buffer.Length - read + write : buffer.Length;
+
+            for (var i = 0; i < count; i++)
+            {
+                var b = buffer[(read + i) % buffer.Length];
+                toReturn.Add(new Variable($"{i}", UartCharDisplay(b), 0));
+            }
+        }
+
+        return (toReturn.Count == 0 ? "Empty" : $"{toReturn.Count} byte{(toReturn.Count == 1 ? "" : "s")}", toReturn);
+    }
+
+    private static string UartCharDisplay(byte value)
+    {
+        var c = (char)value;
+        return char.IsAscii(c) && !char.IsControl(c) ? $"0x{value:X2} '{c}'" : $"0x{value:X2}";
     }
 
     private static string ViaByteDisplay(byte input, char zeroValue, char oneValue)
