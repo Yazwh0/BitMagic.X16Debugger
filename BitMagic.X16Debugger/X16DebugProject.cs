@@ -224,6 +224,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [Description("Files to be loaded into ROM.")]
     public RomSource[] RomSource { get; set; } = [];
 
+    /// <summary>
+    /// Enable the wifi card at $9fe0
+    /// </summary>
+    [JsonProperty("wifi")]
+    [Description("Enable the wifi card at $9fe0")]
+    public bool Wifi { get; set; } = false;
+
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {
         var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));
