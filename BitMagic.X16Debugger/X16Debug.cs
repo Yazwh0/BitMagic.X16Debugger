@@ -227,7 +227,9 @@ public class X16Debug : DebugAdapterBase
 
         // EmulatorOptions
         var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
+        _emulator.Reset();
         _emulator.SetOptions(emulatiorOptions);
+        _emulator.EnableWifi = _debugProject.Wifi;
 
         // Clear Ram
         if (_debugProject.MemoryFillValue != 0)
