@@ -1713,8 +1713,16 @@ public class X16Debug : DebugAdapterBase
                 case "sdcardblock":
                     data = _emulator.SpiOutboundBuffer.Slice(0, (int)_emulator.Spi.SendLength);
                     break;
+                case "nvram":
+                    data = _emulator.RtcNvram;
+                    break;
                 default:
-                    throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
+                    // Throwing here previously took down the whole request-processing loop for
+                    // the rest of the debug session, not just this one request - report it as
+                    // fully unreadable instead so an unrecognised reference degrades gracefully.
+                    Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via readMemory.");
+                    data = Span<byte>.Empty;
+                    break;
             }
         }
 
@@ -1751,16 +1759,30 @@ public class X16Debug : DebugAdapterBase
             case "sdcard":
                 data = _emulator.SdCard.Image;
                 break;
+            case "nvram":
+                data = _emulator.RtcNvram;
+                break;
             default:
-                throw new Exception($"Unknown memory reference {arguments.MemoryReference})");
+                // See HandleReadMemoryRequest - throwing here used to wedge the whole
+                // debug session's request loop rather than just failing this one request.
+                Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via writeMemory.");
+                data = Span<byte>.Empty;
+                break;
+        }
+
+        var toReturn = new WriteMemoryResponse();
+
+        if (data.Length == 0)
+        {
+            toReturn.BytesWritten = 0;
+            toReturn.Offset = arguments.Offset;
+            return toReturn;
         }
 
         var toWrite = Convert.FromBase64String(arguments.Data);
         var idx = arguments.Offset ?? 0;
         for (var i = 0; i < toWrite.Length; i++)
             data[idx++] = toWrite[i];
-
-        var toReturn = new WriteMemoryResponse();
 
         toReturn.BytesWritten = toWrite.Length;
         toReturn.Offset = arguments.Offset;
