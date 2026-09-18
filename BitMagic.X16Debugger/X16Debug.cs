@@ -124,6 +124,10 @@ public class X16Debug : DebugAdapterBase
         {
             HandlCpuProfilerRequestAsync(r);
         });
+        Protocol.RegisterRequestType<MemorySearchRequest, MemorySearchArguments, MemorySearchResponse>(delegate (IRequestResponder<MemorySearchArguments, MemorySearchResponse> r)
+        {
+            HandleMemorySearchRequestAsync(r);
+        });
     }
 
 #if SHOWDAP
@@ -1684,47 +1688,12 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new ReadMemoryResponse();
 
-        Span<byte> data;
-        if (arguments.MemoryReference.StartsWith("rambank"))
-        {
-            int.TryParse(arguments.MemoryReference.Substring(8), out var bank);
-
-            data = _emulator.RamBank.Slice(bank * 0x2000, 0x2000);
-        }
-        else if (arguments.MemoryReference.StartsWith("rombank"))
-        {
-            int.TryParse(arguments.MemoryReference.Substring(8), out var bank);
-
-            data = _emulator.RomBank.Slice(bank * 0x4000, 0x4000);
-        }
-        else
-        {
-            switch (arguments.MemoryReference)
-            {
-                case "main":
-                    data = _emulator.Memory;
-                    break;
-                case "vram":
-                    data = _emulator.Vera.Vram;
-                    break;
-                case "sdcard":
-                    data = _emulator.SdCard.Image;
-                    break;
-                case "sdcardblock":
-                    data = _emulator.SpiOutboundBuffer.Slice(0, (int)_emulator.Spi.SendLength);
-                    break;
-                case "nvram":
-                    data = _emulator.RtcNvram;
-                    break;
-                default:
-                    // Throwing here previously took down the whole request-processing loop for
-                    // the rest of the debug session, not just this one request - report it as
-                    // fully unreadable instead so an unrecognised reference degrades gracefully.
-                    Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via readMemory.");
-                    data = Span<byte>.Empty;
-                    break;
-            }
-        }
+        // Throwing for an unrecognised reference previously took down the whole
+        // request-processing loop for the rest of the debug session, not just this one
+        // request - report it as fully unreadable instead so it degrades gracefully.
+        var data = MemorySpaceResolver.Resolve(arguments.MemoryReference, _emulator, out var recognized);
+        if (!recognized)
+            Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via readMemory.");
 
         toReturn.Address = $"0x{arguments.Offset:X4}";
         var requestEnd = arguments.Count + arguments.Offset ?? 0;
@@ -1923,6 +1892,7 @@ public class X16Debug : DebugAdapterBase
             //            "SetFunctionBreakpointsRequest" => _serviceManager.BreakpointManager.SetFunctionBreakpointsRequest(requestArgs as SetFunctionBreakpointsArguments),
             "spriteView" => SpriteRequestHandler.HandleRequest(requestArgs as SpriteRequestArguments, _emulator),
             "getCpuProfile" => CpuProfilerRequestHandler.HandleRequest(requestArgs as CpuProfilerArguements, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
+            "searchMemory" => MemorySearchHandler.HandleRequest(requestArgs as MemorySearchArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1949,6 +1919,11 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleHistoryRequestAsync(IRequestResponder<HistoryRequestArguments, HistoryRequestResponse> responder)
     {
         responder.SetResponse(HistoryRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager));
+    }
+
+    internal virtual void HandleMemorySearchRequestAsync(IRequestResponder<MemorySearchArguments, MemorySearchResponse> responder)
+    {
+        responder.SetResponse(MemorySearchHandler.HandleRequest(responder.Arguments, _emulator));
     }
 
     internal virtual void HandlCpuProfilerRequestAsync(IRequestResponder<CpuProfilerArguements, CpuProfilerResponse> responder)
