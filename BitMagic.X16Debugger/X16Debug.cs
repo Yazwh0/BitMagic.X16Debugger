@@ -68,13 +68,27 @@ public class X16Debug : DebugAdapterBase
     private EmulatorWindow? _window = null;
 
 
+    // True on --queryport: view/amend only, never owns the session. See RequireNotAttachOnly().
+    private readonly bool _attachOnly;
+
+    // Seeds ServiceManagerFactory up front so an attachOnly connection never has to (it must
+    // never create one itself). ServiceManagerFactory/ServiceManager are internal; this is the
+    // public seam for callers like X16D's server mode, which needs this before any connection
+    // - dapport or queryport - arrives.
+    public static void EnsureServiceManagerInitialized(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, IEmulatorLogger logger)
+    {
+        if (!ServiceManagerFactory.Initialized())
+            ServiceManagerFactory.SetServiceManager(new ServiceManager(getNewEmulatorInstance, logger));
+    }
+
     // This will be started on a second thread, seperate to the emulator
-    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false, string officialEmulatorParams = "", IEmulatorLogger? logger = null)
+    public X16Debug(Func<EmulatorOptions?, Emulator> getNewEmulatorInstance, Stream stdIn, Stream stdOut, string romFile, string officialEmulatorLocation, bool runInOfficialEmulator = false, string officialEmulatorParams = "", IEmulatorLogger? logger = null, bool attachOnly = false)
     {
         Logger = logger ?? new DebugLogger(this);
+        _attachOnly = attachOnly;
         //_serviceManager = new ServiceManager(getNewEmulatorInstance, Logger);
 
-        if (!ServiceManagerFactory.Initialized())
+        if (!attachOnly && !ServiceManagerFactory.Initialized())
             ServiceManagerFactory.SetServiceManager(new ServiceManager(getNewEmulatorInstance, Logger));
 
         _serviceManager = ServiceManagerFactory.GetSeviceMangager();
@@ -196,8 +210,26 @@ public class X16Debug : DebugAdapterBase
         };
     }
 
+    // Only meaningful on --queryport connections; guards launch/continue/step/setBreakpoints/
+    // a terminating disconnect there, since those belong to the owning --dapport connection.
+    private void RequireNotAttachOnly(string action)
+    {
+        if (_attachOnly)
+            throw new ProtocolException($"{action} is not supported on an attach connection.");
+    }
+
+    protected override AttachResponse HandleAttachRequest(AttachArguments arguments)
+    {
+        if (!ServiceManagerFactory.IsSessionActive)
+            throw new ProtocolException("No debug session is currently running.");
+
+        return new AttachResponse();
+    }
+
     protected override LaunchResponse HandleLaunchRequest(LaunchArguments arguments)
     {
+        RequireNotAttachOnly("launch");
+
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
         var stopOnEntry = false; // arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
@@ -793,6 +825,7 @@ public class X16Debug : DebugAdapterBase
             _externalThread.Priority = ThreadPriority.Highest;
             _externalThread.Start();
 
+            ServiceManagerFactory.IsSessionActive = true;
             return new LaunchResponse();
         }
 
@@ -825,11 +858,14 @@ public class X16Debug : DebugAdapterBase
         _windowThread.Name = "Debugger Window";
         _windowThread.Start();
 
+        ServiceManagerFactory.IsSessionActive = true;
         return new LaunchResponse();
     }
 
     protected override DisconnectResponse HandleDisconnectRequest(DisconnectArguments arguments)
     {
+        RequireNotAttachOnly("disconnect");
+        ServiceManagerFactory.IsSessionActive = false;
         // Stop the window and emulation threads, then WAIT for both to actually exit
         // before Reset(). Reset() disposes the emulator -- freeing its native memory and
         // calling zimodem_host_destroy() -- which is a use-after-free if either thread is
@@ -884,10 +920,16 @@ public class X16Debug : DebugAdapterBase
     #region Breakpoints
 
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
-        => _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
+    {
+        RequireNotAttachOnly("setBreakpoints");
+        return _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
+    }
 
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
-        => _serviceManager.BreakpointManager.HandleSetInstructionBreakpointsRequest(arguments);
+    {
+        RequireNotAttachOnly("setInstructionBreakpoints");
+        return _serviceManager.BreakpointManager.HandleSetInstructionBreakpointsRequest(arguments);
+    }
 
     public void BreakpointManager_BreakpointsUpdated(object? sender, BreakpointsUpdatedEventArgs e)
     {
@@ -907,7 +949,10 @@ public class X16Debug : DebugAdapterBase
     }
 
     protected override SetFunctionBreakpointsResponse HandleSetFunctionBreakpointsRequest(SetFunctionBreakpointsArguments arguments)
-        => _serviceManager.BreakpointManager.HandleFunctionBreakpointsRequest(arguments);
+    {
+        RequireNotAttachOnly("setFunctionBreakpoints");
+        return _serviceManager.BreakpointManager.HandleFunctionBreakpointsRequest(arguments);
+    }
 
     #endregion
 
@@ -921,6 +966,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override ContinueResponse HandleContinueRequest(ContinueArguments arguments)
     {
+        RequireNotAttachOnly("continue");
         _emulator.Stepping = false;
         lock (SyncObject)
         {
@@ -932,6 +978,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override StepInResponse HandleStepInRequest(StepInArguments arguments)
     {
+        RequireNotAttachOnly("stepIn");
         _emulator.Stepping = true;
         lock (SyncObject)
         {
@@ -943,6 +990,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override StepOutResponse HandleStepOutRequest(StepOutArguments arguments)
     {
+        RequireNotAttachOnly("stepOut");
         _emulator.Stepping = false;
         _serviceManager.StackManager.SetBreakpointOnCaller();
 
@@ -956,6 +1004,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override NextResponse HandleNextRequest(NextArguments arguments)
     {
+        RequireNotAttachOnly("next");
         if (_emulator.Memory[_emulator.Pc] == 0x20)
         {
             _emulator.StackBreakpoints[_emulator.StackPointer - 0x100] = 0x01;
@@ -980,6 +1029,7 @@ public class X16Debug : DebugAdapterBase
 
     protected override GotoResponse HandleGotoRequest(GotoArguments arguments)
     {
+        RequireNotAttachOnly("goto");
         var toReturn = new GotoResponse();
 
         if (!_GotoTargets.ContainsKey(arguments.TargetId))

@@ -20,6 +20,10 @@ internal static class ServiceManagerFactory
     public static bool Initialized() => _serviceManager != null;
 
     public static ServiceManager GetSeviceMangager() => _serviceManager ?? throw new Exception("ServiceManager not set in Factory");
+
+    // Whether the owning connection currently has a live launched session (Initialized()
+    // alone just means a ServiceManager exists, not that it's in active use).
+    public static bool IsSessionActive { get; set; }
 }
 
 // Not quite DI, but a place to hold all the managers and initialise in the correct order.

@@ -28,9 +28,14 @@ static class Program
 
         [Option("dapport", Default = 0, Required = false)]
         public int DapServerPort { get; set; }
-        
+
         [Option("lspport", Default = 2564, Required = false)]
         public int LspServerPort { get; set; }
+
+        // View/amend-only DAP port: connections here never own a session, they only attach to
+        // whatever session the --dapport connection currently has live. 0 = disabled.
+        [Option("queryport", Default = 0, Required = false)]
+        public int QueryServerPort { get; set; }
 
         [Option("stepOnEnter", Default = false, Required = false)]
         public bool StepOnEnter { get; set; }
@@ -129,7 +134,7 @@ static class Program
         try
         {
             if (options.DapServerPort != 0)
-                RunAsServer(getEmulator, options.DapServerPort, options.LspServerPort, rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
+                RunAsServer(getEmulator, options.DapServerPort, options.LspServerPort, options.QueryServerPort, rom, options.OfficialEmulatorLocation, options.RunInOfficialEmulator, options.OfficialEmulatorParameters);
             else
             {
                 Console.WriteLine(@"Running using stdin\stdout.");
@@ -163,10 +168,15 @@ static class Program
         return 0;
     }
 
-    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int dapPort, int lspPort, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
+    private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int dapPort, int lspPort, int queryPort, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
     {
         Console.WriteLine($"DAP Listening on port {dapPort}.");
         Console.WriteLine($"LSP Listening on port {lspPort}.");
+
+        // Seed this up front rather than let the first X16Debug create it lazily: a --queryport
+        // connection must never be the one to create it (see X16Debug's attachOnly ctor param),
+        // so it needs to already exist by the time any connection - dapport or queryport - arrives.
+        X16Debug.EnsureServiceManagerInitialized(getEmulator, new ConsoleLogger());
 
         var listenThread = new Thread(() =>
         {
@@ -250,6 +260,56 @@ static class Program
 
         lspListenThread.Name = "LSP listener thread";
         lspListenThread.Start();
+
+        if (queryPort != 0)
+        {
+            Console.WriteLine($"Query Listening on port {queryPort}.");
+
+            var queryListenThread = new Thread(() =>
+            {
+                var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), queryPort);
+                listener.Start();
+
+                while (true)
+                {
+                    var clientSocket = listener.AcceptSocket();
+
+                    var clientThread = new Thread(() =>
+                    {
+                        Console.WriteLine("Query Accepted connection");
+
+                        using var inputStream = new NetworkStream(clientSocket, ownsSocket: true);
+                        try
+                        {
+                            var logger = new ConsoleLogger();
+                            var debugger = new X16Debug(getEmulator, inputStream, inputStream, rom, emulatorLocation, runInEmulatorLocation, officialEmulatorParameters, logger, attachOnly: true);
+                            logger.AddSecondaryLogger(new DebugLogger(debugger));
+
+                            debugger.Protocol.DispatcherError += (sender, e) =>
+                            {
+                                Console.Error.WriteLine(e.Exception.Message);
+                            };
+                            debugger.Run();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[X16D] Query session faulted: {ex}");
+                        }
+                        finally
+                        {
+                            try { clientSocket.Close(); } catch { }
+                            Console.WriteLine("Query Connection closed");
+                        }
+                    });
+
+                    clientThread.Name = "QueryServer connection thread";
+                    clientThread.Start();
+                }
+            });
+
+            queryListenThread.Name = "QueryServer listener thread";
+            queryListenThread.Start();
+        }
 
         listenThread.Name = "DebugServer listener thread";
         listenThread.Start();
