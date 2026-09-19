@@ -1,5 +1,6 @@
 ﻿using BitMagic.Compiler;
 using BitMagic.Compiler.CodingSeb;
+using BitMagic.X16Debugger.CustomMessage;
 using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
@@ -25,6 +26,32 @@ internal class ExpressionManager
         _memoryWrapper = new MemoryWrapper(() => _emulator.Memory.ToArray());
 
         _evaluator.EvaluateVariable += _evaluator_EvaluateVariable;
+        _evaluator.EvaluateFunction += _evaluator_EvaluateFunction;
+    }
+
+    // evaluate has no other way to read a raw address - named symbols resolve via
+    // _evaluator_EvaluateVariable, but a runtime-computed address (e.g. a tile map entry)
+    // isn't a symbol. Mirrors read_memory's space-name convention (MemorySpaceResolver) so
+    // "main" here means the same thing it does there.
+    private void _evaluator_EvaluateFunction(object? sender, FunctionEvaluationEventArg e)
+    {
+        if (!e.Name.Equals("peek", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (e.Args.Count is < 1 or > 2)
+            throw new Exception("peek(address) or peek(address, space) expected - space defaults to 'main' and can also be 'vram', 'sdcard', 'sdcardblock', 'nvram', 'rambank_<N>', or 'rombank_<N>'.");
+
+        var address = Convert.ToInt32(e.EvaluateArg(0));
+        var space = e.Args.Count == 2 ? e.EvaluateArg<string>(1) : "main";
+
+        var data = MemorySpaceResolver.Resolve(space, _emulator, out var recognized);
+        if (!recognized)
+            throw new Exception($"peek: unknown memory space '{space}'.");
+
+        if (address < 0 || address >= data.Length)
+            throw new Exception($"peek: address {address} is out of range for '{space}' (length {data.Length}).");
+
+        e.Value = data[address];
     }
 
     public void SetState(CompileState state)
