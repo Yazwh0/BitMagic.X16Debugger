@@ -1771,28 +1771,12 @@ public class X16Debug : DebugAdapterBase
 
     protected override WriteMemoryResponse HandleWriteMemoryRequest(WriteMemoryArguments arguments)
     {
-        Span<byte> data;
-        switch (arguments.MemoryReference)
-        {
-            case "main":
-                data = _emulator.Memory;
-                break;
-            case "vram":
-                data = _emulator.Vera.Vram;
-                break;
-            case "sdcard":
-                data = _emulator.SdCard.Image;
-                break;
-            case "nvram":
-                data = _emulator.RtcNvram;
-                break;
-            default:
-                // See HandleReadMemoryRequest - throwing here used to wedge the whole
-                // debug session's request loop rather than just failing this one request.
-                Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via writeMemory.");
-                data = Span<byte>.Empty;
-                break;
-        }
+        // Was a hand-duplicated switch covering only "main"/"vram"/"sdcard"/"nvram" - silently
+        // missing "sdcardblock" and every "rambank_<N>"/"rombank_<N>" bank that
+        // HandleReadMemoryRequest and searchMemory already support via this same resolver.
+        var data = MemorySpaceResolver.Resolve(arguments.MemoryReference, _emulator, out var recognized);
+        if (!recognized)
+            Logger.LogError($"Unknown memory reference '{arguments.MemoryReference}' requested via writeMemory.");
 
         var toReturn = new WriteMemoryResponse();
 
