@@ -648,6 +648,11 @@ public class X16Debug : DebugAdapterBase
             throw new ProtocolException(e.Message);
         }
 
+        // Compilation succeeded - (re)build the "Globals" scope from what was just
+        // compiled. Doesn't depend on the current stack frame (unlike Locals), so this
+        // only needs doing once here, not per scopes request.
+        _serviceManager.VariableManager.RebuildGlobals(_serviceManager.DebugableFileManager);
+
         //if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
         //{
         //    foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())

@@ -36,6 +36,7 @@ internal class BitMagicBinaryFile : SourceFileBase, IBinaryFile
     public override IReadOnlyList<ParentSourceMapReference> ParentMap => _parentMap;
 
     private readonly CompileResult _result;
+    internal CompileState State => _result.State;
     public FileHeader HasHeader { get; }
 
     public bool Written { get; private set; }

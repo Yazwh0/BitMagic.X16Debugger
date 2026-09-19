@@ -1,9 +1,12 @@
-﻿using BitMagic.X16Debugger.Scopes;
+﻿using BitMagic.Common;
+using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Snapshot;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
 using System.Text;
 using static Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages.VariablePresentationHint;
+using CompilerVariables = BitMagic.Compiler.Variables;
 
 namespace BitMagic.X16Debugger.Variables;
 
@@ -584,6 +587,73 @@ internal class VariableManager
 
 
         AddLocalScope("Locals");
+
+        // Registered empty here (like Locals) so it's visible immediately; RebuildGlobals
+        // fills it in once something's actually been compiled.
+        GetNewScope("Globals");
+    }
+
+    // Unlike Locals, this doesn't depend on the current stack frame - built once after a
+    // successful compile (X16Debug.HandleLaunchRequest), not per scopes request. Safe to
+    // call again on a relaunch: Clear() drops the previous tree first.
+    public void RebuildGlobals(DebugableFileManager debugableFileManager)
+    {
+        var scope = GetNewScope("Globals");
+        scope.Clear();
+
+        var memory = new MemoryWrapper(() => _emulator.Memory.ToArray());
+        var seen = new HashSet<CompilerVariables>();
+
+        foreach (var file in debugableFileManager.GetBitMagicFilesToWrite())
+        {
+            if (file is not BitMagicBinaryFile binary)
+                continue;
+
+            foreach (var compilerScope in binary.State.ScopeFactory.AllScopes)
+            {
+                // Multiple compiled files can share the same CompileState (and so the same
+                // Scopes) - only add each one once.
+                if (!seen.Add(compilerScope.Variables))
+                    continue;
+
+                var node = BuildVariableTree(compilerScope.Variables, memory);
+                if (node != null)
+                    scope.AddVariable(Register(node));
+            }
+        }
+    }
+
+    // Mirrors DebuggerLocalVariables.SetLocalScope's own walk, but keeps the nesting
+    // (Segment/Scope/Procedure are already one tree on CompilerVariables itself, see
+    // Variables.Children) instead of flattening every ancestor into one list. Returns
+    // null (and adds no node) for a scope with nothing to show, recursively - an empty
+    // Procedure shouldn't leave a dead-end node in the tree, and a Scope whose only
+    // content was empty Procedures shouldn't appear at all.
+    private VariableChildren? BuildVariableTree(CompilerVariables variables, MemoryWrapper memory)
+    {
+        var children = new List<IVariableItem>();
+
+        foreach (var (key, value) in variables.Values)
+        {
+            if (value.VariableDataType is VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)
+                continue;
+
+            var item = DebuggerLocalVariables.GetVariable(key, value, _expressionManager!, memory, this);
+            if (item != null)
+                children.Add(item);
+        }
+
+        foreach (var child in variables.Children)
+        {
+            var childNode = BuildVariableTree(child, memory);
+            if (childNode != null)
+                children.Add(Register(childNode));
+        }
+
+        if (children.Count == 0)
+            return null;
+
+        return new VariableChildren(variables.Namespace, () => "", children.ToArray());
     }
 
     public int GetMapSize(int value) => value switch

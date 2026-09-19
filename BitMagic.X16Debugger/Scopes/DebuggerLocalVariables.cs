@@ -97,7 +97,9 @@ internal class DebuggerLocalVariables : IScopeMap
         }
     }
 
-    private IVariableItem? GetVariable(string name, IAsmVariable variable, ExpressionManager expressionManager, MemoryWrapper memory, VariableManager variableManager)
+    // Also reused by VariableManager.RebuildGlobals - this rendering doesn't depend on
+    // instance state, just the variable/memory/manager it's given.
+    internal static IVariableItem? GetVariable(string name, IAsmVariable variable, ExpressionManager expressionManager, MemoryWrapper memory, VariableManager variableManager)
     {
         var j = variable;
 
@@ -136,7 +138,7 @@ internal class DebuggerLocalVariables : IScopeMap
         return null;
     }
 
-    private Func<(string Value, ICollection<Variable> Variables)> GetArray(IAsmVariable variable, MemoryWrapper memory)
+    internal static Func<(string Value, ICollection<Variable> Variables)> GetArray(IAsmVariable variable, MemoryWrapper memory)
     {
         var _variable = variable;
         var _memory = memory;
