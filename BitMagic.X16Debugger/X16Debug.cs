@@ -240,7 +240,7 @@ public class X16Debug : DebugAdapterBase
 
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
-        var stopOnEntry = false; // arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
+        var stopOnEntry = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
 
         if (!File.Exists(toCompile))
         {
