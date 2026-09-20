@@ -2,7 +2,7 @@
 
 namespace BitMagic.X16Debugger.LSP;
 
-internal class ProjectService
+public class ProjectService
 {
     public X16DebugProject? Project { get; internal set; }
     public string? WorkspaceFolder { get; internal set; }

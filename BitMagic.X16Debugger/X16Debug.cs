@@ -260,7 +260,6 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Source = toCompile;
         }
 
-
         // EmulatorOptions
         var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
         _emulator.Reset();
@@ -445,7 +444,6 @@ public class X16Debug : DebugAdapterBase
             _debugProject.Symbols = symbolsList.ToArray();
         }
 
-
         // Keyboard buffer
         if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any())
         {
@@ -530,147 +528,22 @@ public class X16Debug : DebugAdapterBase
 
         // default compiler options
         if (_debugProject.CompileOptions == null)
+        {
             _debugProject.CompileOptions = new Compiler.CompileOptions()
             {
                 BinFolder = "bin",
             };
-
-        var autobootFile = _debugProject.AutobootFile;
-
-        try
-        {
-            var projectService = new ProjectService();
-            projectService.SetProject(_debugProject, workspaceFolder);
-
-            var builder = new ProjectBuilder(projectService, _serviceManager, Logger);
-
-            builder.Build().GetAwaiter().GetResult();
-
-            _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)((_emulator.RomBank[0x3ffd] << 8) + _emulator.RomBank[0x3ffc]);
-            autobootFile = _debugProject.AutobootFile;
-
-            if (_debugProject.DirectRun && !string.IsNullOrWhiteSpace(_debugProject.Source))
-            {
-                var result = _serviceManager.DebugableFileManager.GetFile_New(_debugProject.Source) ?? throw new Exception("Source file not found");
-                var prg = result as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
-
-                _emulator.LoadIntoMemory(prg.Data, 0x801, true);
-                result.FileLoaded(_emulator, 0x801, true, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
-
-                _emulator.Pc = _debugProject.StartAddress != -1 ? (ushort)_debugProject.StartAddress : (ushort)0x810;
-                Logger.LogLine($"Injecting {prg.Data.Count:#,##0} bytes. Starting at 0x801. PC is 0x{_emulator.Pc:X4}.");
-            }
         }
-        catch (CompilerLineException e)
-        {
-            var sourceFile = e.Line.Source.SourceFile;
-            var lineNumber = e.Line.Source.LineNumber - 1;
 
-            // its very possible the source hasn't been registered, so we need to do it.
-            _serviceManager.DebugableFileManager.AddFiles(sourceFile);
+        var debugReturn = DebugBuilder.BuildDebugProject(_debugProject, workspaceFolder, Protocol, _emulator, _serviceManager, Logger, out var autobootFile);
 
-            var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
-
-            try
-            {
-                var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
-
-                var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
-
-                Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
-            }
-            catch
-            {
-                Logger.LogLine($"ERROR: \"??\" \"{e.Message}\"");
-            }
-
-            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
-
-            return new LaunchResponse();
-        }
-        catch (CompilerSourceException e)
-        {
-            var sourceFile = e.SourceFile.SourceFile;
-            var lineNumber = e.SourceFile.LineNumber - 1;
-
-            _serviceManager.DebugableFileManager.AddFiles(sourceFile);
-
-            var wrapper = _serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
-
-            var ul = wrapper.FindUltimateSource(lineNumber, _serviceManager.DebugableFileManager);
-
-            var path = sourceFile != null ? Path.GetRelativePath(workspaceFolder, sourceFile.Path) : "";
-
-            Logger.LogError($"ERROR: \"{path ?? "??"}\" ({ul.lineNumber}) \"{e.Message}\"", ul.SourceFile, ul.lineNumber + 1);
-
-            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
-
-            return new LaunchResponse();
-        }
-        catch (CompilerException e)
-        {
-            Logger.LogLine($"ERROR: {e.Message}");
-
-            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
-
-            return new LaunchResponse();
-        }
-        catch (TemplateCompilationException e)
-        {
-            Logger.LogLine(""); // ensure there is a new line
-            foreach (var error in e.Errors)
-            {
-                var path = e.Filename != null ? Path.GetRelativePath(workspaceFolder, e.Filename) : "";
-                var source = new BitMagicProjectFile(e.Filename);
-                if (error.LineNumber >= 0)
-                    Logger.LogError($"ERROR: \"{path ?? "??"}\" ({error.LineNumber}) \"{error.ErrorText}\"", source, error.LineNumber);
-                else
-                    Logger.LogLine($"ERROR: \"{path ?? "??"}\" \"{error.ErrorText}\"");
-            }
-
-            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
-
-            return new LaunchResponse();
-        }
-        catch (TemplateException e)
-        {
-            Logger.LogLine($"ERROR: {e.Message}");
-
-            Protocol.SendEvent(new TerminatedEvent() { Restart = false });
-
-            return new LaunchResponse();
-        }
-        catch (Exception e)
-        {
-            Logger.LogLine($"ERROR: {e.Message}");
-            Logger.LogError(e.StackTrace);
-
-            throw new ProtocolException(e.Message);
-        }
+        if (debugReturn != null)
+            return debugReturn;
 
         // Compilation succeeded - (re)build the "Globals" scope from what was just
         // compiled. Doesn't depend on the current stack frame (unlike Locals), so this
         // only needs doing once here, not per scopes request.
         _serviceManager.VariableManager.RebuildGlobals(_serviceManager.DebugableFileManager);
-
-        //if (!string.IsNullOrWhiteSpace(_debugProject.OutputFolder))
-        //{
-        //    foreach (var f in _serviceManager.DebugableFileManager.GetBitMagicFiles())
-        //    {
-        //        string path = "";
-        //        if (Path.IsPathRooted(_debugProject.OutputFolder))
-        //        {
-        //            path = Path.GetFullPath(Path.Combine(_debugProject.OutputFolder, f.Filename));
-        //        }
-        //        else
-        //        {
-        //            path = Path.GetFullPath(Path.Combine(workspaceFolder, _debugProject.OutputFolder, f.Filename));
-        //        }
-        //        Logger.Log($"Writing to '{path}'... ");
-        //        File.WriteAllBytes(path, f.Data.ToArray());
-        //        Logger.LogLine("Done.");
-        //    }
-        //}
 
         if (!string.IsNullOrWhiteSpace(autobootFile))
         {

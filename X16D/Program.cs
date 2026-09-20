@@ -1,4 +1,5 @@
 ﻿using BitMagic.X16Debugger;
+using BitMagic.X16Debugger.Builder;
 using BitMagic.X16Debugger.LSP;
 using BitMagic.X16Emulator;
 using CommandLine;
@@ -51,6 +52,25 @@ static class Program
 
         [Option("buildOnly", Default = false, Required = false)]
         public bool BuildOnly { get; set; }
+
+        [Option("buildTarget", Default = "", Required = false)]
+        public string BuildTarget { get; set; } = "";
+
+        [Option("buildFolder", Default = "", Required = false)]
+        public string BuildFolder { get; set; } = "";
+
+        // Where the compiled output (.prg etc) is written (X16DebugProject.OutputFolder). Only
+        // meaningful to set explicitly when buildTarget is a bare source file rather than a .json
+        // project - a project file can already carry its own "outputFolder"; this overrides it
+        // either way.
+        [Option("outputFolder", Default = "", Required = false)]
+        public string OutputFolder { get; set; } = "";
+
+        // Where the template engine writes its intermediate compiled-C#/generated-bmasm artifacts
+        // (CompileOptions.BinFolder) - not the compiled program itself, see outputFolder for that.
+        // Overrides a .json project's own compileOptions.binFolder too, if given.
+        [Option("binFolder", Default = "", Required = false)]
+        public string BinFolder { get; set; } = "";
     }
 
     private const string RomEnvironmentVariable = "BITMAGIC_ROM";
@@ -121,6 +141,67 @@ static class Program
             }
         }
 
+        if (options.BuildOnly)
+        {
+            if (string.IsNullOrEmpty(options.BuildFolder))
+            {
+                Console.Error.WriteLine("BuildFolder cannot be empty if BuildOnly is set.");
+                return 100;
+            }
+            if (string.IsNullOrEmpty(options.BuildTarget))
+            {
+                Console.Error.WriteLine("BuildTarget cannot be empty if BuildOnly is set.");
+                return 101;
+            }
+
+            if (!File.Exists(options.BuildTarget))
+            {
+                Console.Error.WriteLine($"BuildTarget '{options.BuildTarget}' does not exist.");
+                return 102;
+            }
+
+            try
+            {
+                var logger = new ConsoleLogger();
+
+                // Same branch HandleLaunchRequest uses for its "program" argument: a .json project
+                // file is loaded as one, anything else (a bare .bmasm/.asm file) is compiled directly
+                // with no project wrapper needed.
+                X16DebugProject debugProject;
+                if (string.Equals(Path.GetExtension(options.BuildTarget), ".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    DebugProjectFileConverter.SetLogger(logger);
+                    debugProject = X16DebugProject.Load(options.BuildTarget, options.BuildFolder);
+                }
+                else
+                {
+                    debugProject = new X16DebugProject { Source = options.BuildTarget, BasePath = options.BuildFolder };
+                }
+
+                if (!string.IsNullOrWhiteSpace(options.OutputFolder))
+                    debugProject.OutputFolder = options.OutputFolder;
+
+                debugProject.CompileOptions ??= new BitMagic.Compiler.CompileOptions();
+
+                if (!string.IsNullOrWhiteSpace(options.BinFolder))
+                    debugProject.CompileOptions.BinFolder = options.BinFolder;
+                else if (string.IsNullOrWhiteSpace(debugProject.CompileOptions.BinFolder))
+                    // Same default HandleLaunchRequest applies: CompileOptions.BinFolder defaults
+                    // to "" (not "bin"), and an empty BasePath + empty BinFolder makes
+                    // AsTemplateOptions call Path.GetFullPath("") further down, which throws.
+                    debugProject.CompileOptions.BinFolder = "bin";
+
+                var success = ProjectBuilderFactory.TryBuild(debugProject, options.BuildFolder, logger, out _);
+
+                return success ? 0 : 1;
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"ERROR: {e.Message}");
+                return 1;
+            }
+        }
+
         Func<EmulatorOptions?, Emulator> getEmulator = (options) =>
         {
             var emulator = new Emulator(options);
@@ -162,7 +243,6 @@ static class Program
 
             return 1;
         }
-
 
         Console.WriteLine("Exiting.");
         return 0;

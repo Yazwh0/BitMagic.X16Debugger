@@ -7,7 +7,9 @@ internal static class CompileOptionsExtension
 {
     public static TemplateOptions AsTemplateOptions(this CompileOptions options, string basePath) => new TemplateOptions
     {
-        BinFolder = Path.GetFullPath(Path.Join(basePath, options?.BinFolder ?? "bin")),
+        // Path.Combine (not Path.Join): an absolute options.BinFolder must replace basePath
+        // rather than be appended to it - Join always concatenates regardless of rootedness.
+        BinFolder = Path.GetFullPath(Path.Combine(basePath, options?.BinFolder ?? "bin")),
         Rebuild = options?.Rebuild ?? false,
         SaveGeneratedTemplate = options?.SaveGeneratedTemplate ?? false,
         SavePreGeneratedTemplate = options?.SavePreGeneratedTemplate ?? false,
