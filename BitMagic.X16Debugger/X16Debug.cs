@@ -142,6 +142,14 @@ public class X16Debug : DebugAdapterBase
         {
             HandleMemorySearchRequestAsync(r);
         });
+        Protocol.RegisterRequestType<KeyboardInputRequest, KeyboardInputRequestArguments, KeyboardInputRequestResponse>(delegate (IRequestResponder<KeyboardInputRequestArguments, KeyboardInputRequestResponse> r)
+        {
+            HandleKeyboardInputRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<MouseInputRequest, MouseInputRequestArguments, MouseInputRequestResponse>(delegate (IRequestResponder<MouseInputRequestArguments, MouseInputRequestResponse> r)
+        {
+            HandleMouseInputRequestAsync(r);
+        });
     }
 
 #if SHOWDAP
@@ -1805,6 +1813,8 @@ public class X16Debug : DebugAdapterBase
             "spriteView" => SpriteRequestHandler.HandleRequest(requestArgs as SpriteRequestArguments, _emulator),
             "getCpuProfile" => CpuProfilerRequestHandler.HandleRequest(requestArgs as CpuProfilerArguements, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
             "searchMemory" => MemorySearchHandler.HandleRequest(requestArgs as MemorySearchArguments, _emulator),
+            "keyboardInput" => KeyboardInputRequestHandler.HandleRequest(requestArgs as KeyboardInputRequestArguments, _emulator),
+            "mouseInput" => MouseInputRequestHandler.HandleRequest(requestArgs as MouseInputRequestArguments, _emulator),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -1846,6 +1856,16 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleSpriteRequestAsync(IRequestResponder<SpriteRequestArguments, SpriteRequestResponse> responder)
     {
         responder.SetResponse(SpriteRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleKeyboardInputRequestAsync(IRequestResponder<KeyboardInputRequestArguments, KeyboardInputRequestResponse> responder)
+    {
+        responder.SetResponse(KeyboardInputRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleMouseInputRequestAsync(IRequestResponder<MouseInputRequestArguments, MouseInputRequestResponse> responder)
+    {
+        responder.SetResponse(MouseInputRequestHandler.HandleRequest(responder.Arguments, _emulator));
     }
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     //{
