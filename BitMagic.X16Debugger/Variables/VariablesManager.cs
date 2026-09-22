@@ -633,6 +633,8 @@ internal class VariableManager
             if (file is not BitMagicBinaryFile binary)
                 continue;
 
+            var fileChildren = new List<IVariableItem>();
+
             foreach (var compilerScope in binary.State.ScopeFactory.AllScopes)
             {
                 // Multiple compiled files can share the same CompileState (and so the same
@@ -642,8 +644,16 @@ internal class VariableManager
 
                 var node = BuildVariableTree(compilerScope.Variables, memory);
                 if (node != null)
-                    scope.AddVariable(Register(node));
+                    fileChildren.Add(Register(node));
             }
+
+            // Each top-level project file compiles with its own ScopeFactory, so scope
+            // names (e.g. the default "Main") are only unique within one file - two files
+            // can easily both contribute a "Main". Group by binary.Name (the compiled
+            // output's filename, which is unique per binary) so those scopes never collide
+            // when flattened into this one shared Globals scope.
+            if (fileChildren.Count > 0)
+                scope.AddVariable(Register(new VariableChildren(binary.Name, () => "", fileChildren.ToArray())));
         }
     }
 

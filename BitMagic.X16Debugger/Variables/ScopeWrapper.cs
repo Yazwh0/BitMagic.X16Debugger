@@ -18,7 +18,7 @@ internal class ScopeWrapper : IScopeWrapper
         _scope.AddVariable(variable);
 
         if (variable.GetExpressionValue != null)
-            ObjectTree.Add(variable.Name, variable.GetExpressionValue);
+            ObjectTree[variable.Name] = variable.GetExpressionValue;
     }
 
     public void Clear()
