@@ -85,6 +85,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Libraries", "Libraries", "{
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BitMagic.Cc65Lib", "BitMagic.Cc65Lib\BitMagic.Cc65Lib.csproj", "{FC8A8406-ABEC-4454-BA29-043A1C7795FE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BitMagic.X16Debugger.Tests", "BitMagic.X16Debugger.Tests\BitMagic.X16Debugger.Tests.csproj", "{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -407,6 +409,18 @@ Global
 		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x64.Build.0 = Release|Any CPU
 		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x86.ActiveCfg = Release|Any CPU
 		{FC8A8406-ABEC-4454-BA29-043A1C7795FE}.Release|x86.Build.0 = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|x64.Build.0 = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Debug|x86.Build.0 = Debug|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|x64.ActiveCfg = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|x64.Build.0 = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|x86.ActiveCfg = Release|Any CPU
+		{AE0F3B17-B08F-4AEF-ABC3-A7156970BE99}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

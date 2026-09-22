@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="BitMagic.X16Debugger.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\BitMagic.Libraries\BitMagic.Common.Address\BitMagic.Common.Address.csproj" />
     <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.Compiler\BitMagic.TemplateEngine.Compiler.csproj" />
     <ProjectReference Include="..\..\BitMagic.TemplateEngine\BitMagic.TemplateEngine.X16\BitMagic.TemplateEngine.X16.csproj" />

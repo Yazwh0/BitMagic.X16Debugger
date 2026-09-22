@@ -1,6 +1,8 @@
 ﻿using BitMagic.Common;
 using BitMagic.X16Debugger.Variables;
+using BitMagic.X16Emulator;
 using System;
+using System.Globalization;
 
 namespace BitMagic.X16Debugger.Scopes;
 
@@ -11,6 +13,78 @@ internal static class IAsmVariableExtensions
 
     internal static int MemoryOffset(this IAsmVariable variable, int index) =>
         variable.Value + index * VariableDataTypeLength(variable);
+
+    // Only fixed-width numeric locations have an unambiguous single-value write - strings need
+    // length/overflow handling and the *Ptr types display "address -> pointee", so leave both
+    // read-only rather than guess which half a plain SetVariable value is meant to change.
+    internal static bool SupportsDirectWrite(this IAsmVariable variable) =>
+        variable.VariableDataType is
+            VariableDataType.Byte or VariableDataType.Sbyte or
+            VariableDataType.Short or VariableDataType.Ushort or
+            VariableDataType.Int or VariableDataType.Uint or
+            VariableDataType.Long or VariableDataType.Ulong or
+            VariableDataType.Ptr;
+
+    // Writes straight into the emulator's live memory (not a MemoryWrapper snapshot, which is a
+    // .ToArray() copy). Accepts plain decimal, "0x"/"$"-prefixed hex - whatever VSC's edit box holds.
+    internal static bool TrySetValue(this IAsmVariable variable, Emulator emulator, string text, int index = 0)
+    {
+        if (!variable.SupportsDirectWrite() || !TryParseInteger(text, out var parsed))
+            return false;
+
+        var memory = emulator.Memory;
+        var offset = MemoryOffset(variable, index);
+
+        switch (variable.VariableDataType)
+        {
+            case VariableDataType.Byte:
+            case VariableDataType.Sbyte:
+                memory[offset] = unchecked((byte)parsed);
+                return true;
+            case VariableDataType.Short:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 2), unchecked((short)parsed));
+            case VariableDataType.Ushort:
+            case VariableDataType.Ptr:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 2), unchecked((ushort)parsed));
+            case VariableDataType.Int:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 4), unchecked((int)parsed));
+            case VariableDataType.Uint:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 4), unchecked((uint)parsed));
+            case VariableDataType.Long:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 8), parsed);
+            case VariableDataType.Ulong:
+                return BitConverter.TryWriteBytes(memory.Slice(offset, 8), unchecked((ulong)parsed));
+            default:
+                return false;
+        }
+    }
+
+    // Also reused directly by VariablesManager for the CPU register scope, which writes
+    // straight to Emulator properties rather than through an IAsmVariable/memory offset.
+    internal static bool TryParseInteger(string text, out long value)
+    {
+        text = text.Trim();
+
+        // Hex parsing already reinterprets a full-width bit pattern (e.g. "FFFFFFFFFFFFFFFF" -> -1)
+        // via two's complement, so Ulong's top half round-trips through the hex path unchanged.
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            return long.TryParse(text.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
+
+        if (text.StartsWith("$", StringComparison.Ordinal))
+            return long.TryParse(text.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
+
+        if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            return true;
+
+        // Decimal Ulong values above long.MaxValue don't fit a signed parse - reinterpret the bit pattern.
+        if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var asUlong))
+        {
+            value = unchecked((long)asUlong);
+            return true;
+        }
+
+        return false;
+    }
 
     internal static Func<string> ToStringFunction(this IAsmVariable variable, MemoryWrapper memory, int index = 0)
     {

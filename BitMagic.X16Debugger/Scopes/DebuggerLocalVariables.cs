@@ -51,7 +51,7 @@ internal class DebuggerLocalVariables : IScopeMap
 
                 var j = i;
 
-                var toAdd = GetVariable(i.Key, i.Value, expressionManager, memory, variableManager);
+                var toAdd = GetVariable(i.Key, i.Value, expressionManager, memory, emulator, variableManager);
 
                 _variables.Add(toAdd);
                 //if (i.Value.VariableType == VariableType.DebuggerExpression)
@@ -99,7 +99,7 @@ internal class DebuggerLocalVariables : IScopeMap
 
     // Also reused by VariableManager.RebuildGlobals - this rendering doesn't depend on
     // instance state, just the variable/memory/manager it's given.
-    internal static IVariableItem? GetVariable(string name, IAsmVariable variable, ExpressionManager expressionManager, MemoryWrapper memory, VariableManager variableManager)
+    internal static IVariableItem? GetVariable(string name, IAsmVariable variable, ExpressionManager expressionManager, MemoryWrapper memory, Emulator emulator, VariableManager variableManager)
     {
         var j = variable;
 
@@ -111,6 +111,7 @@ internal class DebuggerLocalVariables : IScopeMap
 
             var type = j.VariableTypeText();
 
+            // Arbitrary expressions aren't a single memory location, so there's no sensible write-back.
             return new VariableMap(variable.Name, type, getter);
         }
         else
@@ -118,7 +119,7 @@ internal class DebuggerLocalVariables : IScopeMap
             // todo: handle arrays
             if (j.Array)
             {
-                var v = new VariableIndex(name, GetArray(j, memory));
+                var v = new VariableIndex(name, GetArray(j, memory), GetArraySetter(j, emulator));
                 variableManager.Register(v);
                 return v;
             }
@@ -132,7 +133,9 @@ internal class DebuggerLocalVariables : IScopeMap
             else
                 type += $" (${j.Value:X4})";
 
-            return new VariableMap(name, type, getter);
+            Action<string>? setValue = j.SupportsDirectWrite() ? value => j.TrySetValue(emulator, value) : null;
+
+            return new VariableMap(name, type, getter, setValue: setValue);
         }
 
         return null;
@@ -164,6 +167,21 @@ internal class DebuggerLocalVariables : IScopeMap
             }
 
             return ($"{_variable.VariableTypeText()}[{_variable.Length.ToString()}]", toReturn);
+        };
+    }
+
+    // Element name is the index (as text, set by GetArray above) - out-of-range or non-numeric
+    // names are ignored rather than throwing, since VSC is the only caller and always echoes
+    // back a name it was given.
+    internal static Action<string, string>? GetArraySetter(IAsmVariable variable, Emulator emulator)
+    {
+        if (!variable.SupportsDirectWrite())
+            return null;
+
+        return (indexText, value) =>
+        {
+            if (int.TryParse(indexText, out var index) && index >= 0 && index < variable.Length)
+                variable.TrySetValue(emulator, value, index);
         };
     }
 }

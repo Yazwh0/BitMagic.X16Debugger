@@ -206,7 +206,7 @@ public class X16Debug : DebugAdapterBase
             SupportsInstructionBreakpoints = true,
             SupportsGotoTargetsRequest = true,
             SupportsLoadedSourcesRequest = true,
-            //SupportsSetVariable = true,
+            SupportsSetVariable = true,
             SupportsLogPoints = true,
             SupportsConditionalBreakpoints = true,
             SupportsHitConditionalBreakpoints = true,
@@ -1746,6 +1746,46 @@ public class X16Debug : DebugAdapterBase
 
     protected override SetVariableResponse HandleSetVariableRequest(SetVariableArguments arguments)
     {
+        static SetVariableResponse ToResponse(Variable v) => new()
+        {
+            Value = v.Value,
+            Type = v.Type,
+            VariablesReference = v.VariablesReference,
+            NamedVariables = v.NamedVariables,
+            IndexedVariables = v.IndexedVariables
+        };
+
+        var scope = _serviceManager.ScopeManager.GetScope(arguments.VariablesReference);
+
+        if (scope != null)
+        {
+            var scopeItem = scope.Variables.FirstOrDefault(i => i.Name == arguments.Name);
+            if (scopeItem == null)
+                return new SetVariableResponse();
+
+            scopeItem.SetVariable(arguments);
+            return ToResponse(scopeItem.GetVariable());
+        }
+
+        var variable = _serviceManager.VariableManager.Get(arguments.VariablesReference);
+
+        if (variable is VariableChildren children)
+        {
+            var child = children.Children.FirstOrDefault(i => i.Name == arguments.Name);
+            if (child == null)
+                return new SetVariableResponse();
+
+            children.SetVariable(arguments);
+            return ToResponse(child.GetVariable());
+        }
+
+        if (variable is VariableIndex index)
+        {
+            index.SetVariable(arguments);
+            var updated = index.GetChildren().FirstOrDefault(i => i.Name == arguments.Name);
+            return updated == null ? new SetVariableResponse() : ToResponse(updated);
+        }
+
         return new SetVariableResponse();
     }
 

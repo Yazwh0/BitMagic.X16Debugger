@@ -196,23 +196,30 @@ internal class VariableManager
                 new VariableChildren("Flags",
                 () => $"[{(_emulator.Negative ? "N" : " ")}{(_emulator.Overflow ? "V" : " ")} {(_emulator.BreakFlag ? "B" : " ")}{(_emulator.Decimal ? "D" : " ")}{(_emulator.InterruptDisable ? "I" : " ")}{(_emulator.Zero ? "Z" : " ")}{(_emulator.Carry ? "C" : " ")}]",
                 new[] {
-                    new VariableMap("Negative", "bool", () => _emulator.Negative, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Overflow", "bool", () => _emulator.Overflow, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Break", "bool", () => _emulator.BreakFlag, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Decimal", "bool", () => _emulator.Decimal, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Interupt", "bool", () => _emulator.InterruptDisable, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Zero", "bool", () => _emulator.Zero, attribute: AttributesValue.IsBoolean),
-                    new VariableMap("Carry", "bool", () => _emulator.Carry, attribute: AttributesValue.IsBoolean),
+                    new VariableMap("Negative", "bool", () => _emulator.Negative, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.Negative = b)),
+                    new VariableMap("Overflow", "bool", () => _emulator.Overflow, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.Overflow = b)),
+                    new VariableMap("Break", "bool", () => _emulator.BreakFlag, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.BreakFlag = b)),
+                    new VariableMap("Decimal", "bool", () => _emulator.Decimal, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.Decimal = b)),
+                    new VariableMap("Interupt", "bool", () => _emulator.InterruptDisable, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.InterruptDisable = b)),
+                    new VariableMap("Zero", "bool", () => _emulator.Zero, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.Zero = b)),
+                    new VariableMap("Carry", "bool", () => _emulator.Carry, attribute: AttributesValue.IsBoolean, setValue: value => SetFlag(value, b => _emulator.Carry = b)),
                 })));
-        scope.AddVariable(new VariableMap("A", "byte", () => _emulator.A, () => _emulator.A));
-        scope.AddVariable(new VariableMap("X", "byte", () => _emulator.X, () => _emulator.X));
-        scope.AddVariable(new VariableMap("Y", "byte", () => _emulator.Y, () => _emulator.Y));
-        scope.AddVariable(new VariableMap("PC", "ushort", () => _emulator.Pc, () => _emulator.Pc));
-        scope.AddVariable(new VariableMap("SP", "byte", () => $"0x{_emulator.StackPointer:X3}", () => _emulator.StackPointer));
+        scope.AddVariable(new VariableMap("A", "byte", () => _emulator.A, () => _emulator.A, setValue: value => SetRegister(value, p => _emulator.A = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("X", "byte", () => _emulator.X, () => _emulator.X, setValue: value => SetRegister(value, p => _emulator.X = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("Y", "byte", () => _emulator.Y, () => _emulator.Y, setValue: value => SetRegister(value, p => _emulator.Y = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("PC", "ushort", () => _emulator.Pc, () => _emulator.Pc, setValue: value => SetRegister(value, p => _emulator.Pc = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("SP", "byte", () => $"0x{_emulator.StackPointer:X3}", () => _emulator.StackPointer, setValue: value => SetRegister(value, p => _emulator.StackPointer = unchecked((ushort)p))));
 
-        scope.AddVariable(new VariableMap("Ram Bank", "byte", () => _emulator.Memory[0], () => _emulator.Memory[0]));
+        // Ram Bank/Rom Bank (Memory) write the raw register byte, not a decoded Emulator.* property
+        // - the opposite of the VERA scope. copy_rambank_to_memory/copy_rombank_to_memory
+        // (Banking.asm), called unconditionally every emulator run/step right alongside vera_init,
+        // read Memory[0]/Memory[1] directly to decide which bank to copy into the visible window
+        // and to refresh RomBankAct/rom_bank from. So the memory byte is the source of truth here;
+        // Rom Bank (Act) is the derived read-only view and stays without a setter, since any edit
+        // to it would just be overwritten from Memory[1] on the next run.
+        scope.AddVariable(new VariableMap("Ram Bank", "byte", () => _emulator.Memory[0], () => _emulator.Memory[0], setValue: value => SetRegister(value, p => _emulator.Memory[0] = unchecked((byte)p))));
         scope.AddVariable(new VariableMap("Rom Bank (Act)", "int", () => (byte)_emulator.RomBankAct, () => (byte)_emulator.RomBankAct));
-        scope.AddVariable(new VariableMap("Rom Bank (Memory)", "byte", () => _emulator.Memory[1], () => _emulator.Memory[1]));
+        scope.AddVariable(new VariableMap("Rom Bank (Memory)", "byte", () => _emulator.Memory[1], () => _emulator.Memory[1], setValue: value => SetRegister(value, p => _emulator.Memory[1] = unchecked((byte)p))));
         scope.AddVariable(new VariableMemory("Ram", () => "CPU Visible Ram", "main", () => _emulator.Memory.ToArray()));
         scope.AddVariable(Register(new VariableChildren("Ram Banks", () => "256 Banks", GetRamBanks().ToArray())));
         scope.AddVariable(Register(new VariableChildren("Rom Banks", () => "256 Banks", GetRomBanks().ToArray())));
@@ -248,8 +255,8 @@ internal class VariableManager
             Register(
                 new VariableChildren("Data 0", () => $"0x{_emulator.Memory[0x9F23]:X2}", "int",
                 new[] {
-                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => (uint)_emulator.Vera.Data0_Address),
-                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step)
+                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => (uint)_emulator.Vera.Data0_Address, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Address = unchecked((int)p))),
+                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Step = unchecked((int)p)))
                 }
             )));
 
@@ -257,8 +264,8 @@ internal class VariableManager
             Register(
                 new VariableChildren("Data 1", () => $"0x{_emulator.Memory[0x9F24]:X2}", "int",
                 new[] {
-                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => (uint)_emulator.Vera.Data1_Address),
-                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step)
+                    new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => (uint)_emulator.Vera.Data1_Address, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Address = unchecked((int)p))),
+                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Step = unchecked((int)p)))
                 }
             )));
 
@@ -268,14 +275,14 @@ internal class VariableManager
                     _emulator.Vera.Layer0_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer0_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer0_T256C)}Tiles" :
                     "Disabled",
                 new[] {
-                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}", () => _emulator.Vera.Layer0_MapAddress),
-                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}", () => _emulator.Vera.Layer0_TileAddress),
-                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}", () => _emulator.Vera.Layer0_HScroll),
-                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}", () => _emulator.Vera.Layer0_VScroll),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}", () => _emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16),
-                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer0_MapWidth)),
-                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer0_MapHeight)),
+                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer0_MapAddress:X5}", () => _emulator.Vera.Layer0_MapAddress, setValue: value => SetRegister(value, p => _emulator.Vera.Layer0_MapAddress = unchecked((uint)p))),
+                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer0_TileAddress:X5}", () => _emulator.Vera.Layer0_TileAddress, setValue: value => SetRegister(value, p => _emulator.Vera.Layer0_TileAddress = unchecked((uint)p))),
+                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer0_HScroll:X2}", () => _emulator.Vera.Layer0_HScroll, setValue: value => SetRegister(value, p => _emulator.Vera.Layer0_HScroll = unchecked((ushort)p))),
+                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer0_VScroll:X2}", () => _emulator.Vera.Layer0_VScroll, setValue: value => SetRegister(value, p => _emulator.Vera.Layer0_VScroll = unchecked((ushort)p))),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16)}", () => _emulator.Vera.Layer0_TileWidth == 0 ? 8 : 16, setValue: value => SetTileSize(value, b => _emulator.Vera.Layer0_TileWidth = b)),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer0_TileHeight == 0 ? 8 : 16, setValue: value => SetTileSize(value, b => _emulator.Vera.Layer0_TileHeight = b)),
+                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer0_MapWidth), setValue: value => SetMapSize(value, b => _emulator.Vera.Layer0_MapWidth = b)),
+                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer0_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer0_MapHeight), setValue: value => SetMapSize(value, b => _emulator.Vera.Layer0_MapHeight = b)),
                 }
             )));
 
@@ -285,23 +292,23 @@ internal class VariableManager
                     _emulator.Vera.Layer1_BitMapMode ? $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp Bitmap" : $"{GetColourDepth(_emulator.Vera.Layer1_ColourDepth):0}bpp{GetT256C(_emulator.Vera.Layer1_T256C)}Tiles" :
                     "Disabled",
                 new[] {
-                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}", () => _emulator.Vera.Layer1_MapAddress),
-                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}", () => _emulator.Vera.Layer1_TileAddress),
-                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}", () => _emulator.Vera.Layer1_HScroll),
-                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}", () => _emulator.Vera.Layer1_VScroll),
-                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16),
-                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16),
-                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer1_MapWidth)),
-                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer1_MapHeight)),
+                    new VariableMap("Map Address", "uint", () => $"0x{_emulator.Vera.Layer1_MapAddress:X5}", () => _emulator.Vera.Layer1_MapAddress, setValue: value => SetRegister(value, p => _emulator.Vera.Layer1_MapAddress = unchecked((uint)p))),
+                    new VariableMap("Tile Address", "uint", () => $"0x{_emulator.Vera.Layer1_TileAddress:X5}", () => _emulator.Vera.Layer1_TileAddress, setValue: value => SetRegister(value, p => _emulator.Vera.Layer1_TileAddress = unchecked((uint)p))),
+                    new VariableMap("HScroll", "uint", () => $"0x{_emulator.Vera.Layer1_HScroll:X2}", () => _emulator.Vera.Layer1_HScroll, setValue: value => SetRegister(value, p => _emulator.Vera.Layer1_HScroll = unchecked((ushort)p))),
+                    new VariableMap("VScroll", "uint", () => $"0x{_emulator.Vera.Layer1_VScroll:X2}", () => _emulator.Vera.Layer1_VScroll, setValue: value => SetRegister(value, p => _emulator.Vera.Layer1_VScroll = unchecked((ushort)p))),
+                    new VariableMap("Tile Width", "uint", () => $"{(_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileWidth == 0 ? 8 : 16, setValue: value => SetTileSize(value, b => _emulator.Vera.Layer1_TileWidth = b)),
+                    new VariableMap("Tile Height", "uint", () => $"{(_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16)}", () =>_emulator.Vera.Layer1_TileHeight == 0 ? 8 : 16, setValue: value => SetTileSize(value, b => _emulator.Vera.Layer1_TileHeight = b)),
+                    new VariableMap("Map Width", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapWidth)}", () => GetMapSize(_emulator.Vera.Layer1_MapWidth), setValue: value => SetMapSize(value, b => _emulator.Vera.Layer1_MapWidth = b)),
+                    new VariableMap("Map Height", "uint", () => $"{GetMapSize(_emulator.Vera.Layer1_MapHeight)}", () => GetMapSize(_emulator.Vera.Layer1_MapHeight), setValue: value => SetMapSize(value, b => _emulator.Vera.Layer1_MapHeight = b)),
                 }
             )));
 
-        scope.AddVariable(new VariableMap("DcSel", "uint", () => $"{_emulator.Vera.DcSel}", () => _emulator.Vera.DcSel));
-        scope.AddVariable(new VariableMap("Output", "uint", () => $"{_emulator.Vera.VideoOutput}", () => _emulator.Vera.VideoOutput));
-        scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}", () => _emulator.Vera.Dc_HStart));
-        scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}", () => _emulator.Vera.Dc_VStart));
-        scope.AddVariable(new VariableMap("DC HStop", "uint", () => $"{_emulator.Vera.Dc_HStop}", () => _emulator.Vera.Dc_HStop));
-        scope.AddVariable(new VariableMap("DC VStop", "uint", () => $"{_emulator.Vera.Dc_VStop}", () => _emulator.Vera.Dc_VStop));
+        scope.AddVariable(new VariableMap("DcSel", "uint", () => $"{_emulator.Vera.DcSel}", () => _emulator.Vera.DcSel, setValue: value => SetRegister(value, p => _emulator.Vera.DcSel = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("Output", "uint", () => $"{_emulator.Vera.VideoOutput}", () => _emulator.Vera.VideoOutput, setValue: value => SetRegister(value, p => _emulator.Vera.VideoOutput = unchecked((uint)p))));
+        scope.AddVariable(new VariableMap("DC HStart", "uint", () => $"{_emulator.Vera.Dc_HStart}", () => _emulator.Vera.Dc_HStart, setValue: value => SetRegister(value, p => _emulator.Vera.Dc_HStart = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("DC VStart", "uint", () => $"{_emulator.Vera.Dc_VStart}", () => _emulator.Vera.Dc_VStart, setValue: value => SetRegister(value, p => _emulator.Vera.Dc_VStart = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("DC HStop", "uint", () => $"{_emulator.Vera.Dc_HStop}", () => _emulator.Vera.Dc_HStop, setValue: value => SetRegister(value, p => _emulator.Vera.Dc_HStop = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("DC VStop", "uint", () => $"{_emulator.Vera.Dc_VStop}", () => _emulator.Vera.Dc_VStop, setValue: value => SetRegister(value, p => _emulator.Vera.Dc_VStop = unchecked((ushort)p))));
 
         scope.AddVariable(
             Register(
@@ -431,25 +438,27 @@ internal class VariableManager
 
         scope = GetNewScope("Kernal");
 
-        scope.AddVariable(new VariableMap("R0", "ushort", () => $"0x{_emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8):X4}", () => _emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8)));
-        scope.AddVariable(new VariableMap("R1", "ushort", () => $"0x{_emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8):X4}", () => _emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8)));
-        scope.AddVariable(new VariableMap("R2", "ushort", () => $"0x{_emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8):X4}", () => _emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8)));
-        scope.AddVariable(new VariableMap("R3", "ushort", () => $"0x{_emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8):X4}", () => _emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8)));
+        // R0-R15 are plain zero-page memory (no register-decode indirection like VERA/VIA), so the
+        // setter just writes the two bytes directly - no resync story to worry about.
+        scope.AddVariable(new VariableMap("R0", "ushort", () => $"0x{_emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8):X4}", () => _emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8), setValue: value => SetR16(value, 0x02)));
+        scope.AddVariable(new VariableMap("R1", "ushort", () => $"0x{_emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8):X4}", () => _emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8), setValue: value => SetR16(value, 0x04)));
+        scope.AddVariable(new VariableMap("R2", "ushort", () => $"0x{_emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8):X4}", () => _emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8), setValue: value => SetR16(value, 0x06)));
+        scope.AddVariable(new VariableMap("R3", "ushort", () => $"0x{_emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8):X4}", () => _emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8), setValue: value => SetR16(value, 0x08)));
 
-        scope.AddVariable(new VariableMap("R4", "ushort", () => $"0x{_emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8):X4}", () => _emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8)));
-        scope.AddVariable(new VariableMap("R5", "ushort", () => $"0x{_emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8):X4}", () => _emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8)));
-        scope.AddVariable(new VariableMap("R6", "ushort", () => $"0x{_emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8):X4}", () => _emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8)));
-        scope.AddVariable(new VariableMap("R7", "ushort", () => $"0x{_emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8):X4}", () => _emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8)));
+        scope.AddVariable(new VariableMap("R4", "ushort", () => $"0x{_emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8):X4}", () => _emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8), setValue: value => SetR16(value, 0x0a)));
+        scope.AddVariable(new VariableMap("R5", "ushort", () => $"0x{_emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8):X4}", () => _emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8), setValue: value => SetR16(value, 0x0c)));
+        scope.AddVariable(new VariableMap("R6", "ushort", () => $"0x{_emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8):X4}", () => _emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8), setValue: value => SetR16(value, 0x0e)));
+        scope.AddVariable(new VariableMap("R7", "ushort", () => $"0x{_emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8):X4}", () => _emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8), setValue: value => SetR16(value, 0x10)));
 
-        scope.AddVariable(new VariableMap("R8", "ushort", () => $"0x{_emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8):X4}", () => _emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8)));
-        scope.AddVariable(new VariableMap("R9", "ushort", () => $"0x{_emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8):X4}", () => _emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8)));
-        scope.AddVariable(new VariableMap("R10", "ushort", () => $"0x{_emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8):X4}", () => _emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8)));
-        scope.AddVariable(new VariableMap("R11", "ushort", () => $"0x{_emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8):X4}", () => _emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8)));
+        scope.AddVariable(new VariableMap("R8", "ushort", () => $"0x{_emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8):X4}", () => _emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8), setValue: value => SetR16(value, 0x12)));
+        scope.AddVariable(new VariableMap("R9", "ushort", () => $"0x{_emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8):X4}", () => _emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8), setValue: value => SetR16(value, 0x14)));
+        scope.AddVariable(new VariableMap("R10", "ushort", () => $"0x{_emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8):X4}", () => _emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8), setValue: value => SetR16(value, 0x16)));
+        scope.AddVariable(new VariableMap("R11", "ushort", () => $"0x{_emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8):X4}", () => _emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8), setValue: value => SetR16(value, 0x18)));
 
-        scope.AddVariable(new VariableMap("R12", "ushort", () => $"0x{_emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8):X4}", () => _emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8)));
-        scope.AddVariable(new VariableMap("R13", "ushort", () => $"0x{_emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8):X4}", () => _emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8)));
-        scope.AddVariable(new VariableMap("R14", "ushort", () => $"0x{_emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8):X4}", () => _emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8)));
-        scope.AddVariable(new VariableMap("R15", "ushort", () => $"0x{_emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8):X4}", () => _emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8)));
+        scope.AddVariable(new VariableMap("R12", "ushort", () => $"0x{_emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8):X4}", () => _emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8), setValue: value => SetR16(value, 0x1a)));
+        scope.AddVariable(new VariableMap("R13", "ushort", () => $"0x{_emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8):X4}", () => _emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8), setValue: value => SetR16(value, 0x1c)));
+        scope.AddVariable(new VariableMap("R14", "ushort", () => $"0x{_emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8):X4}", () => _emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8), setValue: value => SetR16(value, 0x1e)));
+        scope.AddVariable(new VariableMap("R15", "ushort", () => $"0x{_emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8):X4}", () => _emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8), setValue: value => SetR16(value, 0x20)));
 
         scope = GetNewScope("Display");
 
@@ -526,29 +535,44 @@ internal class VariableManager
 
         scope = GetNewScope("VIA");
 
-        scope.AddVariable(new VariableMap("A In Value ", "", () => ViaByteDisplay(_emulator.Via.Register_A_InValue, '0', '1'), () => _emulator.Via.Register_A_InValue));
-        scope.AddVariable(new VariableMap("A Direction", "", () => ViaByteDisplay(_emulator.Via.Register_A_Direction, '^', 'v')));
-        scope.AddVariable(new VariableMap("A Out Value", "", () => ViaByteDisplay(_emulator.Via.Register_A_OutValue, '0', '1'), () => _emulator.Via.Register_A_OutValue));
+        // A In/Out Value and the Timer fields below write Emulator.Via.* (decoded state), same
+        // reasoning as the VERA scope: via_init (Via.asm) re-encodes In/Out/Direction into PRA/ORA,
+        // and the Timer1/2 counter+latch fields into memory, unconditionally on every emulator
+        // run/step - so these edits reach memory just like a real CPU write would.
+        //
+        // "A Value" (raw Memory[0x9f01]) deliberately has no setter - it's the derived PRA byte
+        // via_init recomputes from A In/Out/Direction every run, so an edit there would just be
+        // silently overwritten next run, same reasoning as Rom Bank (Act).
+        //
+        // The "Interupt *" fields (and Timer1/2 Interupt) are backed by ViaState.Interrupt_* in
+        // X16Emulator, which writes Memory[0x9f0e] directly - a fixed bit within a genuine memory
+        // byte, so (unlike A Value above) there's no init routine to overwrite it. These setters
+        // used to be `Memory[0x9f0e] |= ...` unconditionally, i.e. could set the bit but never
+        // clear it - fixed in X16Emulator.cs (ViaState.SetMemoryBit) to properly AND/OR based on
+        // the value, so it's now safe to expose here too.
+        scope.AddVariable(new VariableMap("A In Value ", "", () => ViaByteDisplay(_emulator.Via.Register_A_InValue, '0', '1'), () => _emulator.Via.Register_A_InValue, setValue: value => SetRegister(value, p => _emulator.Via.Register_A_InValue = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("A Direction", "", () => ViaByteDisplay(_emulator.Via.Register_A_Direction, '^', 'v'), () => _emulator.Via.Register_A_Direction, setValue: value => SetRegister(value, p => _emulator.Via.Register_A_Direction = unchecked((byte)p))));
+        scope.AddVariable(new VariableMap("A Out Value", "", () => ViaByteDisplay(_emulator.Via.Register_A_OutValue, '0', '1'), () => _emulator.Via.Register_A_OutValue, setValue: value => SetRegister(value, p => _emulator.Via.Register_A_OutValue = unchecked((byte)p))));
         scope.AddVariable(new VariableMap("A Value    ", "", () => ViaByteDisplay(_emulator.Memory[0x9f01], '0', '1'), () => _emulator.Memory[0x9f01]));
 
-        scope.AddVariable(new VariableMap("Timer1", "", () => _emulator.Via.Timer1_Counter.ToString(), () => _emulator.Via.Timer1_Counter));
-        scope.AddVariable(new VariableMap("Timer1 Continuous", "", () => _emulator.Via.Timer1_Continous.ToString(), () => _emulator.Via.Timer1_Continous));
-        scope.AddVariable(new VariableMap("Timer1 Running", "", () => _emulator.Via.Timer1_Running.ToString(), () => _emulator.Via.Timer1_Running));
-        scope.AddVariable(new VariableMap("Timer1 Latch", "", () => _emulator.Via.Timer1_Latch.ToString(), () => _emulator.Via.Timer1_Latch));
-        scope.AddVariable(new VariableMap("Timer1 Interupt", "", () => _emulator.Via.Interrupt_Timer1.ToString(), () => _emulator.Via.Interrupt_Timer1));
-        scope.AddVariable(new VariableMap("Timer1 Pb7", "", () => _emulator.Via.Timer1_Pb7.ToString(), () => _emulator.Via.Timer1_Pb7));
+        scope.AddVariable(new VariableMap("Timer1", "", () => _emulator.Via.Timer1_Counter.ToString(), () => _emulator.Via.Timer1_Counter, setValue: value => SetRegister(value, p => _emulator.Via.Timer1_Counter = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("Timer1 Continuous", "", () => _emulator.Via.Timer1_Continous.ToString(), () => _emulator.Via.Timer1_Continous, setValue: value => SetFlag(value, b => _emulator.Via.Timer1_Continous = b)));
+        scope.AddVariable(new VariableMap("Timer1 Running", "", () => _emulator.Via.Timer1_Running.ToString(), () => _emulator.Via.Timer1_Running, setValue: value => SetFlag(value, b => _emulator.Via.Timer1_Running = b)));
+        scope.AddVariable(new VariableMap("Timer1 Latch", "", () => _emulator.Via.Timer1_Latch.ToString(), () => _emulator.Via.Timer1_Latch, setValue: value => SetRegister(value, p => _emulator.Via.Timer1_Latch = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("Timer1 Interupt", "", () => _emulator.Via.Interrupt_Timer1.ToString(), () => _emulator.Via.Interrupt_Timer1, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Timer1 = b)));
+        scope.AddVariable(new VariableMap("Timer1 Pb7", "", () => _emulator.Via.Timer1_Pb7.ToString(), () => _emulator.Via.Timer1_Pb7, setValue: value => SetFlag(value, b => _emulator.Via.Timer1_Pb7 = b)));
 
-        scope.AddVariable(new VariableMap("Timer2", "", () => _emulator.Via.Timer2_Counter.ToString(), () => _emulator.Via.Timer2_Counter));
-        scope.AddVariable(new VariableMap("Timer2 Running", "", () => _emulator.Via.Timer2_Running.ToString(), () => _emulator.Via.Timer2_Running));
-        scope.AddVariable(new VariableMap("Timer2 Latch", "", () => _emulator.Via.Timer2_Latch.ToString(), () => _emulator.Via.Timer2_Latch));
-        scope.AddVariable(new VariableMap("Timer2 Interupt", "", () => _emulator.Via.Interrupt_Timer2.ToString(), () => _emulator.Via.Interrupt_Timer2));
-        scope.AddVariable(new VariableMap("Timer2 Pulse Count", "", () => _emulator.Via.Timer2_PulseCount.ToString(), () => _emulator.Via.Timer2_PulseCount));
+        scope.AddVariable(new VariableMap("Timer2", "", () => _emulator.Via.Timer2_Counter.ToString(), () => _emulator.Via.Timer2_Counter, setValue: value => SetRegister(value, p => _emulator.Via.Timer2_Counter = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("Timer2 Running", "", () => _emulator.Via.Timer2_Running.ToString(), () => _emulator.Via.Timer2_Running, setValue: value => SetFlag(value, b => _emulator.Via.Timer2_Running = b)));
+        scope.AddVariable(new VariableMap("Timer2 Latch", "", () => _emulator.Via.Timer2_Latch.ToString(), () => _emulator.Via.Timer2_Latch, setValue: value => SetRegister(value, p => _emulator.Via.Timer2_Latch = unchecked((ushort)p))));
+        scope.AddVariable(new VariableMap("Timer2 Interupt", "", () => _emulator.Via.Interrupt_Timer2.ToString(), () => _emulator.Via.Interrupt_Timer2, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Timer2 = b)));
+        scope.AddVariable(new VariableMap("Timer2 Pulse Count", "", () => _emulator.Via.Timer2_PulseCount.ToString(), () => _emulator.Via.Timer2_PulseCount, setValue: value => SetFlag(value, b => _emulator.Via.Timer2_PulseCount = b)));
 
-        scope.AddVariable(new VariableMap("Interupt Cb1", "", () => _emulator.Via.Interrupt_Cb1.ToString(), () => _emulator.Via.Interrupt_Cb1));
-        scope.AddVariable(new VariableMap("Interupt Cb2", "", () => _emulator.Via.Interrupt_Cb2.ToString(), () => _emulator.Via.Interrupt_Cb2));
-        scope.AddVariable(new VariableMap("Interupt Shift", "", () => _emulator.Via.Interrupt_ShiftRegister.ToString(), () => _emulator.Via.Interrupt_ShiftRegister));
-        scope.AddVariable(new VariableMap("Interupt Ca1", "", () => _emulator.Via.Interrupt_Ca1.ToString(), () => _emulator.Via.Interrupt_Ca1));
-        scope.AddVariable(new VariableMap("Interupt Ca2", "", () => _emulator.Via.Interrupt_Ca2.ToString(), () => _emulator.Via.Interrupt_Ca2));
+        scope.AddVariable(new VariableMap("Interupt Cb1", "", () => _emulator.Via.Interrupt_Cb1.ToString(), () => _emulator.Via.Interrupt_Cb1, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Cb1 = b)));
+        scope.AddVariable(new VariableMap("Interupt Cb2", "", () => _emulator.Via.Interrupt_Cb2.ToString(), () => _emulator.Via.Interrupt_Cb2, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Cb2 = b)));
+        scope.AddVariable(new VariableMap("Interupt Shift", "", () => _emulator.Via.Interrupt_ShiftRegister.ToString(), () => _emulator.Via.Interrupt_ShiftRegister, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_ShiftRegister = b)));
+        scope.AddVariable(new VariableMap("Interupt Ca1", "", () => _emulator.Via.Interrupt_Ca1.ToString(), () => _emulator.Via.Interrupt_Ca1, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Ca1 = b)));
+        scope.AddVariable(new VariableMap("Interupt Ca2", "", () => _emulator.Via.Interrupt_Ca2.ToString(), () => _emulator.Via.Interrupt_Ca2, setValue: value => SetFlag(value, b => _emulator.Via.Interrupt_Ca2 = b)));
 
 
         scope.AddVariable(new VariableMap("IO 0x9f00 PRB", "", () => $"0b{Convert.ToString(_emulator.Memory[0x9f00], 2).PadLeft(8, '0')}", () => _emulator.Memory[0x9f00]));
@@ -638,7 +662,7 @@ internal class VariableManager
             if (value.VariableDataType is VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)
                 continue;
 
-            var item = DebuggerLocalVariables.GetVariable(key, value, _expressionManager!, memory, this);
+            var item = DebuggerLocalVariables.GetVariable(key, value, _expressionManager!, memory, _emulator, this);
             if (item != null)
                 children.Add(item);
         }
@@ -654,6 +678,81 @@ internal class VariableManager
             return null;
 
         return new VariableChildren(variables.Namespace, () => "", children.ToArray());
+    }
+
+    // Shared by the CPU scope's register VariableMaps, and the VERA scope's decoded Emulator.Vera.*
+    // properties - accepts plain decimal or "0x"/"$"-prefixed hex, whatever VSC's edit box holds,
+    // same as IAsmVariable writes. Silently ignores unparsable text rather than throwing, since
+    // SetVariable has no way to report a rejected edit back to VSC.
+    //
+    // Writing Emulator.Vera.* directly (rather than the underlying $9F20-$9F3F memory bytes) is
+    // safe because vera_init (Vera.asm) re-encodes every one of these decoded fields back into
+    // that memory range unconditionally on every emulator run/step - it's called at the top of
+    // asm_func (Core.asm), before Vera.asm's own per-register write-trap handlers ever run. So a
+    // debugger edit here is indistinguishable, next time the emulator resumes, from the CPU having
+    // written the register itself. There's no such resync in the other direction (memory -> decoded
+    // field only happens via those per-register write-trap handlers, which a raw memory edit never
+    // triggers), which is why Vera.* is the side to write, not $9F20-$9F3F.
+    private static void SetRegister(string text, Action<long> setValue)
+    {
+        if (IAsmVariableExtensions.TryParseInteger(text, out var parsed))
+            setValue(parsed);
+    }
+
+    // Kernal R0-R15's two bytes (little-endian, at lowAddress/lowAddress+1) - plain zero-page
+    // memory, not a hardware register, so there's no decode/resync path to consider.
+    private void SetR16(string text, int lowAddress) =>
+        SetRegister(text, p =>
+        {
+            var value = unchecked((ushort)p);
+            _emulator.Memory[lowAddress] = (byte)(value & 0xff);
+            _emulator.Memory[lowAddress + 1] = (byte)(value >> 8);
+        });
+
+    // Layer0/1_TileWidth/Height are stored as a single 0/1 bit (vera_update_l0tilebase decodes bit 0
+    // of $9F2F/$9F36), but displayed/edited as the actual pixel size to match what L0_CONFIG's
+    // register documentation calls it. Only 8 and 16 are valid; anything else is ignored rather than
+    // silently truncated into a nonsense bit value.
+    private static void SetTileSize(string text, Action<byte> setValue)
+    {
+        if (!IAsmVariableExtensions.TryParseInteger(text, out var parsed))
+            return;
+
+        if (parsed == 8)
+            setValue(0);
+        else if (parsed == 16)
+            setValue(1);
+    }
+
+    // Layer0/1_MapWidth/Height are stored as a 2-bit index (0-3), displayed/edited as the actual
+    // tile-map size via GetMapSize's 32/64/128/256 table. Reject anything that isn't one of those
+    // four values rather than writing a truncated/wrapped index.
+    private static void SetMapSize(string text, Action<byte> setValue)
+    {
+        if (!IAsmVariableExtensions.TryParseInteger(text, out var parsed))
+            return;
+
+        var index = parsed switch
+        {
+            32 => 0,
+            64 => 1,
+            128 => 2,
+            256 => 3,
+            _ => -1
+        };
+
+        if (index >= 0)
+            setValue((byte)index);
+    }
+
+    // Flags are presented with AttributesValue.IsBoolean, so VSC normally sends "True"/"False",
+    // but also accept 0/1 (and hex) for anyone editing via the Debug Console.
+    private static void SetFlag(string text, Action<bool> setValue)
+    {
+        if (bool.TryParse(text, out var value))
+            setValue(value);
+        else if (IAsmVariableExtensions.TryParseInteger(text, out var parsed))
+            setValue(parsed != 0);
     }
 
     public int GetMapSize(int value) => value switch
