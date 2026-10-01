@@ -60,6 +60,7 @@ public class X16Debug : DebugAdapterBase
     private int _setlfs_secondaryaddress = 0;
     private int _setnam_fileaddress = 0;
     private bool _setnam_fileexists = false;
+    private bool _setnam_fileTooShort = false; // under 2 bytes, so there is no header and nothing to load
 
     internal readonly string OfficialEmulatorLocation;
     internal readonly string OfficialEmulatorParams;
@@ -1466,6 +1467,7 @@ public class X16Debug : DebugAdapterBase
 
             _setnam_fileaddress = 0;
             _setnam_fileexists = false;
+            _setnam_fileTooShort = false;
 
             if (_setnam_value.StartsWith("@:"))
             {
@@ -1494,15 +1496,25 @@ public class X16Debug : DebugAdapterBase
                 {
                     using var data = _emulator.SdCard.FileSystem.OpenFile(path, FileMode.Open);
 
-                    _setnam_fileaddress = data.ReadByte();
-                    _setnam_fileaddress += data.ReadByte() << 8;
+                    if (data.Length < 2)
+                    {
+                        // ReadByte returns -1 at the end of the stream, which would produce a garbage header address.
+                        _setnam_fileTooShort = true;
+                    }
+                    else
+                    {
+                        _setnam_fileaddress = data.ReadByte();
+                        _setnam_fileaddress += data.ReadByte() << 8;
+                    }
 
                     data.Close();
                     _setnam_fileexists = true;
                 }
             }
 
-            if (_setnam_fileexists)
+            if (_setnam_fileTooShort)
+                Logger.LogLine($"SETNAM called with '{filename}', found '{path}' but it is less than 2 bytes so has no header.");
+            else if (_setnam_fileexists)
                 Logger.LogLine($"SETNAM called with '{filename}', found '{path}' with header ${_setnam_fileaddress:X4}.");
             else
                 Logger.LogLine($"SETNAM called with '{filename}', no file found.");
@@ -1519,6 +1531,12 @@ public class X16Debug : DebugAdapterBase
             if (!_setnam_fileexists)
             {
                 Logger.LogLine($"LOAD called but file does not exist.");
+                return;
+            }
+
+            if (_setnam_fileTooShort)
+            {
+                Logger.LogLine($"LOAD called but '{_setnam_value}' is less than 2 bytes, so there is nothing to load. Not clearing breakpoints.");
                 return;
             }
 
