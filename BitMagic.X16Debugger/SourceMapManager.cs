@@ -81,6 +81,7 @@ internal class SourceMapManager
         return null;
     }
 
+    [Obsolete("SourceToMemoryMap is never populated, use DebugWrapper.FindUltimateAddresses.")]
     public HashSet<CodeMap>? GetSourceFileMap(string filename)
     {
         var filePath = PathFunctions.FixPath(filename);
@@ -91,6 +92,7 @@ internal class SourceMapManager
         return SourceToMemoryMap[filePath];
     }
 
+    [Obsolete("OutputToMemoryMap is never populated.")]
     public HashSet<CodeMap>? GetOutputFileMap(string outputFilename)
     {
         if (!OutputToMemoryMap.ContainsKey(outputFilename))
@@ -174,6 +176,7 @@ internal class SourceMapManager
     //    }
     //}
 
+    [Obsolete("Only called from the removed ConstructSourceMap.")]
     private void MapProc(Procedure proc, string outputFilename)
     {
         HashSet<CodeMap> outputMap;

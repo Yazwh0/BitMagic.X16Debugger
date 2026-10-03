@@ -40,7 +40,8 @@ public class X16Debug : DebugAdapterBase
 
     private readonly ServiceManager _serviceManager;
 
-    private readonly Dictionary<int, CodeMap> _GotoTargets = new();
+    // goto target id -> debugger address
+    private readonly Dictionary<int, int> _GotoTargets = new();
 
     private bool _running = true;
 
@@ -926,10 +927,30 @@ public class X16Debug : DebugAdapterBase
         if (!_GotoTargets.ContainsKey(arguments.TargetId))
             return toReturn;
 
-        var destination = _GotoTargets[arguments.TargetId];
+        var debuggerAddress = _GotoTargets[arguments.TargetId];
+        var (address, bank) = AddressFunctions.GetAddressBank(debuggerAddress);
 
-        // todo: set banking!!
-        _emulator.Pc = (ushort)destination.Address;
+        // switch bank if the destination is in a bank that isn't currently selected.
+        // the core reloads the banked windows from $00/$01 when it resumes.
+        if (address >= 0xc000)
+        {
+            if (_emulator.RomBankAct != bank)
+            {
+                Logger.LogLine($"Warning: Jump to cursor switched ROM bank from 0x{_emulator.RomBankAct:X2} to 0x{bank:X2}.");
+                _emulator.Memory[1] = (byte)bank;
+                _emulator.RomBankAct = (uint)bank;
+            }
+        }
+        else if (address >= 0xa000)
+        {
+            if (_emulator.RamBankAct != bank)
+            {
+                Logger.LogLine($"Warning: Jump to cursor switched RAM bank from 0x{_emulator.RamBankAct:X2} to 0x{bank:X2}.");
+                _emulator.Memory[0] = (byte)bank;
+            }
+        }
+
+        _emulator.Pc = (ushort)address;
         _emulator.Stepping = true;
 
         _GotoTargets.Clear();
@@ -944,20 +965,30 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new GotoTargetsResponse();
 
-        var file = _serviceManager.SourceMapManager.GetSourceFileMap(arguments.Source.Path);
-        if (file == null)
+        _GotoTargets.Clear();
+
+        arguments.Source.Path = arguments.Source.Path.FixFilename();
+
+        var wrapper = _serviceManager.DebugableFileManager.GetFileSource(arguments.Source);
+        if (wrapper == null)
             return toReturn;
 
-        var line = file.FirstOrDefault(i => i.LineNumber == arguments.Line);
+        // same lookup as breakpoints, VSCode lines are 1 based
+        foreach (var (debuggerAddress, _) in wrapper.FindUltimateAddresses(arguments.Line - 1, _serviceManager.DebugableFileManager))
+        {
+            var id = _serviceManager.IdManager.GetId();
 
-        if (line == null)
-            return toReturn;
+            _GotoTargets.Add(id, debuggerAddress);
 
-        var id = _serviceManager.IdManager.GetId();
+            toReturn.Targets.Add(new GotoTarget()
+            {
+                InstructionPointerReference = $"0x{debuggerAddress:X6}",
+                Id = id,
+                Line = arguments.Line,
+                Label = AddressFunctions.GetDebuggerAddressDisplayString(debuggerAddress)
+            });
+        }
 
-        _GotoTargets.Add(id, line);
-
-        toReturn.Targets.Add(new GotoTarget() { InstructionPointerReference = $"0x{line.Address}", Id = id, Line = line.LineNumber, Label = $"0x{line.Address}" });
         return toReturn;
     }
 
