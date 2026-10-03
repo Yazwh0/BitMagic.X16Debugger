@@ -14,7 +14,8 @@ internal static class CompileResultExtensions
         // go through each output and create file on each
         foreach (var i in result.Data.Where(i => i.Value.Length != 0)) // dont process segment that do not have data
         {
-            var hasAddedHeader = i.Value.FileName.EndsWith(".PRG", StringComparison.InvariantCultureIgnoreCase);
+            // the compiler decides which files get a load address header (eg the main program always does)
+            var hasAddedHeader = i.Value.HasHeader;
             
             toReturn.Add(new BitMagicBinaryFile(result.Project.Code, i.Value, result, hasAddedHeader ? FileHeader.HeaderNotInCode : FileHeader.NoHeader));
         }

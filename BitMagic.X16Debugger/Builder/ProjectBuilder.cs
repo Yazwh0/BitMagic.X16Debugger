@@ -35,7 +35,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
             {
                 if (i is BitmagicInputFile bitmagicFile)
                 {
-                    var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions);
+                    var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions, bitmagicFile.OutputFilename);
                     if (result != null)
                     {
                         serviceManager.ExpressionManager.AddState(state);
@@ -44,7 +44,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
                         if (project.AutobootRun && string.IsNullOrWhiteSpace(project.AutobootFile))
                         {
-                            project.AutobootFile = prg.Name;
+                            project.AutobootFile = AutobootPath(prg);
                         }
                     }
                 }
@@ -70,7 +70,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
                 if (project.AutobootRun && string.IsNullOrWhiteSpace(project.AutobootFile))
                 {
-                    project.AutobootFile = prg.Name;
+                    project.AutobootFile = AutobootPath(prg);
                 }
             }
             else
@@ -81,6 +81,10 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
             WriteOutputFiles(project);
         }
     }
+
+    // The file's path on the SD card, including any folder (eg 'BIN/GAME.PRG'), as CMDR-DOS LOADs a path like that.
+    // The name alone would miss a file in a folder.
+    internal static string AutobootPath(IBinaryFile file) => file.Path.Replace('\\', '/');
 
     private void WriteOutputFiles(X16DebugProject project)
     {

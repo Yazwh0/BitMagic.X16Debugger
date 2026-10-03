@@ -27,14 +27,21 @@ internal class BitmagicBuilder
     /// Build project and return the main binary file
     /// </summary>
     /// <param name="debugProject"></param>
+    /// <param name="outputFilename">File the main segment is written to, eg 'GAME.PRG' or 'BIN/GAME.PRG'. If blank it is
+    /// the source name with a .prg extension.</param>
     /// <returns>Binary file for the main segment</returns>
-    public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions)// X16DebugProject debugProject)
+    public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions, string? outputFilename = null)
     {
         var project = new Project();
         _logger.LogLine($"Compiling {source} ");
 
         if (compileOptions != null)
             project.CompileOptions = compileOptions;
+
+        // the compiler names the main segment's file after this, and marks it as the main output. '/' as it's an
+        // SD card path, which works the same on Linux and Windows.
+        if (!string.IsNullOrWhiteSpace(outputFilename))
+            project.OutputFile.Filename = outputFilename.Trim().Replace('\\', '/');
 
         source = Path.GetFullPath(Path.Combine(basePath, source)).FixFilename();
         var codeFile = new BitMagicProjectFile(source);

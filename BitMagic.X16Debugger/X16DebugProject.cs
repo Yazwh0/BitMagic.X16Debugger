@@ -389,6 +389,10 @@ public class BitmagicInputFile : IDebugProjectFile
 
     [JsonProperty("filename")]
     public string Filename { get; set; } = "";
+
+    [JsonProperty("outputFilename")]
+    [Description("File to write the main output to, eg 'GAME.PRG' or 'BIN/GAME.PRG'. Defaults to the source name with a .prg extension (eg main.bmasm writes MAIN.PRG). It's written with a 2-byte load address header, unless the name ends .bin.")]
+    public string OutputFilename { get; set; } = "";
 }
 
 [JsonObject("rtcNvram")]
