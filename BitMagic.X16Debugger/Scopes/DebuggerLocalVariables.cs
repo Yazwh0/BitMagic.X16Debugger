@@ -37,8 +37,18 @@ internal class DebuggerLocalVariables : IScopeMap
         var s = state.Scope;
         var done = new HashSet<string>();
 
+        // the top level variables are the globals (shown in the Globals scope), so only show them when stopped in top
+        // level code, not from inside a procedure. Default procedures (eg for a BitMagic .segment) share them, so
+        // compare the variables rather than the scope.
+        var top = s;
+        while (top.Parent != null)
+            top = top.Parent;
+
         while (true)
         {
+            if (s != state.Scope && s.Variables == top.Variables)
+                break;
+
             foreach (var i in s.Variables.Values)
             {
                 if (i.Value.VariableDataType is VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)

@@ -11,323 +11,397 @@ namespace BitMagic.X16Debugger.DebugableFiles;
 
 internal static class Cc65BinaryFileFactory
 {
-    public static void BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath, IEmulatorLogger logger)
+    public static CompileState BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath, IEmulatorLogger logger)
     {
-        logger.LogLine($"Building cc65 object map for config '{inputFile.Config}'");
+        var (files, state) = Build(inputFile, basePath, logger);
 
-        basePath = Path.Combine(basePath, inputFile.BasePath);
-
-        var defaultFile = inputFile.Outputs.FirstOrDefault(i => i.Default) ?? inputFile.Outputs.FirstOrDefault();
-
-        if (defaultFile == null)
+        foreach (var file in files)
         {
-            throw new Exception("No default output defined");
+            serviceManager.DebugableFileManager.AddFiles(file);
         }
 
-        var debugFile = DebugFileParser.ParseFile(Path.Combine(basePath, inputFile.DebugFile));
+        return state;
+    }
 
+    /// <summary>
+    /// Creates a Cc65BinaryFile for each output file in the ld65 debug file, with the source map taken from the
+    /// line -> span -> segment records. Each byte is mapped by its offset in the output file, so the debugger can
+    /// relocate it to wherever (and whichever bank) it is loaded.
+    /// </summary>
+    internal static (List<Cc65BinaryFile> Files, CompileState State) Build(Cc65InputFile inputFile, string basePath, IEmulatorLogger logger)
+    {
+        basePath = Path.GetFullPath(Path.Combine(basePath, ToLocalPath(inputFile.BasePath)));
+
+        if (string.IsNullOrWhiteSpace(inputFile.DebugFile))
+            throw new Exception("cc65 files require a 'debugFile', created by ld65 using '--dbgfile'.");
+
+        var debugFilename = Path.Combine(basePath, ToLocalPath(inputFile.DebugFile));
+        if (!File.Exists(debugFilename))
+            throw new Exception($"Cannot find cc65 debug file '{debugFilename}'.");
+
+        if (inputFile.Outputs.Length == 0)
+            throw new Exception("cc65 files require at least one 'outputs' entry.");
+
+        logger.LogLine($"Building cc65 source map from '{inputFile.DebugFile}'");
+
+        var debugInfo = DebugFileParser.ParseFile(debugFilename);
+
+        if (debugInfo.Spans.Count == 0)
+            logger.LogError($"  '{inputFile.DebugFile}' has no line information. Assemble with '-g' (for cl65 it must come before the source files).");
+
+        var (state, scopes) = Cc65CompileState.Build(debugInfo, inputFile.DebugFile);
+
+        var objects = LoadObjectFiles(inputFile, basePath, logger);
+        var sourceFiles = new SourceFileResolver(inputFile, basePath, logger);
+        var toReturn = new List<Cc65BinaryFile>();
+        var matchedOutputs = new HashSet<Cc65InputFileOutput>();
+
+        foreach (var outputSegments in debugInfo.OutputFiles)
+        {
+            var outputName = outputSegments.Key;
+            var output = FindOutput(inputFile, outputName);
+
+            if (output == null)
+            {
+                logger.LogLine($"  Skipping '{outputName}', not in 'outputs'.");
+                continue;
+            }
+
+            matchedOutputs.Add(output);
+
+            var referenceFile = string.IsNullOrWhiteSpace(output.ReferenceFile) ? "" : Path.Combine(basePath, ToLocalPath(output.ReferenceFile));
+            if (!File.Exists(referenceFile))
+                referenceFile = Path.Combine(basePath, ToLocalPath(outputName));
+
+            if (!File.Exists(referenceFile))
+            {
+                logger.LogError($"Cannot find file '{referenceFile}'.");
+                continue;
+            }
+
+            var data = File.ReadAllBytes(referenceFile);
+            var headerSize = output.HasHeader ? 2 : 0;
+
+            var startAddress = output.StartAddress != 0 ? output.StartAddress : GetStartAddress(outputSegments, headerSize);
+            var binaryFile = new Cc65BinaryFile(outputName, AddressFunctions.GetDebuggerAddress(startAddress, 0, 0), data.Length);
+            binaryFile.Data = data;
+            binaryFile.State = state;
+
+            var mapped = MapLines(debugInfo, outputName, data.Length - headerSize, headerSize, binaryFile, sourceFiles);
+            MapScopes(scopes, outputName, headerSize, binaryFile);
+
+            if (objects.Count != 0)
+                VerifyObjects(objects, debugInfo, outputName, data, logger);
+
+            logger.LogLine($"  '{outputName}' added to debugable files. 0x{startAddress:X4} -> 0x{startAddress + data.Length - headerSize - 1:X4}, {mapped} bytes mapped to source.");
+            toReturn.Add(binaryFile);
+        }
+
+        foreach (var output in inputFile.Outputs.Where(i => !matchedOutputs.Contains(i)))
+        {
+            logger.LogLine($"  Warning: Output '{output.Filename}' is not in the debug file.");
+        }
+
+        // source files can be shared between output files, so only map once all children are added.
+        foreach (var binaryFile in toReturn)
+        {
+            foreach (var p in binaryFile.Parents)
+                p.AddChild(binaryFile);
+        }
+
+        foreach (var binaryFile in toReturn)
+        {
+            foreach (var p in binaryFile.Parents)
+                p.MapChildren();
+        }
+
+        logger.LogLine("... Done.");
+
+        return (toReturn, state);
+    }
+
+    private static Cc65InputFileOutput? FindOutput(Cc65InputFile inputFile, string outputName)
+    {
+        var name = ToMatchPath(outputName);
+
+        return inputFile.Outputs.FirstOrDefault(i => ToMatchPath(i.Filename) == name) ??
+            inputFile.Outputs.FirstOrDefault(i => FileSystemName.MatchesSimpleExpression(ToMatchPath(i.Filename), name));
+    }
+
+    /// <summary>
+    /// The run address of the first byte after the header.
+    /// </summary>
+    private static int GetStartAddress(IEnumerable<DebugSegment> segments, int headerSize)
+    {
+        var first = segments.Where(i => i.Size > 0 && i.Offset >= headerSize).MinBy(i => i.Offset);
+
+        if (first == null)
+            return 0;
+
+        return first.Start - (first.Offset - headerSize);
+    }
+
+    /// <summary>
+    /// Sets the parent map for every byte that has a line. Where spans overlap the outer line wins over a macro body,
+    /// and a smaller span wins over a larger one.
+    /// </summary>
+    private static int MapLines(DebugInfo debugInfo, string outputName, int length, int headerSize, Cc65BinaryFile binaryFile, SourceFileResolver sourceFiles)
+    {
+        var mapped = new bool[length];
+        var count = 0;
+
+        var lineSpans = debugInfo.Lines
+            .Where(i => i.SourceFile != null)
+            .SelectMany(line => line.Spans
+                .Where(span => span.Segment != null && span.Segment.OutputFile == outputName)
+                .Select(span => (Line: line, Span: span)))
+            .OrderBy(i => LinePriority(i.Line.Type))
+            .ThenByDescending(i => i.Span.Size);
+
+        foreach (var (line, span) in lineSpans)
+        {
+            var parentId = sourceFiles.GetParentId(line.SourceFile!, binaryFile);
+
+            if (parentId == -1)
+                continue;
+
+            var offset = span.Segment!.Offset + span.Start - headerSize;
+
+            for (var i = 0; i < span.Size; i++)
+            {
+                var index = offset + i;
+                if (index < 0 || index >= length)
+                    continue;
+
+                binaryFile.SetParentMap(index, line.LineNumber - 1, parentId);
+
+                if (!mapped[index])
+                {
+                    mapped[index] = true;
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Sets the innermost scope for each byte, so locals and stack frame names work.
+    /// </summary>
+    private static void MapScopes(Dictionary<DebugScope, Procedure> scopes, string outputName, int headerSize, Cc65BinaryFile binaryFile)
+    {
+        var scopeSpans = scopes
+            .SelectMany(scope => scope.Key.Spans
+                .Where(span => span.Segment != null && span.Segment.OutputFile == outputName)
+                .Select(span => (Procedure: scope.Value, Span: span)))
+            .OrderByDescending(i => i.Span.Size);
+
+        foreach (var (procedure, span) in scopeSpans)
+        {
+            var offset = span.Segment!.Offset + span.Start - headerSize;
+
+            for (var i = 0; i < span.Size; i++)
+                binaryFile.SetScope(offset + i, procedure);
+        }
+    }
+
+    private static int LinePriority(DebugLineType type) => type switch
+    {
+        DebugLineType.Macro => 0,
+        DebugLineType.Assembler => 1,
+        _ => 2
+    };
+
+    private static List<Cc65Obj> LoadObjectFiles(Cc65InputFile inputFile, string basePath, IEmulatorLogger logger)
+    {
         var objects = new List<Cc65Obj>();
 
         foreach (var i in inputFile.ObjectFiles)
         {
             var matcher = new Matcher();
-            matcher.AddInclude(i);
+            matcher.AddInclude(i.Replace('\\', '/'));
 
             var foundItem = false;
             foreach (var f in matcher.GetResultsInFullPath(basePath))
             {
-                logger.LogLine($"  Loading object file {Path.Combine(inputFile.SourcePath, f)}");
-                objects.Add(Cc65LibParser.Parse(f, Path.Combine(basePath, inputFile.SourcePath)));
+                logger.LogLine($"  Loading object file '{f}'");
+                objects.Add(Cc65LibParser.Parse(f));
                 foundItem = true;
             }
+
             if (!foundItem)
-            {
                 logger.LogLine($"  Warning: No files found for '{i}'.");
-            }
         }
 
-        var includes = new List<Cc65Obj>();
-        var libraries = new List<Cc65Library>();
-        var externalSourceFiles = new List<string>();
+        return objects;
+    }
 
-        foreach (var i in inputFile.Includes)
-
+    /// <summary>
+    /// Checks the literal bytes in each object file against the output file, using the module's top level scope to
+    /// find where each of its segments was linked.
+    /// </summary>
+    private static void VerifyObjects(List<Cc65Obj> objects, DebugInfo debugInfo, string outputName, byte[] data, IEmulatorLogger logger)
+    {
+        foreach (var obj in objects)
         {
-            switch (Path.GetExtension(i).ToLower())
+            var moduleName = Path.GetFileName(obj.Filename);
+            var module = debugInfo.Modules.FirstOrDefault(i => i.LibraryId == -1 && string.Equals(i.Name, moduleName, StringComparison.OrdinalIgnoreCase));
+
+            if (module == null)
             {
-                case ".lib":
-                    libraries.Add(Cc65LibParser.ParseLib(Path.Combine(basePath, i)));
-                    break;
-                case ".mac":
-                    externalSourceFiles.Add(Path.Combine(basePath, i));
-                    break;
-                default:
-                    includes.Add(Cc65LibParser.Parse(Path.Combine(basePath, i)));
-                    break;
-            }
-        }
-
-        var cc65Cfg = Cc65CfgParser.Parse(Path.Combine(basePath, inputFile.Config), inputFile.DefaultOuputFile, Path.Combine(basePath, defaultFile.Filename), defaultFile.StartAddress);
-
-        foreach (var file in cc65Cfg.Files.Values)
-        {
-            // look for exact first
-            var thisFile = inputFile.Outputs.FirstOrDefault(i => i.Filename == file.Filename);
-
-            if (thisFile == null)
-            {
-                thisFile = inputFile.Outputs.FirstOrDefault(i => FileSystemName.MatchesSimpleExpression(i.Filename, file.Filename));
-            }
-
-            if (thisFile == null)
-            {
-                logger.LogLine($"Skipping {file.Filename}");
+                logger.LogLine($"  Warning: Object file '{moduleName}' is not in the debug file.");
                 continue;
             }
 
-            var referenceFile = Path.Combine(basePath, thisFile.ReferenceFile);
-            if (!File.Exists(referenceFile))
-            {
-                referenceFile = Path.Combine(basePath, thisFile.Filename);
-            }
+            if (module.RootScope == null)
+                continue; // no -g, so no spans to check against.
 
-            byte[] actualData;
-            if (!File.Exists(referenceFile))
+            foreach (var segment in obj.Segments)
             {
-                logger.LogError($"Cannot find file '{thisFile.Filename}'.");
-                continue;
+                if (segment.Size == 0)
+                    continue;
+
+                var segmentName = obj.StringPool[(int)segment.Name_stringId];
+                var span = module.RootScope.Spans.FirstOrDefault(i => i.Segment != null && i.Segment.Name == segmentName && i.Segment.OutputFile == outputName);
+
+                if (span == null)
+                    continue;
+
+                var offset = span.Segment!.Offset + span.Start;
+                var fragmentIndex = 0;
+
+                foreach (var fragment in segment.Fragments)
+                {
+                    if ((fragment.FragmentType & Fragment.TypeMask) == Fragment.Literal)
+                    {
+                        for (var i = 0; i < fragment.Data.Length; i++)
+                        {
+                            var index = offset + i;
+                            if (index >= data.Length || data[index] != fragment.Data[i])
+                            {
+                                logger.LogError($"  '{moduleName}' does not match '{outputName}' in segment {segmentName} fragment {fragmentIndex} at 0x{index:X4}. Is the build out of date?");
+                                return;
+                            }
+                        }
+                    }
+
+                    offset += fragment.Size();
+                    fragmentIndex++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// ld65 writes '/' as the separator (and libraries can be mixed), project files tend to use '\'.
+    /// </summary>
+    internal static string ToLocalPath(string path) =>
+        path.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar);
+
+    private static string ToMatchPath(string path) =>
+        path.Replace('\\', '/').TrimStart('.', '/');
+
+    /// <summary>
+    /// Finds the source files on disk, and adds them as parents to the binary files. The same parent is used for
+    /// every binary file, as files are tracked by path.
+    /// </summary>
+    private sealed class SourceFileResolver
+    {
+        private readonly Cc65InputFile _inputFile;
+        private readonly string _basePath;
+        private readonly IEmulatorLogger _logger;
+        private readonly List<string> _externalSourceFiles;
+        private readonly Dictionary<int, StaticTextFile?> _files = new();
+        private readonly Dictionary<(Cc65BinaryFile, int), int> _parentIds = new();
+
+        public SourceFileResolver(Cc65InputFile inputFile, string basePath, IEmulatorLogger logger)
+        {
+            _inputFile = inputFile;
+            _basePath = basePath;
+            _logger = logger;
+            _externalSourceFiles = inputFile.Includes
+                .Where(i => Path.GetExtension(i).ToLower() is not ".lib" and not ".o")
+                .Select(i => Path.Combine(basePath, ToLocalPath(i)))
+                .ToList();
+        }
+
+        public int GetParentId(DebugSourceFile sourceFile, Cc65BinaryFile binaryFile)
+        {
+            if (_parentIds.TryGetValue((binaryFile, sourceFile.FileId), out var parentId))
+                return parentId;
+
+            var file = GetFile(sourceFile);
+            parentId = file == null ? -1 : binaryFile.AddParent(file);
+
+            _parentIds.Add((binaryFile, sourceFile.FileId), parentId);
+
+            return parentId;
+        }
+
+        private StaticTextFile? GetFile(DebugSourceFile sourceFile)
+        {
+            if (_files.TryGetValue(sourceFile.FileId, out var file))
+                return file;
+
+            var filename = FindFile(sourceFile.Name);
+
+            if (filename == null)
+            {
+                _logger.LogError($"Cannot find source file '{sourceFile.Name}'.");
             }
             else
             {
-                actualData = File.ReadAllBytes(referenceFile);
+                CheckModified(sourceFile, filename);
+                file = new StaticTextFile(File.ReadAllText(filename), filename, true);
             }
 
-            var firstBank = file.Areas.Min(i => i.Value.Bank) ?? 0;
-            var startAddress = (file.StartAddress ?? 0) == 0 ? thisFile.StartAddress : (file.StartAddress ?? 0);
-            var toAdd = new Cc65BinaryFile(file.Filename, AddressFunctions.GetDebuggerAddress(startAddress, firstBank, firstBank), actualData.Length);
+            _files.Add(sourceFile.FileId, file);
 
-            var currentAddress = startAddress; // thisFile.StartAddress;
-            var adjust = thisFile.HasHeader ? 2 : 0;
-            var currentBank = firstBank;
-
-            var sourceMap = new Dictionary<string, int>();
-
-            foreach (var area in file.Areas)
-            {
-                // ignore file header
-                if (area.Value.StartAddress != null && (area.Value.StartAddress & 0xffff) < (toAdd.BaseAddress & 0xffff))
-                {
-                    //adjust += toAdd.BaseAddress - area.Value.StartAddress.Value;
-                    continue;
-                }
-
-                if (area.Value.StartAddress.HasValue && area.Value.StartAddress != 0)
-                {
-                    if (area.Value.StartAddress.Value < currentAddress && currentAddress != 0)
-                    {
-                        currentBank = (area.Value.Bank.HasValue && area.Value.Bank.Value != 0) ? area.Value.Bank.Value : currentBank++;
-                        adjust += area.Value.StartAddress.Value >= 0xa000 && area.Value.StartAddress.Value < 0xc000 ? 0x2000 : 0x4000; // add on ram\rom bank
-                    }
-                    currentAddress = area.Value.StartAddress.Value;
-                }
-
-                var startCount = currentAddress;
-
-                foreach (var s in area.Value.Segments)
-                {
-                    Cc65Lib.Segment? segment = null;
-
-                    var possibles = new List<Cc65Obj>();
-                    var possibleSegments = new List<Cc65Lib.Segment>();
-
-                    foreach (var ofile in objects)
-                    {
-                        foreach (var i in ofile.Segments)
-                        {
-                            var toCheck = ofile.StringPool[(int)i.Name_stringId];
-                            if (toCheck == s.Key)
-                            {
-                                possibles.Add(ofile);
-                                possibleSegments.Add(i);
-                            }
-                        }
-                    }
-
-                    if (possibles.Count == 0)
-                    {
-                        foreach (var l in libraries)
-                        {
-                            if (l.Index.ContainsKey(s.Key.ToLower() + ".o"))
-                            {
-                                var obj = l.Index[s.Key.ToLower() + ".o"];
-                                if (obj.Cc65Obj == null)
-                                    continue;
-
-                                foreach (var i in obj.Cc65Obj.Segments)
-                                {
-                                    var toCheck = obj.Cc65Obj.StringPool[(int)i.Name_stringId];
-                                    if (toCheck == s.Key)
-                                    {
-                                        segment = i;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (segment == null)
-                        {
-                            if (s.Value.Optional)
-                                continue;
-                            else
-                            {
-                                logger.LogLine($"Warning: Cannot find segment {s.Key}");
-                                //throw new Exception($"Cannot find segment {s.Key}");
-                                continue;
-                            }
-                        }
-                    }
-
-                    if (s.Value.Align != null && s.Value.Align > 1)
-                    {
-                        if (currentAddress % s.Value.Align != 0)
-                        {
-                            currentAddress = ((currentAddress / s.Value.Align.Value) + 1) * s.Value.Align.Value;
-                        }
-                    }
-
-                    // Can there be multiple possible segments?! Is this correct???
-
-                    for (var segmentIndex = 0; segmentIndex < possibles.Count; segmentIndex++)
-                    {
-                        segment = possibleSegments[segmentIndex];
-
-                        var cc65obj = possibles[segmentIndex];
-                        //var sourceMap = sourceMaps[cc65obj.Filename];
-
-                        //                        Console.WriteLine($"{cc65obj.StringPool[(int)segment.Name_stringId]} Start address: ${currentAddress:X4} {currentAddress}, Size {segment.Size} CfgSize {s.Value.si}");
-
-
-                        if (s.Value.StartAddress != null)
-                        {
-                            currentAddress = s.Value.StartAddress.Value;
-                        }
-
-
-                        if (s.Key == "EXEHDR")
-                        {
-                            currentAddress += (int)segment.Size;
-                            continue;
-                        }
-
-                        var fragIdx = 0;
-                        foreach (var i in segment.Fragments)
-                        {
-                            // map code
-                            var lineIdx = i.LineInfo[i.LineInfo.Count - 1];
-                            var lineInfo = cc65obj.Lines[(int)lineIdx];
-                            var sourceFile = cc65obj.Files[(int)lineInfo.FileInfo_id];
-                            var fl = cc65obj.StringPool[(int)sourceFile.Filename_StringId];
-                            //Console.WriteLine($"{file.Filename} {area.Value.Name} {cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}");
-
-
-                            if (i.IsExpression)
-                            {
-                                //Console.WriteLine($"Expression of 0x{i.Size():X2}");
-                                // we dont evaluate expressions, or map code
-                                fragIdx++;
-                                currentAddress += i.Size();
-                                continue;
-                            }
-
-                            if ((i.FragmentType & Fragment.TypeMask) == Fragment.Literal)
-                            {
-                                if (!sourceMap.ContainsKey(fl))
-                                {
-                                    string sourceFilename = fl;
-
-                                    foreach (var m in inputFile.Filemap)
-                                    {
-                                        if (!sourceFilename.StartsWith(m.Path))
-                                            continue;
-
-                                        sourceFilename = sourceFilename.Replace(m.Path, m.Replace);
-                                    }
-
-                                    sourceFilename = Path.Combine(basePath, sourceFilename);
-                                    sourceFilename = Path.GetFullPath(sourceFilename);
-                                    sourceFilename = sourceFilename.FixFilename();
-
-                                    if (!File.Exists(sourceFilename))
-                                    {
-                                        foreach (var f in externalSourceFiles)
-                                        {
-                                            if (Path.GetFileName(f) == Path.GetFileName(sourceFilename))
-                                            {
-                                                sourceFilename = f;
-                                                break;
-                                            }
-                                        }
-
-                                        if (!File.Exists(sourceFilename))
-                                        {
-                                            logger.LogError($"Cannot find file '{sourceFilename}'");
-                                        }
-                                    }
-
-                                    var idx = toAdd.AddParent(new StaticTextFile(File.ReadAllText(sourceFilename), sourceFilename, true));
-                                    sourceMap.Add(fl, idx);
-                                }
-
-                                //Console.WriteLine($"{file.Filename} {area.Value.Name} {cc65obj.StringPool[(int)sourceFile.Filename_StringId]}\t{(int)lineInfo.Line - 1}");
-
-                                var offset = currentAddress - startAddress + (currentBank - firstBank) * 0x2000;
-                                toAdd.SetParentMap(offset, (int)lineInfo.Line - 1, sourceMap[fl]);
-                            }
-
-                            for (var j = 0; j < i.Data.Length; j++)
-                            {
-                                var idx = currentAddress - startAddress + adjust;
-                                if (i.Data[j] != actualData[idx] && i.FragmentType != 0x20)
-                                {
-                                    Console.WriteLine($"Missmatch Data {idx:X4} ({startAddress+idx:X4}) : {i.Data[j]:X2} Act: {actualData[idx]:X2}");
-                                    throw new Exception($"Difference between object file and generated file at {idx} in segment {s.Key} fragment {fragIdx}");
-                                }
-                                currentAddress++;
-                            }
-                            fragIdx++;
-                        }
-                    }
-                }
-
-                if (area.Value.Size != 0 && area.Value.Size > 0)
-                {
-                    //Console.WriteLine($"{currentAddress - startCount} Area : {area.Value.Size}");
-                    currentAddress = startCount + (int)area.Value.Size;
-                }
-            }
-
-            toAdd.Data = actualData;
-
-            foreach (var p in toAdd.Parents)
-            {
-                p.AddChild(toAdd);
-            }
-
-            foreach (var p in toAdd.Parents)
-            {
-                p.MapChildren();
-            }
-
-            logger.LogLine($"  '{toAdd.Name}' added to debugable files. 0x{startAddress:X4} -> 0x{currentAddress-1:X4}");
-            serviceManager.DebugableFileManager.AddFiles(toAdd);
+            return file;
         }
 
-        logger.LogLine("... Done.");
+        private string? FindFile(string name)
+        {
+            name = name.Replace('\\', '/');
+
+            foreach (var m in _inputFile.Filemap)
+            {
+                var path = m.Path.Replace('\\', '/');
+                if (path.Length != 0 && name.StartsWith(path))
+                    name = m.Replace.Replace('\\', '/') + name[path.Length..];
+            }
+
+            name = ToLocalPath(name);
+
+            var candidates = Path.IsPathRooted(name)
+                ? [name]
+                : new[] { Path.Combine(_basePath, name), Path.Combine(_basePath, ToLocalPath(_inputFile.SourcePath), name) };
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                    return Path.GetFullPath(candidate).FixFilename();
+            }
+
+            var filename = Path.GetFileName(name);
+            var external = _externalSourceFiles.FirstOrDefault(i => Path.GetFileName(i) == filename && File.Exists(i));
+
+            return external == null ? null : Path.GetFullPath(external).FixFilename();
+        }
+
+        private void CheckModified(DebugSourceFile sourceFile, string filename)
+        {
+            var info = new System.IO.FileInfo(filename);
+            var modified = new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeSeconds();
+
+            if ((sourceFile.Size != 0 && info.Length != sourceFile.Size) || (sourceFile.ModifiedTime != 0 && modified > sourceFile.ModifiedTime + 2))
+                _logger.LogLine($"  Warning: '{filename}' has changed since it was assembled, source lines may not match.");
+        }
     }
 }
 
-internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
+internal class Cc65BinaryFile : SourceFileBase, ICompiledBinaryFile
 {
     public Cc65BinaryFile(string name, int baseAddress, int size)
     {
@@ -335,6 +409,7 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
         Path = name;
         Name = System.IO.Path.GetFileName(name);
         _parentMap = new ParentSourceMapReference[size];
+        _scopeMap = new IScope?[size];
         for (var i = 0; i < _parentMap.Length; i++)
         {
             _parentMap[i] = new ParentSourceMapReference(-1, -1);
@@ -362,6 +437,16 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
 
     public bool Written { get; private set; }
 
+    public CompileState State { get; internal set; } = null!; // set by Cc65BinaryFileFactory
+
+    private readonly IScope?[] _scopeMap;
+
+    internal void SetScope(int index, IScope scope)
+    {
+        if (index >= 0 && index < _scopeMap.Length)
+            _scopeMap[index] = scope;
+    }
+
     public void LoadDebugData(Emulator emulator, SourceMapManager sourceMapManager, int debuggerAddress)
     {
         for (int i = 0; i < _parentMap.Length; i++)
@@ -378,7 +463,7 @@ internal class Cc65BinaryFile : SourceFileBase, IBinaryFile
                 Name = Name,
                 Source = "",
                 SourceFile = this
-            }, true));
+            }, true, _scopeMap[i]));
 
             debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
         }

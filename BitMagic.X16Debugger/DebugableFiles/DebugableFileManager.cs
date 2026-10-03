@@ -71,8 +71,15 @@ internal class DebugableFileManager
         if (AllFiles.ContainsKey(filename))
             return AllFiles[filename];
 
-        return null;
+        // A file loaded by the X16 (SETNAM) uses the local path separator, whereas a binary file can be named with
+        // either (eg ld65 writes 'DAT/PSM.DAT'). The SD card is FAT, so names aren't case sensitive either.
+        var toFind = NormaliseX16Filename(filename);
+
+        return AllFiles.Values.FirstOrDefault(i => i.X16File && NormaliseX16Filename(i.Path) == toFind);
     }
+
+    private static string NormaliseX16Filename(string filename) =>
+        filename.Replace('\\', '/').TrimStart('/').ToUpperInvariant();
 
     public IEnumerable<string> AllFilenames()
     {

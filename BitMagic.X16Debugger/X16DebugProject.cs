@@ -12,8 +12,8 @@ public class X16DebugProject
     /// Start the application in stepping mode.
     /// </summary>
     [JsonProperty("startStepping")]
-    [Description("Start the application in stepping mode.")]
-    public bool StartStepping { get; set; } = true;
+    [Description("Start the application in stepping mode. Default false.")]
+    public bool StartStepping { get; set; } = false;
 
     /// <summary>
     /// Main source file.
@@ -316,31 +316,40 @@ public class Cc65InputFile : IDebugProjectFile
     public string Type { get; set; } = "";
 
     [JsonProperty("outputs")]
+    [Description("Output files written by ld65 to debug. Filenames can use wildcards, eg 'DAT/*'.")]
     public Cc65InputFileOutput[] Outputs { get; set; } = [];
 
+    [JsonProperty("debugFile")]
+    [Description("Debug info file written by ld65 using '--dbgfile' (cl65: '-Wl --dbgfile,<file>'). Sources must be assembled with '-g' to include line information.")]
+    public string DebugFile { get; set; } = "";
+
     [JsonProperty("objectFiles")]
+    [Description("Optional. Object files (.o) to check against the output files, to catch out of date builds. Wildcards are supported.")]
     public string[] ObjectFiles { get; set; } = [];
 
-    [JsonProperty("config")]
-    public string Config { get; set; } = "";
-
     [JsonProperty("sourcePath")]
+    [Description("Additional folder to search for source files, relative to the base path.")]
     public string SourcePath { get; set; } = "";
 
     [JsonProperty("includes")]
+    [Description("Additional source files (eg .mac, .inc) to use when a source file in the debug file cannot be found. Matched by filename.")]
     public string[] Includes { get; set; } = [];
 
     [JsonProperty("filemap")]
+    [Description("Replace the start of source file paths in the debug file, eg to map a build machine path to a local one.")]
     public Cc65InputFileMap[] Filemap { get; set; } = [];
 
     [JsonProperty("basepath")]
+    [Description("Folder that ld65 and ca65 were run from, relative to the project.")]
     public string BasePath { get; set; } = "";
 
-    [JsonProperty("defaultOutputFile")]
-    public string DefaultOuputFile { get; set; } = "";
+    [JsonProperty("config")]
+    [Description("No longer used, the debug file is used instead.")]
+    public string Config { get; set; } = "";
 
-    [JsonProperty("debugFile")]
-    public string DebugFile { get; set; } = "";
+    [JsonProperty("defaultOutputFile")]
+    [Description("No longer used, the debug file is used instead.")]
+    public string DefaultOuputFile { get; set; } = "";
 }
 
 public class Cc65InputFileOutput
@@ -349,6 +358,7 @@ public class Cc65InputFileOutput
     public string Filename { get; set; } = "";
 
     [JsonProperty("startAddress")]
+    [Description("Optional. Load address of the file, if not set it is taken from the debug file.")]
     public int StartAddress { get; set; }
 
     [JsonProperty("default")]

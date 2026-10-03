@@ -13,7 +13,8 @@ internal class ExpressionManager
 {
     private readonly Asm6502ExpressionEvaluator _evaluator;
     private readonly VariableManager _variableManager;
-    private CompileState? _state = null;
+    // one per compiled file (BitMagic or cc65), searched in build order.
+    private readonly List<CompileState> _states = new();
     private readonly Emulator _emulator;
     private readonly MemoryWrapper _memoryWrapper;
 
@@ -54,10 +55,13 @@ internal class ExpressionManager
         e.Value = data[address];
     }
 
-    public void SetState(CompileState state)
+    public void AddState(CompileState state)
     {
-        _state = state;
+        if (!_states.Contains(state))
+            _states.Add(state);
     }
+
+    public void ClearStates() => _states.Clear();
 
     internal static string Stringify(object obj)
     {
@@ -106,20 +110,29 @@ internal class ExpressionManager
             return;
         }
 
-        if (_state == null)
-            return;
-
-        if (_state.Evaluator.Variables != null &&
-            _state.Evaluator.Variables.TryGetValue(e.Name, new Common.SourceFilePosition(), out var result))
+        // Evaluator.Variables is whatever the compiler last evaluated against, it is not set for states that
+        // weren't compiled (eg cc65), so fall back to the default procedure which looks up the whole tree.
+        foreach (var state in _states)
         {
-            e.Value = result.GetActualValue(_memoryWrapper);
-            return;
+            var variables = state.Evaluator.Variables ?? state.Procedure.Variables;
+
+            if (variables.TryGetValue(e.Name, new Common.SourceFilePosition(), out var result))
+            {
+                e.Value = result!.GetActualValue(_memoryWrapper);
+                return;
+            }
         }
 
-        var asmValue = _state.Evaluator.Evaluate(e.Name, new Common.SourceFilePosition(), _state.Procedure.Variables, 0, false);
+        foreach (var state in _states)
+        {
+            var asmValue = state.Evaluator.Evaluate(e.Name, new Common.SourceFilePosition(), state.Procedure.Variables, 0, false);
 
-        if (!asmValue.RequiresRecalc)
-            e.Value = asmValue.Result;
+            if (!asmValue.RequiresRecalc)
+            {
+                e.Value = asmValue.Result;
+                return;
+            }
+        }
     }
 
     /// <summary>

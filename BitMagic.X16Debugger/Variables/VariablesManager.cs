@@ -630,7 +630,7 @@ internal class VariableManager
 
         foreach (var file in debugableFileManager.GetBitMagicFilesToWrite())
         {
-            if (file is not BitMagicBinaryFile binary)
+            if (file is not ICompiledBinaryFile binary)
                 continue;
 
             var fileChildren = new List<IVariableItem>();
@@ -666,6 +666,7 @@ internal class VariableManager
     private VariableChildren? BuildVariableTree(CompilerVariables variables, MemoryWrapper memory)
     {
         var children = new List<IVariableItem>();
+        var segments = new List<string?>();
 
         foreach (var (key, value) in variables.Values)
         {
@@ -674,8 +675,13 @@ internal class VariableManager
 
             var item = DebuggerLocalVariables.GetVariable(key, value, _expressionManager!, memory, _emulator, this);
             if (item != null)
+            {
                 children.Add(item);
+                segments.Add((value as AsmVariable)?.Segment);
+            }
         }
+
+        children = GroupBySegment(children, segments, variables.Children.Select(i => i.Namespace));
 
         foreach (var child in variables.Children)
         {
@@ -688,6 +694,34 @@ internal class VariableManager
             return null;
 
         return new VariableChildren(variables.Namespace, () => "", children.ToArray());
+    }
+
+    // Above this many variables in one scope, they are shown grouped by segment (eg a memory map include file with
+    // ZEROPAGE, BSS and banked RAM variables), rather than as one long list. Display only, the variables keep
+    // their names for expressions.
+    internal const int GroupBySegmentThreshold = 16;
+
+    private List<IVariableItem> GroupBySegment(List<IVariableItem> items, List<string?> segments, IEnumerable<string> siblingNames)
+    {
+        if (items.Count <= GroupBySegmentThreshold || segments.Where(i => i != null).Distinct().Count() < 2)
+            return items;
+
+        var names = new HashSet<string>(items.Select(i => i.Name).Concat(siblingNames));
+        var toReturn = new List<IVariableItem>();
+
+        foreach (var group in items.Zip(segments).GroupBy(i => i.Second))
+        {
+            if (group.Key == null)
+            {
+                toReturn.AddRange(group.Select(i => i.First));
+                continue;
+            }
+
+            var name = names.Contains(group.Key) ? $"{group.Key} (segment)" : group.Key;
+            toReturn.Add(Register(new VariableChildren(name, () => "", "segment", group.Select(i => i.First).ToArray())));
+        }
+
+        return toReturn;
     }
 
     // Shared by the CPU scope's register VariableMaps, and the VERA scope's decoded Emulator.Vera.*

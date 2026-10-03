@@ -27,6 +27,8 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
     {
         var project = projectService.Project ?? throw new Exception("No project set");
 
+        serviceManager.ExpressionManager.ClearStates();
+
         if (project.Files != null)
         {
             foreach (var i in project.Files)
@@ -36,7 +38,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
                     var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions);
                     if (result != null)
                     {
-                        serviceManager.ExpressionManager.SetState(state);
+                        serviceManager.ExpressionManager.AddState(state);
 
                         var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
 
@@ -48,7 +50,8 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
                 }
                 else if (i is Cc65InputFile cc65File)
                 {
-                    Cc65BinaryFileFactory.BuildAndAdd(cc65File, serviceManager, project.BasePath, Logger);
+                    var state = Cc65BinaryFileFactory.BuildAndAdd(cc65File, serviceManager, project.BasePath, Logger);
+                    serviceManager.ExpressionManager.AddState(state);
                 }
 
                 // write files after each step incase there is a pre-requisite.
@@ -61,7 +64,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
             var (result, state) = await serviceManager.BitmagicBuilder.Build(project.Source, project.BasePath, project.CompileOptions);
             if (result != null)
             {
-                serviceManager.ExpressionManager.SetState(state);
+                serviceManager.ExpressionManager.AddState(state);
 
                 var prg = result.Source as IBinaryFile ?? throw new Exception("result is not a IBinaryFile!");
 

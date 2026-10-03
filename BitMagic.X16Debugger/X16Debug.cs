@@ -241,7 +241,9 @@ public class X16Debug : DebugAdapterBase
 
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
-        var stopOnEntry = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntry") ?? false;
+        // launch.json's stopOnEntry is ignored, stepping comes from the project file. This is set by tools (eg X16M)
+        // that need to control stepping regardless of the project file.
+        var stopOnEntryOverride = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntryOverride");
 
         if (!File.Exists(toCompile))
         {
@@ -268,6 +270,8 @@ public class X16Debug : DebugAdapterBase
             _debugProject = new X16DebugProject();
             _debugProject.Source = toCompile;
         }
+
+        var stopOnEntry = stopOnEntryOverride ?? _debugProject.StartStepping;
 
         // EmulatorOptions
         var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
