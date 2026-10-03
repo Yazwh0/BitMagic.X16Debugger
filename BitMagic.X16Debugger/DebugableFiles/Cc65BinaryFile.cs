@@ -13,12 +13,17 @@ internal static class Cc65BinaryFileFactory
 {
     public static CompileState BuildAndAdd(Cc65InputFile inputFile, ServiceManager serviceManager, string basePath, IEmulatorLogger logger)
     {
-        var (files, state) = Build(inputFile, basePath, logger);
+        var (files, state, symbols) = Build(inputFile, basePath, logger);
 
         foreach (var file in files)
         {
             serviceManager.DebugableFileManager.AddFiles(file);
         }
+
+        // labels for the disassembler, eg for library code or a module without line information. Any already set
+        // (eg from a .sym file) are kept.
+        foreach (var (address, name) in symbols)
+            serviceManager.SourceMapManager.Symbols.TryAdd(address, name);
 
         return state;
     }
@@ -28,7 +33,7 @@ internal static class Cc65BinaryFileFactory
     /// line -> span -> segment records. Each byte is mapped by its offset in the output file, so the debugger can
     /// relocate it to wherever (and whichever bank) it is loaded.
     /// </summary>
-    internal static (List<Cc65BinaryFile> Files, CompileState State) Build(Cc65InputFile inputFile, string basePath, IEmulatorLogger logger)
+    internal static (List<Cc65BinaryFile> Files, CompileState State, Dictionary<int, string> Symbols) Build(Cc65InputFile inputFile, string basePath, IEmulatorLogger logger)
     {
         basePath = Path.GetFullPath(Path.Combine(basePath, ToLocalPath(inputFile.BasePath)));
 
@@ -117,7 +122,28 @@ internal static class Cc65BinaryFileFactory
 
         logger.LogLine("... Done.");
 
-        return (toReturn, state);
+        return (toReturn, state, GetSymbols(debugInfo));
+    }
+
+    /// <summary>
+    /// Address -> name for every symbol that names a location (labels, and equates in a segment such as zero page
+    /// variables), for the disassembler. Constants aren't included as they aren't addresses. Banked addresses are
+    /// skipped as the bank isn't known until the file is loaded, the same as for .sym files.
+    /// </summary>
+    internal static Dictionary<int, string> GetSymbols(DebugInfo debugInfo)
+    {
+        var toReturn = new Dictionary<int, string>();
+
+        // where several symbols share an address prefer a normal label over a cheap local (@name)
+        foreach (var symbol in debugInfo.Symbols.Where(i => i.Segment != null && i.Type != DebugSymbolType.Import).OrderBy(i => i.Name.StartsWith('@')))
+        {
+            if (symbol.Value >= 0xa000)
+                continue;
+
+            toReturn.TryAdd(AddressFunctions.GetDebuggerAddress(symbol.Value, 0, 0), symbol.Name);
+        }
+
+        return toReturn;
     }
 
     private static Cc65InputFileOutput? FindOutput(Cc65InputFile inputFile, string outputName)

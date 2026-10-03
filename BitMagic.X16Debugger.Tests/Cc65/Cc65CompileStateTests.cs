@@ -14,7 +14,13 @@ public class Cc65CompileStateTests
 {
     private static string TestData => Path.Combine(AppContext.BaseDirectory, "Cc65", "TestData");
 
-    private static (List<Cc65BinaryFile> Files, CompileState State) Build() =>
+    private static (List<Cc65BinaryFile> Files, CompileState State) Build()
+    {
+        var (files, state, _) = BuildWithSymbols();
+        return (files, state);
+    }
+
+    private static (List<Cc65BinaryFile> Files, CompileState State, Dictionary<int, string> Symbols) BuildWithSymbols() =>
         Cc65BinaryFileFactory.Build(new Cc65InputFile
         {
             Type = "cc65",
@@ -142,6 +148,19 @@ public class Cc65CompileStateTests
         Assert.AreEqual("0x5A", expressionManager.Evaluate("counter"));
         Assert.AreEqual("0x12", expressionManager.Evaluate("other_value"));
         Assert.AreEqual("10", expressionManager.Evaluate("MAX_COUNT"));
+    }
+
+    [TestMethod]
+    public void Symbols_ForDisassembly()
+    {
+        var (_, _, symbols) = BuildWithSymbols();
+
+        Assert.AreEqual("second", symbols[0x822]); // code label
+        Assert.AreEqual("work", symbols[0x825]);   // .proc
+        Assert.AreEqual("counter", symbols[0x83d]); // BSS variable
+        Assert.AreEqual("zp_pointer", symbols[0x22]);
+        Assert.IsFalse(symbols.ContainsValue("MAX_COUNT")); // constant, not an address
+        Assert.IsFalse(symbols.ContainsValue("banked"));    // $a000, bank unknown
     }
 
     private static IEnumerable<BitMagic.Compiler.Variables> AllVariables(BitMagic.Compiler.Variables variables) =>
