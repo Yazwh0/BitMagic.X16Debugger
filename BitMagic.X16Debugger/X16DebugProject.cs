@@ -218,6 +218,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     public float WindowScale { get; set; } = 0x01;
 
     /// <summary>
+    /// Don't play audio. Emulation is unaffected.
+    /// </summary>
+    [JsonProperty("muteAudio")]
+    [Description("Don't play audio. Emulation is unaffected.")]
+    public bool MuteAudio { get; set; } = false;
+
+    /// <summary>
     /// Files to be loaded into ROM
     /// </summary>
     [JsonProperty("romSource")]

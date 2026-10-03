@@ -245,6 +245,8 @@ public class X16Debug : DebugAdapterBase
         // launch.json's stopOnEntry is ignored, stepping comes from the project file. This is set by tools (eg X16M)
         // that need to control stepping regardless of the project file.
         var stopOnEntryOverride = arguments.ConfigurationProperties.GetValueAsBool("stopOnEntryOverride");
+        // Same for audio, X16M mutes by default regardless of the project file.
+        var muteAudioOverride = arguments.ConfigurationProperties.GetValueAsBool("muteAudioOverride");
 
         if (!File.Exists(toCompile))
         {
@@ -275,7 +277,7 @@ public class X16Debug : DebugAdapterBase
         var stopOnEntry = stopOnEntryOverride ?? _debugProject.StartStepping;
 
         // EmulatorOptions
-        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale };
+        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale, MuteAudio = muteAudioOverride ?? _debugProject.MuteAudio };
         _emulator.Reset();
         _emulator.SetOptions(emulatiorOptions);
         _emulator.EnableWifi = _debugProject.Wifi;
