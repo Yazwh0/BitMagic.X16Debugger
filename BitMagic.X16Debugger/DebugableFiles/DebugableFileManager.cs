@@ -78,6 +78,19 @@ internal class DebugableFileManager
         return AllFiles.Values.FirstOrDefault(i => i.X16File && NormaliseX16Filename(i.Path) == toFind);
     }
 
+    /// <summary>
+    /// The X16 file with this filename in any folder, eg 'kernal.bin' finds 'build/x16/kernal.bin'. Null if there
+    /// isn't exactly one.
+    /// </summary>
+    public DebugWrapper? GetFileByName(string filename)
+    {
+        var toFind = NormaliseX16Filename(Path.GetFileName(filename.Replace('\\', '/')));
+
+        var found = AllFiles.Values.Where(i => i.X16File && NormaliseX16Filename(Path.GetFileName(i.Path.Replace('\\', '/'))) == toFind).Take(2).ToArray();
+
+        return found.Length == 1 ? found[0] : null;
+    }
+
     private static string NormaliseX16Filename(string filename) =>
         filename.Replace('\\', '/').TrimStart('/').ToUpperInvariant();
 

@@ -42,4 +42,23 @@ public class DebugableFileManagerTests
     {
         Assert.IsNull(_debugableFileManager.GetFile_New("DAT\\SM.DAT"));
     }
+
+    // romSource entries can name a file by its filename alone, eg 'kernal.bin' for ld65's 'build/x16/kernal.bin'.
+    [TestMethod]
+    [DataRow("PSM.DAT")]
+    [DataRow("psm.dat")]
+    [DataRow("app/PSM.DAT")]
+    [DataRow("app\\psm.dat")]
+    public void GetFileByName_MatchesFilenameInAnyFolder(string filename)
+    {
+        Assert.AreEqual("DAT/PSM.DAT", _debugableFileManager.GetFileByName(filename)?.Path);
+    }
+
+    [TestMethod]
+    public void GetFileByName_Ambiguous_NotFound()
+    {
+        _debugableFileManager.AddFiles(new Cc65BinaryFile("OTHER/PSM.DAT", 0x8000, 1));
+
+        Assert.IsNull(_debugableFileManager.GetFileByName("PSM.DAT"));
+    }
 }

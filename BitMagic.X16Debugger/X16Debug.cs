@@ -256,6 +256,29 @@ public class X16Debug : DebugAdapterBase
         return new AttachResponse();
     }
 
+    /// <summary>
+    /// Finds the debuggable file for a romSource entry. The filename is usually where the file was written, eg
+    /// 'app/build/x16/kernal.bin' for a cc65 output named 'build/x16/kernal.bin' with an outputFolder of 'app'.
+    /// </summary>
+    private DebugWrapper? FindRomSourceFile(string filename)
+    {
+        var fileManager = _serviceManager.DebugableFileManager;
+        var normalised = filename.Replace('\\', '/').TrimStart('.', '/');
+
+        // relative to the output folder
+        var outputFolder = (_debugProject?.OutputFolder ?? "").Replace('\\', '/').Trim('.', '/');
+        if (!string.IsNullOrEmpty(outputFolder) && normalised.StartsWith(outputFolder + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            var found = fileManager.GetFile_New(normalised[(outputFolder.Length + 1)..]);
+            if (found != null)
+                return found;
+        }
+
+        return fileManager.GetFile_New(normalised) ??
+            fileManager.GetFile_New(Path.GetFileName(normalised)) ??
+            fileManager.GetFileByName(normalised);
+    }
+
     protected override LaunchResponse HandleLaunchRequest(LaunchArguments arguments)
     {
         RequireNotAttachOnly("launch");
@@ -606,13 +629,15 @@ public class X16Debug : DebugAdapterBase
             {
                 var thisFile = Path.GetFileName(i.Filename);
                 romfiles.Add(thisFile);
-                var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(thisFile);
+                var debugableFile = FindRomSourceFile(i.Filename);
 
                 if (debugableFile == null)
                 {
                     Logger.LogError($"Cannot find '{i.Filename}'.");
                     continue;
                 }
+
+                romfiles.Add(debugableFile.Path); // so it isn't also put on the SD card
 
                 int address;
                 if (i.Address is int)
