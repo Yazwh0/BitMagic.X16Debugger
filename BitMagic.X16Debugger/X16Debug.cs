@@ -56,6 +56,26 @@ public class X16Debug : DebugAdapterBase
     private const int KERNEL_SetNam = 0xffbd;
     private const int KERNEL_Load = 0xffd5;
     private const int KERNEL_SetLfs = 0xffba;
+    private const int KERNEL_Open = 0xffc0;
+    private const int KERNEL_Close = 0xffc3;
+    private const int KERNEL_ChkIn = 0xffc6;
+    private const int KERNEL_ChkOut = 0xffc9;
+    private const int KERNEL_Save = 0xffd8;
+
+    // Kernal file IO calls that report failure with carry set and the error code in A.
+    // The return to the managed caller is hooked so the error can be raised as a FIO exception.
+    private static readonly Dictionary<int, string> FileIoCalls = new()
+    {
+        { KERNEL_Open, "OPEN" },
+        { KERNEL_Close, "CLOSE" },
+        { KERNEL_ChkIn, "CHKIN" },
+        { KERNEL_ChkOut, "CHKOUT" },
+        { KERNEL_Load, "LOAD" },
+        { KERNEL_Save, "SAVE" },
+    };
+
+    private string _pendingFileIoCall = "";
+    private string _pendingFileIoDetail = "";
 
     private string _setnam_value = "";
     private int _setlfs_secondaryaddress = 0;
@@ -517,8 +537,9 @@ public class X16Debug : DebugAdapterBase
         }
 
         _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_SetNam);
-        _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_Load);
         _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(KERNEL_SetLfs);
+        foreach (var fileIoCall in FileIoCalls.Keys)
+            _serviceManager.BreakpointManager.DebuggerBreakpoints.Add(fileIoCall);
         _serviceManager.BreakpointManager.SetDebuggerBreakpoints();
 
         if (!string.IsNullOrWhiteSpace(_debugProject.SdCard))
@@ -1318,11 +1339,17 @@ public class X16Debug : DebugAdapterBase
 
     private void HandleStackbreakpointHit()
     {
+        // LoadCheck is the generic file IO check, set for every call in FileIoCalls.
         if (_emulator.State.StackBreakpointHit == DebugConstants.LoadCheck)
         {
+            var call = string.IsNullOrEmpty(_pendingFileIoCall) ? "File IO call" : _pendingFileIoCall;
+            var detail = _pendingFileIoDetail;
+            _pendingFileIoCall = "";
+            _pendingFileIoDetail = "";
+
             if (_emulator.Carry && _emulator.A != 0 && _serviceManager.ExceptionManager.IsSet("FIO"))
             {
-                var stopMessage = $"LOAD returned error code 0x{_emulator.A:X2} : {BasicErrors.GetErrorString(_emulator.A)} '{_setnam_value}'";
+                var stopMessage = $"{call} returned error code 0x{_emulator.A:X2} : {BasicErrors.GetErrorString(_emulator.A)} {detail}".TrimEnd();
                 Logger.LogError(stopMessage);
 
                 _serviceManager.ExceptionManager.LastException = "FIO";
@@ -1486,6 +1513,21 @@ public class X16Debug : DebugAdapterBase
             return;
         }
 
+        if (FileIoCalls.TryGetValue(_emulator.Pc, out var fileIoCall) && _serviceManager.ExceptionManager.IsSet("FIO"))
+        {
+            // inject a stop in the stack so we can hook the return and check for an error.
+            // only one call can be pending; nested calls share the managed caller's stack slot, so the last one names the error.
+            if (_serviceManager.StackManager.SetBreakpointOnManagedCaller((byte)DebugConstants.LoadCheck) != null)
+            {
+                _pendingFileIoCall = fileIoCall;
+                _pendingFileIoDetail = _emulator.Pc switch
+                {
+                    KERNEL_Open or KERNEL_Load or KERNEL_Save => $"'{_setnam_value}'",
+                    _ => $"(logical file {_emulator.X})"
+                };
+            }
+        }
+
         if (_emulator.Pc == KERNEL_SetNam) // setnam
         {
             var filenameAddress = _emulator.X + (_emulator.Y << 8);
@@ -1561,10 +1603,6 @@ public class X16Debug : DebugAdapterBase
 
         if (_emulator.Pc == KERNEL_Load) // load
         {
-            // inject a stop in the stack so we can hook the return
-            if (_serviceManager.ExceptionManager.IsSet("FIO"))
-                _serviceManager.StackManager.SetBreakpointOnManagedCaller((byte)DebugConstants.LoadCheck);
-
             if (!_setnam_fileexists)
             {
                 Logger.LogLine($"LOAD called but file does not exist.");

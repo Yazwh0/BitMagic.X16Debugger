@@ -48,7 +48,7 @@ internal class ExceptionManager
         {
             Filter = "FIO",
             Label = "File IO Exception",
-            Description = "LOAD returned an error code.",
+            Description = "A kernal file IO call (OPEN, CLOSE, CHKIN, CHKOUT, LOAD, SAVE) returned an error code.",
             Default = true,
             SupportsCondition = false,
             ConditionDescription = ""
