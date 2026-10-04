@@ -1,6 +1,7 @@
 ﻿using BitMagic.TemplateEngine.Compiler;
 using BitMagic.Common;
 using BitMagic.Compiler;
+using BitMagic.Compiler.Exceptions;
 using BitMagic.TemplateEngine.X16;
 using BitMagic.Compiler.Files;
 using BitMagic.X16Debugger.Extensions;
@@ -32,6 +33,19 @@ internal class BitmagicBuilder
     /// <returns>Binary file for the main segment</returns>
     public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions, string? outputFilename = null)
     {
+        try
+        {
+            return await BuildCore(source, basePath, compileOptions, outputFilename);
+        }
+        catch (Exception e) when (e is not CompilerException and not TemplateException)
+        {
+            // anything not already a build error would otherwise surface as an unhelpful crash.
+            throw new CompilerGeneralException($"Internal error building '{source}': {e.Message}", e);
+        }
+    }
+
+    private async Task<(DebugWrapper?, CompileState)> BuildCore(string source, string basePath, CompileOptions? compileOptions, string? outputFilename)
+    {
         var project = new Project();
         _logger.LogLine($"Compiling {source} ");
 
@@ -46,7 +60,15 @@ internal class BitmagicBuilder
         source = Path.GetFullPath(Path.Combine(basePath, source)).FixFilename();
         var codeFile = new BitMagicProjectFile(source);
         project.Code = codeFile;
-        await codeFile.Load();
+        try
+        {
+            // not a File.Exists check, the document cache can hold unsaved editor content.
+            await codeFile.Load();
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            throw new CompilerFileNotFound(source);
+        }
 
         var engine = CsasmEngine.CreateEngine();
         var content = project.Code.Content;
@@ -64,7 +86,15 @@ internal class BitmagicBuilder
 
             if (project.CompileOptions != null && project.CompileOptions.SaveGeneratedBmasm)
             {
-                File.WriteAllText(Path.Combine(templateOptions.BinFolder, filename), templateResult.Source.Code);
+                var generatedPath = Path.Combine(templateOptions.BinFolder, filename);
+                try
+                {
+                    File.WriteAllText(generatedPath, templateResult.Source.Code);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    throw new CompilerGeneralException($"Cannot write generated file '{generatedPath}': {e.Message}", e);
+                }
             }
 
             project.Code = templateResult;
