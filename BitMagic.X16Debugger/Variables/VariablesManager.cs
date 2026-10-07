@@ -23,6 +23,8 @@ internal class VariableManager
     private readonly StackManager _stackManager;
     private readonly PsgManager _psgManager;
     private ExpressionManager? _expressionManager;
+    private X16DirectoryTracker? _directoryTracker;
+    private KernalFileState? _kernalFileState;
 
     public VariableManager(IdManager idManager, Emulator emulator, ScopeManager scopeManager, PaletteManager paletteManager,
         SpriteManager spriteManager, StackManager stackManager, PsgManager psgManager)
@@ -40,6 +42,12 @@ internal class VariableManager
     public void SetExpressionManager(ExpressionManager expressionManager)
     {
         _expressionManager = expressionManager;
+    }
+
+    public void SetKernalState(X16DirectoryTracker directoryTracker, KernalFileState kernalFileState)
+    {
+        _directoryTracker = directoryTracker;
+        _kernalFileState = kernalFileState;
     }
 
     public IDictionary<string, object> ObjectTree => _variableObjectTree;
@@ -440,25 +448,40 @@ internal class VariableManager
 
         // R0-R15 are plain zero-page memory (no register-decode indirection like VERA/VIA), so the
         // setter just writes the two bytes directly - no resync story to worry about.
-        scope.AddVariable(new VariableMap("R0", "ushort", () => $"0x{_emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8):X4}", () => _emulator.Memory[0x02] + (_emulator.Memory[0x03] << 8), setValue: value => SetR16(value, 0x02)));
-        scope.AddVariable(new VariableMap("R1", "ushort", () => $"0x{_emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8):X4}", () => _emulator.Memory[0x04] + (_emulator.Memory[0x05] << 8), setValue: value => SetR16(value, 0x04)));
-        scope.AddVariable(new VariableMap("R2", "ushort", () => $"0x{_emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8):X4}", () => _emulator.Memory[0x06] + (_emulator.Memory[0x07] << 8), setValue: value => SetR16(value, 0x06)));
-        scope.AddVariable(new VariableMap("R3", "ushort", () => $"0x{_emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8):X4}", () => _emulator.Memory[0x08] + (_emulator.Memory[0x09] << 8), setValue: value => SetR16(value, 0x08)));
+        scope.AddVariable(
+            Register(
+            new VariableChildren("Registers", () => "R0-R15",
+                Enumerable.Range(0, 16).Select(KernalRegister).ToArray())));
 
-        scope.AddVariable(new VariableMap("R4", "ushort", () => $"0x{_emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8):X4}", () => _emulator.Memory[0x0a] + (_emulator.Memory[0x0b] << 8), setValue: value => SetR16(value, 0x0a)));
-        scope.AddVariable(new VariableMap("R5", "ushort", () => $"0x{_emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8):X4}", () => _emulator.Memory[0x0c] + (_emulator.Memory[0x0d] << 8), setValue: value => SetR16(value, 0x0c)));
-        scope.AddVariable(new VariableMap("R6", "ushort", () => $"0x{_emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8):X4}", () => _emulator.Memory[0x0e] + (_emulator.Memory[0x0f] << 8), setValue: value => SetR16(value, 0x0e)));
-        scope.AddVariable(new VariableMap("R7", "ushort", () => $"0x{_emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8):X4}", () => _emulator.Memory[0x10] + (_emulator.Memory[0x11] << 8), setValue: value => SetR16(value, 0x10)));
+        // read from fat32's cur_volume, see X16DirectoryTracker
+        scope.AddVariable(
+            Register(
+            new VariableChildren("DOS",
+                () => _directoryTracker?.Refresh() ?? X16Path.Root,
+                new[]
+                {
+                    new VariableMap("Current Directory", "string", () => _directoryTracker?.Refresh() ?? X16Path.Root),
+                    new VariableMap("Mounted", "bool", () => $"{_directoryTracker?.ReadVolume().Mounted}"),
+                    new VariableMap("Root Cluster", "uint", () => $"0x{_directoryTracker?.ReadVolume().RootCluster:X8}"),
+                    new VariableMap("Current Directory Cluster", "uint", () => $"0x{_directoryTracker?.ReadVolume().CwdCluster:X8}"),
+                    new VariableMap("cur_volume", "ushort", () => $"0x{_directoryTracker?.CurVolumeAddress:X4}"),
+                })));
 
-        scope.AddVariable(new VariableMap("R8", "ushort", () => $"0x{_emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8):X4}", () => _emulator.Memory[0x12] + (_emulator.Memory[0x13] << 8), setValue: value => SetR16(value, 0x12)));
-        scope.AddVariable(new VariableMap("R9", "ushort", () => $"0x{_emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8):X4}", () => _emulator.Memory[0x14] + (_emulator.Memory[0x15] << 8), setValue: value => SetR16(value, 0x14)));
-        scope.AddVariable(new VariableMap("R10", "ushort", () => $"0x{_emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8):X4}", () => _emulator.Memory[0x16] + (_emulator.Memory[0x17] << 8), setValue: value => SetR16(value, 0x16)));
-        scope.AddVariable(new VariableMap("R11", "ushort", () => $"0x{_emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8):X4}", () => _emulator.Memory[0x18] + (_emulator.Memory[0x19] << 8), setValue: value => SetR16(value, 0x18)));
-
-        scope.AddVariable(new VariableMap("R12", "ushort", () => $"0x{_emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8):X4}", () => _emulator.Memory[0x1a] + (_emulator.Memory[0x1b] << 8), setValue: value => SetR16(value, 0x1a)));
-        scope.AddVariable(new VariableMap("R13", "ushort", () => $"0x{_emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8):X4}", () => _emulator.Memory[0x1c] + (_emulator.Memory[0x1d] << 8), setValue: value => SetR16(value, 0x1c)));
-        scope.AddVariable(new VariableMap("R14", "ushort", () => $"0x{_emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8):X4}", () => _emulator.Memory[0x1e] + (_emulator.Memory[0x1f] << 8), setValue: value => SetR16(value, 0x1e)));
-        scope.AddVariable(new VariableMap("R15", "ushort", () => $"0x{_emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8):X4}", () => _emulator.Memory[0x20] + (_emulator.Memory[0x21] << 8), setValue: value => SetR16(value, 0x20)));
+        // the last SETLFS / SETNAM seen, used to match a LOAD to its debugger info
+        scope.AddVariable(
+            Register(
+            new VariableChildren("Last File",
+                () => _kernalFileState?.Path ?? "",
+                new[]
+                {
+                    new VariableMap("SETNAM", "string", () => _kernalFileState?.SetNam ?? ""),
+                    new VariableMap("Path", "string", () => _kernalFileState?.Path ?? ""),
+                    new VariableMap("Exists", "bool", () => $"{_kernalFileState?.FileExists}"),
+                    new VariableMap("Header Address", "ushort", () => _kernalFileState is { FileExists: true, FileTooShort: false } ? $"0x{_kernalFileState.HeaderAddress:X4}" : "None"),
+                    new VariableMap("Logical File", "byte", () => $"{_kernalFileState?.LogicalFile}"),
+                    new VariableMap("Device", "byte", () => $"{_kernalFileState?.Device}"),
+                    new VariableMap("Secondary Address", "byte", () => $"{_kernalFileState?.SecondaryAddress}"),
+                })));
 
         scope = GetNewScope("Display");
 
@@ -595,8 +618,7 @@ internal class VariableManager
 
         scope = GetNewScope("SD Card");
 
-        scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () => _emulator.SdCard.Image.ToArray()));
-        scope.AddVariable(new VariableMap("Last Sector Read", "uint", () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
+        scope.AddVariable(new VariableMemory("Content", () => $"{_emulator.SdCard.Size} bytes", "sdcard", () => _emulator.SdCard.Image.ToArray()));        scope.AddVariable(new VariableMap("Last Sector Read", "uint", () => $"0x{_emulator.Spi.LastRead:X2}", () => _emulator.Spi.LastRead));
         scope.AddVariable(new VariableMap("Position", "uint", () => $"0x{_emulator.Spi.Position:X8}", () => _emulator.Spi.LastRead));
         scope.AddVariable(new VariableMap("Chip Select", "bool", () => _emulator.Spi.ChipSelect.ToString(), () => _emulator.Spi.ChipSelect));
         scope.AddVariable(new VariableMap("Auto TX", "bool", () => _emulator.Spi.AutoTx.ToString(), () => _emulator.Spi.AutoTx));
@@ -741,6 +763,13 @@ internal class VariableManager
     {
         if (IAsmVariableExtensions.TryParseInteger(text, out var parsed))
             setValue(parsed);
+    }
+
+    // Kernal R<index>, at $02 + index * 2.
+    private VariableMap KernalRegister(int index)
+    {
+        var address = 0x02 + index * 2;
+        return new VariableMap($"R{index}", "ushort", () => $"0x{_emulator.Memory[address] + (_emulator.Memory[address + 1] << 8):X4}", () => _emulator.Memory[address] + (_emulator.Memory[address + 1] << 8), setValue: value => SetR16(value, address));
     }
 
     // Kernal R0-R15's two bytes (little-endian, at lowAddress/lowAddress+1) - plain zero-page

@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace BitMagic.X16Debugger.Tests.Variables;
 
-// Exercises the "Kernal" scope's R0-R15 VariableMaps. Unlike VERA/VIA, these are plain zero-page
+// Exercises the "Kernal" scope's R0-R15 VariableMaps (in its "Registers" group). Unlike VERA/VIA, these are plain zero-page
 // memory (no register-decode indirection), so the setter just writes the two bytes directly - no
 // resync story to verify.
 [TestClass]
@@ -41,7 +41,7 @@ public class VariableManagerKernalScopeTests
     public void Cleanup() => _emulator.Dispose();
 
     private VariableMap GetKernalVariable(string name) =>
-        (VariableMap)_scopeManager.GetScope("Kernal", false).Variables.First(v => v.Name == name);
+        (VariableMap)((VariableChildren)_scopeManager.GetScope("Kernal", false).Variables.First(v => v.Name == "Registers")).Children.First(v => v.Name == name);
 
     private static void Set(IVariableItem variable, string name, string value) =>
         variable.SetVariable(new SetVariableArguments { Name = name, Value = value });
@@ -90,6 +90,44 @@ public class VariableManagerKernalScopeTests
 
         Assert.AreEqual((byte)0xAA, _emulator.Memory[0x04]);
         Assert.AreEqual((byte)0xAA, _emulator.Memory[0x05]);
+    }
+
+    private string GetChildValue(string group, string name)
+    {
+        var children = (VariableChildren)_scopeManager.GetScope("Kernal", false).Variables.First(v => v.Name == group);
+        return children.Children.First(v => v.Name == name).GetVariable().Value;
+    }
+
+    [TestMethod]
+    public void Dos_ShowsCurrentDirectory()
+    {
+        using var sdCard = new SdCard(16, new FakeEmulatorLogger());
+        _emulator.LoadSdCard(sdCard);
+        sdCard.FileSystem.CreateDirectory("GAME");
+        var tracker = new X16DirectoryTracker(_emulator, new FakeEmulatorLogger());
+        _variableManager.SetKernalState(tracker, new KernalFileState());
+
+        // fat32's cur_volume, mounted and in GAME
+        var curVolume = X16DirectoryTracker.DefaultCurVolumeAddress - 0xa000;
+        var ram = _emulator.RamBank;
+        ram[curVolume] = 1;
+        BitConverter.GetBytes((uint)sdCard.FileSystem.RootDirectoryCluster).CopyTo(ram[(curVolume + 1)..]);
+        BitConverter.GetBytes(sdCard.FileSystem.RootDir.GetDirectories().First().FirstCluster).CopyTo(ram[(curVolume + 39)..]);
+
+        Assert.AreEqual("/GAME", GetChildValue("DOS", "Current Directory"));
+        Assert.AreEqual("True", GetChildValue("DOS", "Mounted"));
+    }
+
+    [TestMethod]
+    public void LastFile_ShowsKernalFileState()
+    {
+        var state = new KernalFileState { SetNam = "LEVEL1.PRG", Path = "/GAME/LEVEL1.PRG", FileExists = true, HeaderAddress = 0x801, Device = 8, SecondaryAddress = 1 };
+        _variableManager.SetKernalState(new X16DirectoryTracker(_emulator, new FakeEmulatorLogger()), state);
+
+        Assert.AreEqual("LEVEL1.PRG", GetChildValue("Last File", "SETNAM"));
+        Assert.AreEqual("/GAME/LEVEL1.PRG", GetChildValue("Last File", "Path"));
+        Assert.AreEqual("0x0801", GetChildValue("Last File", "Header Address"));
+        Assert.AreEqual("8", GetChildValue("Last File", "Device"));
     }
 
     [TestMethod]

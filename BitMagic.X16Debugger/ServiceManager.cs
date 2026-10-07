@@ -49,6 +49,8 @@ internal class ServiceManager
     public ExceptionManager ExceptionManager { get; private set; }
     public DebugActionManager DebugActionManager { get; private set; }
     public IdManager IdManager { get; private set; }
+    public X16DirectoryTracker DirectoryTracker { get; private set; }
+    public KernalFileState KernalFileState { get; private set; }
 
     // Shared across connections, so an attach-only connection (eg X16M) can record a session
     // someone else owns.
@@ -76,6 +78,8 @@ internal class ServiceManager
         DebugActionManager = new();
 
         DebugableFileManager = new(IdManager);
+        DirectoryTracker = new(Emulator, _logger);
+        KernalFileState = new();
 
         SourceMapManager = new(Emulator, _logger);
         ScopeManager = new(IdManager);
@@ -95,6 +99,7 @@ internal class ServiceManager
         BitmagicBuilder = new(DebugableFileManager, CodeGeneratorManager, DebugActionManager, _logger);
 
         VariableManager.SetExpressionManager(ExpressionManager);
+        VariableManager.SetKernalState(DirectoryTracker, KernalFileState);
         BreakpointManager.SetExpressionManager(ExpressionManager);
 
         try

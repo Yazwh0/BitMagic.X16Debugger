@@ -77,11 +77,7 @@ public class X16Debug : DebugAdapterBase
     private string _pendingFileIoCall = "";
     private string _pendingFileIoDetail = "";
 
-    private string _setnam_value = "";
-    private int _setlfs_secondaryaddress = 0;
-    private int _setnam_fileaddress = 0;
-    private bool _setnam_fileexists = false;
-    private bool _setnam_fileTooShort = false; // under 2 bytes, so there is no header and nothing to load
+    private KernalFileState _fileState => _serviceManager.KernalFileState;
 
     internal readonly string OfficialEmulatorLocation;
     internal readonly string OfficialEmulatorParams;
@@ -510,6 +506,8 @@ public class X16Debug : DebugAdapterBase
             }
             _debugProject.Symbols = symbolsList.ToArray();
         }
+
+        _serviceManager.DirectoryTracker.FindCurVolume(_debugProject.Symbols);
 
         // Keyboard buffer
         if (_debugProject.KeyboardBuffer != null && _debugProject.KeyboardBuffer.Any())
@@ -1505,14 +1503,16 @@ public class X16Debug : DebugAdapterBase
             {
                 if (action is DebugLoadAction debugLocalAction)
                 {
-                    var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(debugLocalAction.Filename);
+                    // the filename is normally from the root of the SD card, but can be relative to the DOS current directory
+                    var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(debugLocalAction.Filename)
+                        ?? _serviceManager.DebugableFileManager.GetFile_New(_serviceManager.DirectoryTracker.Resolve(debugLocalAction.Filename));
                     if (debugableFile != null)
                     {
                         Logger.Log($"Loading requested debugger info for '{debugLocalAction.Filename}' at ${debugLocalAction.Address:X4}... ");
 
                         var actualAddress = AddressFunctions.GetDebuggerAddress(debugLocalAction.Address, _emulator);
 
-                        var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                        var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _fileState.SecondaryAddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
                         Logger.LogLine("Done");
 
                         foreach (var breakpoint in breakpoints)
@@ -1555,7 +1555,7 @@ public class X16Debug : DebugAdapterBase
                 _pendingFileIoCall = fileIoCall;
                 _pendingFileIoDetail = _emulator.Pc switch
                 {
-                    KERNEL_Open or KERNEL_Load or KERNEL_Save => $"'{_setnam_value}'",
+                    KERNEL_Open or KERNEL_Load or KERNEL_Save => $"'{_fileState.Path}'",
                     _ => $"(logical file {_emulator.X})"
                 };
             }
@@ -1568,39 +1568,31 @@ public class X16Debug : DebugAdapterBase
 
             var x = new MemoryWrapper(() => _emulator.Memory.ToArray());
             var filename = x[filenameAddress].FixedString(len);
-            filename = filename.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
-            _setnam_value = filename;
+            _fileState.SetNam = filename;
 
-            if (string.IsNullOrWhiteSpace(_setnam_value) || _setnam_value.All(i => i == 0))
+            // resolve against the DOS current directory, so _fileState.Path is the full path on the SD card
+            if (string.IsNullOrWhiteSpace(filename) || filename.All(i => i == 0))
             {
                 // set first file.
-                _setnam_value = _emulator.SdCard!.FileSystem.GetFiles("").FirstOrDefault() ?? "";
+                var directory = _serviceManager.DirectoryTracker.Refresh();
+                var firstFile = _emulator.SdCard!.FileSystem.GetFiles(X16Path.ToSdCardPath(directory)).FirstOrDefault();
+                _fileState.Path = firstFile == null ? "" : X16Path.FromSdCardPath(firstFile);
+            }
+            else
+            {
+                _fileState.Path = _serviceManager.DirectoryTracker.Resolve(filename);
             }
 
-            _setnam_fileaddress = 0;
-            _setnam_fileexists = false;
-            _setnam_fileTooShort = false;
+            _fileState.HeaderAddress = 0;
+            _fileState.FileExists = false;
+            _fileState.FileTooShort = false;
 
-            if (_setnam_value.StartsWith("@:"))
+            var actFilename = X16Path.GetFilename(_fileState.Path);
+            var path = X16Path.ToSdCardPath(_fileState.Path);
+
+            if (actFilename.Length == 0 || actFilename.Any(i => i < 0x20 || Contains(InvalidBytes, (byte)i)))
             {
-                _setnam_value = _setnam_value[2..];
-            }
-
-            var idx = _setnam_value.LastIndexOfAny(['\\', '/']);
-            var folder = "";
-            var actFilename = _setnam_value;
-            var path = _setnam_value;
-
-            if (idx != -1)
-            {
-                folder = _setnam_value[..idx];
-                actFilename = _setnam_value[(idx + 1)..];
-                path = $"{folder}\\{actFilename}";
-            }
-
-            if (actFilename.Any(i => i < 0x20 || Contains(InvalidBytes, (byte)i)))
-            {
-                _setnam_fileexists = false;
+                _fileState.FileExists = false;
             }
             else
             {
@@ -1611,40 +1603,40 @@ public class X16Debug : DebugAdapterBase
                     if (data.Length < 2)
                     {
                         // ReadByte returns -1 at the end of the stream, which would produce a garbage header address.
-                        _setnam_fileTooShort = true;
+                        _fileState.FileTooShort = true;
                     }
                     else
                     {
-                        _setnam_fileaddress = data.ReadByte();
-                        _setnam_fileaddress += data.ReadByte() << 8;
+                        _fileState.HeaderAddress = data.ReadByte();
+                        _fileState.HeaderAddress += data.ReadByte() << 8;
                     }
 
                     data.Close();
-                    _setnam_fileexists = true;
+                    _fileState.FileExists = true;
                 }
             }
 
-            if (_setnam_fileTooShort)
-                Logger.LogLine($"SETNAM called with '{filename}', found '{path}' but it is less than 2 bytes so has no header.");
-            else if (_setnam_fileexists)
-                Logger.LogLine($"SETNAM called with '{filename}', found '{path}' with header ${_setnam_fileaddress:X4}.");
+            if (_fileState.FileTooShort)
+                Logger.LogLine($"SETNAM called with '{filename}', found '{_fileState.Path}' but it is less than 2 bytes so has no header.");
+            else if (_fileState.FileExists)
+                Logger.LogLine($"SETNAM called with '{filename}', found '{_fileState.Path}' with header ${_fileState.HeaderAddress:X4}.");
             else
-                Logger.LogLine($"SETNAM called with '{filename}', no file found.");
+                Logger.LogLine($"SETNAM called with '{filename}', no file found at '{_fileState.Path}'.");
 
             return;
         }
 
         if (_emulator.Pc == KERNEL_Load) // load
         {
-            if (!_setnam_fileexists)
+            if (!_fileState.FileExists)
             {
                 Logger.LogLine($"LOAD called but file does not exist.");
                 return;
             }
 
-            if (_setnam_fileTooShort)
+            if (_fileState.FileTooShort)
             {
-                Logger.LogLine($"LOAD called but '{_setnam_value}' is less than 2 bytes, so there is nothing to load. Not clearing breakpoints.");
+                Logger.LogLine($"LOAD called but '{_fileState.Path}' is less than 2 bytes, so there is nothing to load. Not clearing breakpoints.");
                 return;
             }
 
@@ -1655,25 +1647,25 @@ public class X16Debug : DebugAdapterBase
             }
 
             var loadAddress = 0;
-            if (_setlfs_secondaryaddress == 0 || _setlfs_secondaryaddress == 2)
+            if (_fileState.SecondaryAddress == 0 || _fileState.SecondaryAddress == 2)
             {
                 loadAddress = _emulator.X + (_emulator.Y << 8);
-                Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (parameters)");
+                Logger.LogLine($"LOAD called with '{_fileState.Path}' loading to ${loadAddress:X4} (parameters)");
             }
             else
             {
-                loadAddress = _setnam_fileaddress;
-                Logger.LogLine($"LOAD called with '{_setnam_value}' loading to ${loadAddress:X4} (file header)");
+                loadAddress = _fileState.HeaderAddress;
+                Logger.LogLine($"LOAD called with '{_fileState.Path}' loading to ${loadAddress:X4} (file header)");
             }
 
-            var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(_setnam_value);
+            var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(_fileState.Path);
             if (debugableFile != null)
             {
-                Logger.Log($"Loading debugger info for '{_setnam_value}'... ");
+                Logger.Log($"Loading debugger info for '{_fileState.Path}'... ");
 
                 var actualAddress = AddressFunctions.GetDebuggerAddress(loadAddress, _emulator);
 
-                var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _setlfs_secondaryaddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
+                var breakpoints = debugableFile.FileLoaded(_emulator, actualAddress, _fileState.SecondaryAddress < 2, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager);
                 Logger.LogLine("Done");
 
                 foreach (var breakpoint in breakpoints)
@@ -1683,8 +1675,8 @@ public class X16Debug : DebugAdapterBase
             }
             else
             {
-                var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(_setnam_value);
-                if (_setlfs_secondaryaddress < 2)
+                var fileLength = (int)_emulator.SdCard!.FileSystem.GetFileLength(X16Path.ToSdCardPath(_fileState.Path));
+                if (_fileState.SecondaryAddress < 2)
                     fileLength = -2;
 
                 if (fileLength > 0)
@@ -1722,7 +1714,9 @@ public class X16Debug : DebugAdapterBase
         if (_emulator.Pc == KERNEL_SetLfs)
         {
             Logger.LogLine($"SETLFS A: {_emulator.A}, X: {_emulator.X}, Y: {_emulator.Y}");
-            _setlfs_secondaryaddress = _emulator.Y;
+            _fileState.LogicalFile = _emulator.A;
+            _fileState.Device = _emulator.X;
+            _fileState.SecondaryAddress = _emulator.Y;
 
             return;
         }
