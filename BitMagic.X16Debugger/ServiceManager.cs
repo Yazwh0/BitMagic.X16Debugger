@@ -50,6 +50,11 @@ internal class ServiceManager
     public DebugActionManager DebugActionManager { get; private set; }
     public IdManager IdManager { get; private set; }
 
+    // Shared across connections, so an attach-only connection (eg X16M) can record a session
+    // someone else owns.
+    private readonly object _audioRecorderLock = new();
+    public AudioRecorder? AudioRecorder { get; private set; }
+
 #pragma warning disable CS8618
     public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, IEmulatorLogger logger)
 #pragma warning restore CS8618
@@ -61,6 +66,9 @@ internal class ServiceManager
 
     public Emulator Reset()
     {
+        // The recorder reads the emulator's native audio buffer, so it must stop before that's freed.
+        StopAudioRecording();
+
         var old = Emulator;
         Emulator = _getNewEmulatorInstance(null);
 
@@ -137,6 +145,29 @@ internal class ServiceManager
         return Emulator;
     }
 
+    public AudioRecorder StartAudioRecording(string path)
+    {
+        lock (_audioRecorderLock)
+        {
+            if (AudioRecorder != null)
+                throw new InvalidOperationException($"Already recording audio to '{AudioRecorder.Path}'.");
+
+            AudioRecorder = new AudioRecorder(Emulator, path);
+            return AudioRecorder;
+        }
+    }
+
+    // Returns the stopped recorder (for its stats), or null if nothing was recording.
+    public AudioRecorder? StopAudioRecording()
+    {
+        lock (_audioRecorderLock)
+        {
+            var recorder = AudioRecorder;
+            AudioRecorder = null;
+            recorder?.Stop();
+            return recorder;
+        }
+    }
 
     private static IEnumerable<uint> GetGradients(uint start_val, uint end_val, int steps)
     {

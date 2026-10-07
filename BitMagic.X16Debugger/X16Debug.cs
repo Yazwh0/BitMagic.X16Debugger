@@ -172,6 +172,14 @@ public class X16Debug : DebugAdapterBase
         {
             HandleMouseInputRequestAsync(r);
         });
+        Protocol.RegisterRequestType<StartAudioRecordingRequest, StartAudioRecordingRequestArguments, StartAudioRecordingRequestResponse>(delegate (IRequestResponder<StartAudioRecordingRequestArguments, StartAudioRecordingRequestResponse> r)
+        {
+            HandleStartAudioRecordingRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<StopAudioRecordingRequest, StopAudioRecordingRequestArguments, StopAudioRecordingRequestResponse>(delegate (IRequestResponder<StopAudioRecordingRequestArguments, StopAudioRecordingRequestResponse> r)
+        {
+            HandleStopAudioRecordingRequestAsync(r);
+        });
     }
 
 #if SHOWDAP
@@ -1973,6 +1981,8 @@ public class X16Debug : DebugAdapterBase
             "searchMemory" => MemorySearchHandler.HandleRequest(requestArgs as MemorySearchArguments, _emulator),
             "keyboardInput" => KeyboardInputRequestHandler.HandleRequest(requestArgs as KeyboardInputRequestArguments, _emulator),
             "mouseInput" => MouseInputRequestHandler.HandleRequest(requestArgs as MouseInputRequestArguments, _emulator),
+            "startAudioRecording" => AudioRecordingRequestHandler.HandleStartRequest(requestArgs as StartAudioRecordingRequestArguments, _serviceManager, _debugProject?.BasePath),
+            "stopAudioRecording" => AudioRecordingRequestHandler.HandleStopRequest(_serviceManager),
             _ => base.HandleProtocolRequest(requestType, requestArgs)
         };
 
@@ -2024,6 +2034,16 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleMouseInputRequestAsync(IRequestResponder<MouseInputRequestArguments, MouseInputRequestResponse> responder)
     {
         responder.SetResponse(MouseInputRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleStartAudioRecordingRequestAsync(IRequestResponder<StartAudioRecordingRequestArguments, StartAudioRecordingRequestResponse> responder)
+    {
+        responder.SetResponse(AudioRecordingRequestHandler.HandleStartRequest(responder.Arguments, _serviceManager, _debugProject?.BasePath));
+    }
+
+    internal virtual void HandleStopAudioRecordingRequestAsync(IRequestResponder<StopAudioRecordingRequestArguments, StopAudioRecordingRequestResponse> responder)
+    {
+        responder.SetResponse(AudioRecordingRequestHandler.HandleStopRequest(_serviceManager));
     }
     //protected override DataBreakpointInfoResponse HandleDataBreakpointInfoRequest(DataBreakpointInfoArguments arguments)
     //{
