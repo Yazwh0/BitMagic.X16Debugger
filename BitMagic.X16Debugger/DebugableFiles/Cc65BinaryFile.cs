@@ -18,6 +18,7 @@ internal static class Cc65BinaryFileFactory
         foreach (var file in files)
         {
             serviceManager.DebugableFileManager.AddFiles(file);
+            serviceManager.DebugableFileManager.SetHostFile(file.Path, file.ReferenceFile);
         }
 
         // labels for the disassembler, eg for library code or a module without line information. Any already set
@@ -91,6 +92,7 @@ internal static class Cc65BinaryFileFactory
             var binaryFile = new Cc65BinaryFile(outputName, AddressFunctions.GetDebuggerAddress(startAddress, 0, 0), data.Length);
             binaryFile.Data = data;
             binaryFile.State = state;
+            binaryFile.ReferenceFile = referenceFile;
 
             var mapped = MapLines(debugInfo, outputName, data.Length - headerSize, headerSize, binaryFile, sourceFiles);
             MapScopes(scopes, outputName, headerSize, binaryFile);
@@ -460,6 +462,11 @@ internal class Cc65BinaryFile : SourceFileBase, ICompiledBinaryFile
 
     internal byte[] Data { get; set; } = Array.Empty<byte>();
     IReadOnlyList<byte> IBinaryFile.Data => Data;
+
+    /// <summary>
+    /// The host file ld65 wrote, which Data is read from.
+    /// </summary>
+    internal string ReferenceFile { get; set; } = "";
 
     public bool Written { get; private set; }
 

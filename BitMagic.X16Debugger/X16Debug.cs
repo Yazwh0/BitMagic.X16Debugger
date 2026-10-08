@@ -79,6 +79,10 @@ public class X16Debug : DebugAdapterBase
 
     private KernalFileState _fileState => _serviceManager.KernalFileState;
 
+    // set at launch, used by SetupSdCard
+    private string _autobootFile = "";
+    private List<string> _sdCardExcludes = new();
+
     internal readonly string OfficialEmulatorLocation;
     internal readonly string OfficialEmulatorParams;
     private readonly bool _runInOfficialEmulator;
@@ -611,22 +615,12 @@ public class X16Debug : DebugAdapterBase
         // only needs doing once here, not per scopes request.
         _serviceManager.VariableManager.RebuildGlobals(_serviceManager.DebugableFileManager);
 
-        if (!string.IsNullOrWhiteSpace(autobootFile))
-        {
-            Logger.Log($"Adding AUTOBOOT.X16 for '{autobootFile}'... ");
-            if (_emulator.SdCard!.FileSystem.Exists("AUTOBOOT.X16"))
-            {
-                Logger.LogLine("Error. File already exists.");
-            }
-            else
-            {
-                _emulator.SdCard!.AddCompiledFile("AUTOBOOT.X16", AutobootCreator.GetAutoboot(autobootFile));
-                Logger.LogLine("Done.");
-            }
-        }
+        // AUTOBOOT.X16 is written with everything else in SetupSdCard
+        _autobootFile = autobootFile;
 
         // ROM Patching
         var romfiles = new List<string>();
+        _sdCardExcludes = romfiles;
         if (_debugProject.RomSource != null)
         {
             var evaluator = new BaseExpressionEvaluator();
@@ -762,7 +756,6 @@ public class X16Debug : DebugAdapterBase
             //            Logger.LogLine("Done.");
         }
 
-        _serviceManager.DebugableFileManager.AddBitMagicFilesToSdCard(_emulator.SdCard ?? throw new Exception("SDCard is null"), romfiles);
 
         if (_runInOfficialEmulator)
         {
@@ -1250,38 +1243,10 @@ public class X16Debug : DebugAdapterBase
 
     internal void SetupSdCard()
     {
+        if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
 
-        // load in SD Card files here.
-        foreach (var file in _debugProject!.SdCardFiles)
-        {
-            if (_emulator.SdCard == null) throw new Exception("SDCard is null!");
-
-            var name = Path.GetFullPath(file.Source, _debugProject.BasePath);
-            if (File.Exists(name))
-            {
-                _emulator.SdCard.AddFiles(name, file.Dest, file.AllowOverwrite);
-                continue;
-            }
-
-            if (Directory.Exists(name))
-            {
-                _emulator.SdCard.AddDirectory(name, file.Dest, file.AllowOverwrite);
-                continue;
-            }
-
-            var wildcard = Path.GetFileName(name);
-            var path = Path.GetDirectoryName(name);
-            if (!Directory.Exists(path))
-            {
-                Logger.LogError($"Cannot find directory: {path}");
-                continue;
-            }
-
-            foreach (var actFilename in Directory.GetFiles(path, wildcard))
-            {
-                _emulator.SdCard.AddFiles(actFilename, file.Dest, file.AllowOverwrite);
-            }
-        }
+        new SdCardWriter(_emulator.SdCard, _serviceManager.DebugableFileManager, Logger)
+            .Write(_debugProject!.SdCardFiles, _debugProject.BasePath, _sdCardExcludes, _autobootFile);
 
         // create sdcard if requested
         if (!string.IsNullOrWhiteSpace(_debugProject.SdCardOutput) && _emulator.SdCard != null)
@@ -1505,7 +1470,7 @@ public class X16Debug : DebugAdapterBase
                 {
                     // the filename is normally from the root of the SD card, but can be relative to the DOS current directory
                     var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(debugLocalAction.Filename)
-                        ?? _serviceManager.DebugableFileManager.GetFile_New(_serviceManager.DirectoryTracker.Resolve(debugLocalAction.Filename));
+                        ?? _serviceManager.DebugableFileManager.GetFileOnSdCard(_serviceManager.DirectoryTracker.Resolve(debugLocalAction.Filename));
                     if (debugableFile != null)
                     {
                         Logger.Log($"Loading requested debugger info for '{debugLocalAction.Filename}' at ${debugLocalAction.Address:X4}... ");
@@ -1658,7 +1623,7 @@ public class X16Debug : DebugAdapterBase
                 Logger.LogLine($"LOAD called with '{_fileState.Path}' loading to ${loadAddress:X4} (file header)");
             }
 
-            var debugableFile = _serviceManager.DebugableFileManager.GetFile_New(_fileState.Path);
+            var debugableFile = _serviceManager.DebugableFileManager.GetFileOnSdCard(_fileState.Path);
             if (debugableFile != null)
             {
                 Logger.Log($"Loading debugger info for '{_fileState.Path}'... ");

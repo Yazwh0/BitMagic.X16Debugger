@@ -8,6 +8,9 @@ internal class DebugableFileManager
 {
     private readonly Dictionary<string, DebugWrapper> AllFiles = new ();
 
+    // host file -> the X16 file built to it, so the project's sdCardFiles copy of it can be followed
+    private readonly Dictionary<string, DebugWrapper> _hostFiles = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private readonly IdManager _idManager;
     private BreakpointManager? _breakpointManager;
 
@@ -27,6 +30,9 @@ internal class DebugableFileManager
 
         foreach(var i in allFiles)
             AllFiles.Remove(i);
+
+        foreach (var i in _hostFiles.Where(i => allFiles.Contains(i.Value.Path)).Select(i => i.Key).ToArray())
+            _hostFiles.Remove(i);
     }
 
     private HashSet<string> GetAllFilesFromSourceFile(ISourceFile file, HashSet<string>? collected)
@@ -91,6 +97,39 @@ internal class DebugableFileManager
         return found.Length == 1 ? found[0] : null;
     }
 
+    /// <summary>
+    /// The X16 file at this path on the SD card, eg '/DATA/LEVEL1.BIN', as placed by SdCardWriter.
+    /// </summary>
+    public DebugWrapper? GetFileOnSdCard(string sdCardPath)
+    {
+        var toFind = NormaliseX16Filename(sdCardPath);
+
+        return AllFiles.Values.FirstOrDefault(i => i.X16File && i.SdCardPaths.Any(p => NormaliseX16Filename(p) == toFind));
+    }
+
+    /// <summary>
+    /// Records the host file an X16 file was written to (or read from), eg 'out/LEVEL1.BIN'.
+    /// </summary>
+    public void SetHostFile(string path, string hostPath)
+    {
+        if (string.IsNullOrWhiteSpace(hostPath) || !AllFiles.TryGetValue(path, out var wrapper) || !wrapper.X16File)
+            return;
+
+        wrapper.HostPath = Path.GetFullPath(hostPath);
+        _hostFiles[wrapper.HostPath] = wrapper;
+    }
+
+    /// <summary>
+    /// The X16 file that was written to (or read from) this host file, if any.
+    /// </summary>
+    public DebugWrapper? GetFileByHostFile(string hostPath) =>
+        _hostFiles.TryGetValue(Path.GetFullPath(hostPath), out var wrapper) ? wrapper : null;
+
+    /// <summary>
+    /// Every X16 file, ie the files built to go on the SD card.
+    /// </summary>
+    public IEnumerable<DebugWrapper> X16Files() => AllFiles.Values.Where(i => i.X16File);
+
     private static string NormaliseX16Filename(string filename) =>
         filename.Replace('\\', '/').TrimStart('/').ToUpperInvariant();
 
@@ -119,22 +158,6 @@ internal class DebugableFileManager
         return AllFiles.Values.FirstOrDefault(i => i.Source == sourceFile);
     }
 
-    public void AddBitMagicFilesToSdCard(SdCard sdCard, IList<string> excludes)
-    {
-        foreach (var i in GetBitMagicFiles())
-        {
-            if (!excludes.Contains(i.Filename))
-                sdCard.AddCompiledFile(i.Filename, i.Data);
-        }
-    }
-
-    public IEnumerable<(string Filename, byte[] Data)> GetBitMagicFiles()
-    {
-        foreach (var i in AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>())
-        {
-            yield return (i.Path, i.Data.ToArray());
-        }
-    }
-    public IEnumerable<IBinaryFile> GetBitMagicFilesToWrite() => 
+    public IEnumerable<IBinaryFile> GetBitMagicFilesToWrite() =>
         AllFiles.Values.Where(i => i.X16File).Select(i => i.Source).Cast<IBinaryFile>();
 }

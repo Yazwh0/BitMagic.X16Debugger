@@ -111,6 +111,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
             File.WriteAllBytes(path, f.Data.ToArray());
             Logger.LogLine("Done.");
             f.SetWritten();
+            serviceManager.DebugableFileManager.SetHostFile(f.Path, path);
         }
     }
 }

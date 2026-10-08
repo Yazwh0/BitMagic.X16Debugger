@@ -27,6 +27,22 @@ internal class DebugWrapper : ISourceFile
         _breakpointManager = breakpointManager;
     }
 
+    // Where the file was put on the SD card, eg '/DATA/LEVEL1.BIN', see SdCardWriter.
+    private readonly List<string> _sdCardPaths = new();
+
+    public IReadOnlyList<string> SdCardPaths => _sdCardPaths;
+
+    /// <summary>
+    /// The host file this was written to or read from, so the project's sdCardFiles can place it.
+    /// </summary>
+    public string? HostPath { get; internal set; }
+
+    internal void PlacedOnSdCard(string sdCardPath)
+    {
+        if (!_sdCardPaths.Contains(sdCardPath, StringComparer.OrdinalIgnoreCase))
+            _sdCardPaths.Add(sdCardPath);
+    }
+
     /// <summary>
     /// Called after a file is loaded into memory
     /// </summary>
