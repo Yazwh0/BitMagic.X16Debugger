@@ -86,7 +86,9 @@ internal class BitMagicBinaryFile : SourceFileBase, ICompiledBinaryFile
             }
         }
 
-        foreach (var (name, value) in _result.State.ScopeFactory.GlobalVariables.GetChildVariables("App"))
+        // an address shows as its own name, so .export aliases only get one nothing else has
+        foreach (var (name, value) in _result.State.ScopeFactory.GlobalVariables.GetChildVariables("App")
+            .OrderBy(i => i.Value is AsmVariable { AliasOf: not null }))
         {
             if (!Symbols.ContainsKey(value.Value))
                 _symbols.Add(value.Value, name);

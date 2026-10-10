@@ -116,9 +116,17 @@ internal class ExpressionManager
         {
             var variables = state.Evaluator.Variables ?? state.Procedure.Variables;
 
-            if (variables.TryGetValue(e.Name, new Common.SourceFilePosition(), out var result))
+            // the debugger sees everything, public or private
+            var found = variables is BitMagic.Compiler.Variables compilerVariables ?
+                compilerVariables.TryGetValueIgnoringVisibility(e.Name, new Common.SourceFilePosition(), out var result) :
+                variables.TryGetValue(e.Name, new Common.SourceFilePosition(), out result);
+
+            if (found)
             {
-                e.Value = result!.GetActualValue(_memoryWrapper);
+                // a .debugalias is its expression, it has no address of its own
+                e.Value = result is Common.DebuggerVariable alias ?
+                    _evaluator.Evaluate(alias.Expression) :
+                    result!.GetActualValue(_memoryWrapper);
                 return;
             }
         }

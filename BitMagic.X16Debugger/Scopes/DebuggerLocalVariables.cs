@@ -143,6 +143,10 @@ internal class DebuggerLocalVariables : IScopeMap
             else
                 type += $" (${j.Value:X4})";
 
+            // an .export alias: say what it stands for
+            if (j is AsmVariable { AliasOf: not null } alias)
+                type += $" → {alias.AliasOf}";
+
             Action<string>? setValue = j.SupportsDirectWrite() ? value => j.TrySetValue(emulator, value) : null;
 
             return new VariableMap(name, type, getter, setValue: setValue);
