@@ -248,6 +248,31 @@ static class Program
         return 0;
     }
 
+    private const int ListenFailedExitCode = 103;
+
+    /// <summary>
+    /// Listens on a local port. If the port is taken, eg by another X16D, says so and exits, rather
+    /// than leave an unhandled exception on a listener thread.
+    /// </summary>
+    private static TcpListener StartListener(string name, int port)
+    {
+        var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), port);
+
+        try
+        {
+            listener.Start();
+        }
+        catch (SocketException e)
+        {
+            Console.Error.WriteLine(e.SocketErrorCode == SocketError.AddressAlreadyInUse
+                ? $"[X16D] Cannot listen for {name} on port {port}: the port is already in use, probably by another X16D. Exiting."
+                : $"[X16D] Cannot listen for {name} on port {port}: {e.Message} Exiting.");
+            Environment.Exit(ListenFailedExitCode);
+        }
+
+        return listener;
+    }
+
     private static void RunAsServer(Func<EmulatorOptions?, Emulator> getEmulator, int dapPort, int lspPort, int queryPort, string rom, string emulatorLocation, bool runInEmulatorLocation, string officialEmulatorParameters)
     {
         Console.WriteLine($"DAP Listening on port {dapPort}.");
@@ -260,8 +285,7 @@ static class Program
 
         var listenThread = new Thread(() =>
         {
-            var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), dapPort);
-            listener.Start();
+            var listener = StartListener("DAP", dapPort);
 
             while (true)
             {
@@ -302,8 +326,7 @@ static class Program
 
         Thread lspListenThread = new Thread(() =>
         {
-            var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), lspPort);
-            listener.Start();
+            var listener = StartListener("LSP", lspPort);
 
             while (true)
             {
@@ -347,8 +370,7 @@ static class Program
 
             var queryListenThread = new Thread(() =>
             {
-                var listener = new TcpListener(IPAddress.Parse("127.0.0.1"), queryPort);
-                listener.Start();
+                var listener = StartListener("queries", queryPort);
 
                 while (true)
                 {
