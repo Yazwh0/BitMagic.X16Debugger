@@ -29,6 +29,9 @@ internal class CodeGeneratorManager
     public int GetSourceReference(string path) => Templates[path.FixFilename()].SourceReference;
     public MacroAssembler.ProcessResult GetTemplate(string path) => Templates[path.FixFilename()].Template;
     public TemplateReference Get(string path) => Templates[path.FixFilename()];
+
+    public MacroAssembler.ProcessResult? TryGetTemplate(string path) =>
+        Templates.TryGetValue(path.FixFilename(), out var template) ? template.Template : null;
 }
 
 internal record class TemplateReference(int SourceReference, MacroAssembler.ProcessResult Template);

@@ -1,5 +1,7 @@
 ﻿using BitMagic.Common;
+using BitMagic.Compiler;
 using BitMagic.X16Debugger.DebugableFiles;
+using BitMagic.X16Debugger.Hovers;
 using BitMagic.X16Debugger.LSP;
 using BitMagic.X16Emulator;
 
@@ -29,6 +31,8 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
         serviceManager.ExpressionManager.ClearStates();
 
+        var hoverUnits = new List<HoverUnit>();
+
         if (project.Files != null)
         {
             foreach (var i in project.Files)
@@ -36,6 +40,8 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
                 if (i is BitmagicInputFile bitmagicFile)
                 {
                     var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions, bitmagicFile.OutputFilename);
+                    hoverUnits.Add(HoverUnitFor(bitmagicFile.Filename, project.BasePath, state));
+
                     if (result != null)
                     {
                         serviceManager.ExpressionManager.AddState(state);
@@ -62,6 +68,8 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
         if (!string.IsNullOrWhiteSpace(project.Source))
         {
             var (result, state) = await serviceManager.BitmagicBuilder.Build(project.Source, project.BasePath, project.CompileOptions);
+            hoverUnits.Add(HoverUnitFor(project.Source, project.BasePath, state));
+
             if (result != null)
             {
                 serviceManager.ExpressionManager.AddState(state);
@@ -80,6 +88,18 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
             WriteOutputFiles(project);
         }
+
+        // only now the whole build has worked
+        serviceManager.HoverSnapshot = new HoverSnapshot(hoverUnits);
+    }
+
+    // a built BitMagic file and, if it went through the template engine, what was compiled
+    private HoverUnit HoverUnitFor(string filename, string basePath, CompileState state)
+    {
+        var source = Path.GetFullPath(Path.Combine(basePath, filename)).FixFilename();
+        var generated = serviceManager.CodeGeneratorManager.TryGetTemplate(source);
+
+        return new HoverUnit(source, state, generated);
     }
 
     // The file's path on the SD card, including any folder (eg 'BIN/GAME.PRG'), as CMDR-DOS LOADs a path like that.

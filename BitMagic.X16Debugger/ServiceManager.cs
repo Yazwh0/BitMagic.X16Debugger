@@ -46,6 +46,10 @@ internal class ServiceManager
     public CodeGeneratorManager CodeGeneratorManager { get; private set; }
     public DebugableFileManager DebugableFileManager { get; private set; }
     public BitmagicBuilder BitmagicBuilder { get; private set; }
+
+    // the last build that succeeded, for the hover; replaced whole, so readers never see a build in progress
+    private volatile Hovers.HoverSnapshot? _hoverSnapshot;
+    public Hovers.HoverSnapshot? HoverSnapshot { get => _hoverSnapshot; internal set => _hoverSnapshot = value; }
     public ExceptionManager ExceptionManager { get; private set; }
     public DebugActionManager DebugActionManager { get; private set; }
     public IdManager IdManager { get; private set; }

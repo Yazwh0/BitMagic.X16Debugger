@@ -39,6 +39,7 @@ public class X16Debug : DebugAdapterBase
     private SysThread? _externalThread;
 
     private readonly ServiceManager _serviceManager;
+    private readonly Hovers.DebugHover _debugHover;
 
     // goto target id -> debugger address
     private readonly Dictionary<int, int> _GotoTargets = new();
@@ -114,6 +115,7 @@ public class X16Debug : DebugAdapterBase
             ServiceManagerFactory.SetServiceManager(new ServiceManager(getNewEmulatorInstance, Logger));
 
         _serviceManager = ServiceManagerFactory.GetSeviceMangager();
+        _debugHover = new Hovers.DebugHover(_serviceManager);
 
         _serviceManager.BreakpointManager.BreakpointsUpdated += this.BreakpointManager_BreakpointsUpdated;
 
@@ -241,6 +243,7 @@ public class X16Debug : DebugAdapterBase
             SupportsConditionalBreakpoints = true,
             SupportsHitConditionalBreakpoints = true,
             //SupportsDataBreakpoints = true,
+            SupportsEvaluateForHovers = true,
             SupportsExceptionInfoRequest = true,
             SupportsExceptionOptions = true,
             ExceptionBreakpointFilters = ExceptionManager.GetExceptionList(),
@@ -609,6 +612,9 @@ public class X16Debug : DebugAdapterBase
 
         if (debugReturn != null)
             return debugReturn;
+
+        // the hover describes the build that's running, even if the language server rebuilds after this
+        _debugHover.SetSnapshot(_serviceManager.HoverSnapshot);
 
         // Compilation succeeded - (re)build the "Globals" scope from what was just
         // compiled. Doesn't depend on the current stack frame (unlike Locals), so this
@@ -1876,6 +1882,23 @@ public class X16Debug : DebugAdapterBase
 
     protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
     {
+        if (arguments.Context == EvaluateArguments.ContextValue.Hover)
+        {
+            var hover = _debugHover.Evaluate(arguments);
+            if (hover != null)
+                return hover;
+
+            // no position, or the file has changed: evaluate what's hovered, and show nothing if it can't be
+            try
+            {
+                return new EvaluateResponse { Result = _serviceManager.ExpressionManager.Evaluate(arguments.Expression) };
+            }
+            catch (Exception e)
+            {
+                throw new ProtocolException(e.Message);
+            }
+        }
+
         return _serviceManager.ExpressionManager.Evaluate(arguments);
     }
 
