@@ -218,6 +218,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     public float WindowScale { get; set; } = 0x01;
 
     /// <summary>
+    /// Screen position of the display window. If not set, the last position is used.
+    /// </summary>
+    [JsonProperty("windowPosition")]
+    [Description("Screen position of the display window. If not set, the last position is used.")]
+    public WindowPosition? WindowPosition { get; set; } = null;
+
+    /// <summary>
     /// Don't play audio. Emulation is unaffected.
     /// </summary>
     [JsonProperty("muteAudio")]
@@ -427,6 +434,24 @@ public class RtcNvram
     [JsonProperty("writeFile")]
     [Description("Filename to store the RTCs NVRAM in. This will overwrite.")]
     public string WriteFile { get; set; } = "";
+}
+
+[JsonObject("windowPosition")]
+public class WindowPosition
+{
+    /// <summary>
+    /// Left edge of the window's client area, in screen pixels.
+    /// </summary>
+    [JsonProperty("x")]
+    [Description("Left edge of the window's client area, in screen pixels.")]
+    public int X { get; set; }
+
+    /// <summary>
+    /// Top edge of the window's client area, in screen pixels.
+    /// </summary>
+    [JsonProperty("y")]
+    [Description("Top edge of the window's client area, in screen pixels.")]
+    public int Y { get; set; }
 }
 
 [JsonObject("symbolsFile")]

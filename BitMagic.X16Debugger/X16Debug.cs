@@ -331,7 +331,9 @@ public class X16Debug : DebugAdapterBase
         var stopOnEntry = stopOnEntryOverride ?? _debugProject.StartStepping;
 
         // EmulatorOptions
-        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale, MuteAudio = muteAudioOverride ?? _debugProject.MuteAudio };
+        var emulatiorOptions = new EmulatorOptions() { HistorySize = _debugProject.HistorySize, WindowScale = _debugProject.WindowScale,
+            WindowPosition = _debugProject.WindowPosition == null ? null : (_debugProject.WindowPosition.X, _debugProject.WindowPosition.Y),
+            MuteAudio = muteAudioOverride ?? _debugProject.MuteAudio };
         _emulator.Reset();
         _emulator.SetOptions(emulatiorOptions);
         _emulator.EnableWifi = _debugProject.Wifi;
@@ -784,7 +786,7 @@ public class X16Debug : DebugAdapterBase
         _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
-        _window = new EmulatorWindow();
+        _window = new EmulatorWindow() { SettingsKey = "x16d" };
 
         _windowThread = new SysThread(() =>
         {
