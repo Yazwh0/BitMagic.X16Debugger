@@ -64,6 +64,7 @@ internal class X16KernelDocumentation : TokenDescriptionProvider
 {
     public X16KernelDocumentation()
     {
+        #pragma warning disable CS8604 // Possible null reference argument.
         Process(JsonSerializer.Deserialize<Dictionary<string, string>>(""" +
 EscapeForCSharp(JsonSerializer.Serialize(result)) + @"""));
     }
