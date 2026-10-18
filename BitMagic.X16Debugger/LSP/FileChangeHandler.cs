@@ -32,7 +32,9 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
         return new TextDocumentChangeRegistrationOptions
         {
             DocumentSelector = TextDocumentSelector.ForLanguage("bmasm"),
-            SyncKind = TextDocumentSyncKind.Incremental
+            // Full rather than Incremental: if one incremental edit failed to apply, the cached copy
+            // would silently drift from the editor and errors would be reported on the wrong lines.
+            SyncKind = TextDocumentSyncKind.Full
         };
     }
 
