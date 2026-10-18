@@ -63,6 +63,11 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
         //    Console.WriteLine(line);
         //Console.WriteLine("-----");
 
+        // Generated files are a build output (saveGeneratedBmasm), not an input. When one is open
+        // the client reports the build rewriting it as a change, which would trigger a second build.
+        if (filename.EndsWith(".generated.bmasm", StringComparison.OrdinalIgnoreCase))
+            return Unit.Task;
+
         debouncer.Debounce(UpdateFileChanges);
 
         return Unit.Task;

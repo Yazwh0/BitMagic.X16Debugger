@@ -89,7 +89,9 @@ internal class BitmagicBuilder
                 var generatedPath = Path.Combine(templateOptions.BinFolder, filename);
                 try
                 {
-                    File.WriteAllText(generatedPath, templateResult.Source.Code);
+                    // only write when it has changed, so open editors and file watchers aren't disturbed on every build
+                    if (!File.Exists(generatedPath) || File.ReadAllText(generatedPath) != templateResult.Source.Code)
+                        File.WriteAllText(generatedPath, templateResult.Source.Code);
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
