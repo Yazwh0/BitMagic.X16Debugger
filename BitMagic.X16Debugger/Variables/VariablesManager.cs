@@ -692,7 +692,7 @@ internal class VariableManager
 
         foreach (var (key, value) in variables.Values)
         {
-            if (value.VariableDataType is VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)
+            if (!value.ShowInVariables())
                 continue;
 
             var item = DebuggerLocalVariables.GetVariable(key, value, _expressionManager!, memory, _emulator, this);

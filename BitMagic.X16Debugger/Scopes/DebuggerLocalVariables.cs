@@ -51,7 +51,7 @@ internal class DebuggerLocalVariables : IScopeMap
 
             foreach (var i in s.Variables.Values)
             {
-                if (i.Value.VariableDataType is VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)
+                if (!i.Value.ShowInVariables())
                     continue;
 
                 if (done.Contains(i.Key))

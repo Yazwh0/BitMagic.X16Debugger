@@ -11,6 +11,12 @@ internal static class IAsmVariableExtensions
     internal static Func<string> ToExpressionFunction(this DebuggerVariable variable, ExpressionManager expressionManager)
         => () => expressionManager.Evaluate(variable.Expression);
 
+    // Whether the variable belongs in the Globals / Locals lists. Constants, procs, segments and
+    // labels are names rather than data, and some variables opt out (see AsmVariable.HideInVariables).
+    internal static bool ShowInVariables(this IAsmVariable variable) =>
+        variable.VariableDataType is not (VariableDataType.Constant or VariableDataType.ProcStart or VariableDataType.ProcEnd or VariableDataType.SegmentStart or VariableDataType.LabelPointer)
+        && variable is not AsmVariable { HideInVariables: true };
+
     internal static int MemoryOffset(this IAsmVariable variable, int index) =>
         variable.Value + index * VariableDataTypeLength(variable);
 
