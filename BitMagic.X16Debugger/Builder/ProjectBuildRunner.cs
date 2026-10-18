@@ -19,6 +19,20 @@ internal static class ProjectBuildRunner
     // Anything else propagates - the caller decides how to report a genuinely unexpected exception.
     public static bool TryBuild(X16DebugProject debugProject, string workspaceFolder, ServiceManager serviceManager, IEmulatorLogger Logger, out string autobootFile)
     {
+        // the error handlers below also touch shared state, so hold the lock for them too
+        serviceManager.BuildLock.Wait();
+        try
+        {
+            return TryBuildCore(debugProject, workspaceFolder, serviceManager, Logger, out autobootFile);
+        }
+        finally
+        {
+            serviceManager.BuildLock.Release();
+        }
+    }
+
+    private static bool TryBuildCore(X16DebugProject debugProject, string workspaceFolder, ServiceManager serviceManager, IEmulatorLogger Logger, out string autobootFile)
+    {
         autobootFile = "";
 
         try

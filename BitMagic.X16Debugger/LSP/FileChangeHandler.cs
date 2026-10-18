@@ -19,8 +19,7 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 {
     private readonly Debouncer debouncer = new Debouncer();
     private LanguageServer? languageServer = null;
-    private readonly HashSet<string> filesWithErrors = new HashSet<string>();
-    private readonly SemaphoreSlim buildGate = new(1, 1);
+    private HashSet<string> filesWithErrors = new HashSet<string>();
     private bool infraFaultShown;
 
     public void SetLanguageServer(LanguageServer server)
@@ -77,7 +76,9 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
     internal async Task UpdateFileChanges()
     {
         // Coalesce overlapping builds: never run two concurrent projectBuilder.Build()
-        // calls against the shared ServiceManager / file managers.
+        // calls against the shared ServiceManager / file managers. This is the same lock a
+        // debug launch takes, so an edit during a launch build just retries afterwards.
+        var buildGate = serviceManager.BuildLock;
         if (!await buildGate.WaitAsync(0))
         {
             QueueUpdateFileChanges(); // re-arm so the newest edit still builds
@@ -127,109 +128,30 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
 
     private async Task UpdateFileChangesCore()
     {
+        if (languageServer == null)
+            throw new FileChangedHandlerNotInitialisedException();
+
+        // Every diagnostic this build produced, by file. Published as a whole at the end so the
+        // client always reflects the latest build: a file that had errors last time but not this
+        // time is cleared, even if this build failed somewhere else.
+        var errors = new Dictionary<string, List<Diagnostic>>();
+
         try
         {
-            if (languageServer == null)
-                throw new FileChangedHandlerNotInitialisedException();
-
             await projectBuilder.Build();
 
             clientNotificationService.SendNotfication("bitmagic/generatedchange", new GeneratedFileChangesParameters()
             {
                 Filenames = serviceManager.DebugableFileManager.AllFilenames().Where(i => i.EndsWith(".generated.bmasm")).ToArray()
             });
-
-            foreach (var i in filesWithErrors)
-            {
-                languageServer.SendNotification<PublishDiagnosticsParams>("textDocument/publishDiagnostics", new PublishDiagnosticsParams()
-                {
-                    Uri = DocumentUri.FromFileSystemPath(i),
-                    Diagnostics = [],
-                });
-            }
-
-            filesWithErrors.Clear();
         }
         catch (CompilerLineException e)
         {
-            if (languageServer == null)
-                throw new FileChangedHandlerNotInitialisedException();
-
-            var sourceFile = e.Line.Source.SourceFile;
-            var lineNumber = e.Line.Source.LineNumber - 1;
-            serviceManager.DebugableFileManager.AddFiles(sourceFile);
-
-            var wrapper = serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
-
-            var ul = wrapper.FindUltimateSource(lineNumber, serviceManager.DebugableFileManager);
-
-            sourceFile = ul.SourceFile ?? sourceFile; // use ultimate source if available
-
-            string path;
-            if (sourceFile.Path.EndsWith(".generated.bmasm"))
-                path = "bitmagic:generated/" + sourceFile.Path;
-            else
-                path = sourceFile != null && projectService.Project != null
-                    ? Path.Combine(projectService.Project.BasePath, sourceFile.Path)
-                    : "";
-
-            var toSend = new List<Diagnostic>() {
-                new Diagnostic()
-                {
-                    Severity = DiagnosticSeverity.Error,
-                    Message = e.Message,
-                    Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(new Position(ul.lineNumber, 0), new Position(ul.lineNumber, 1000)),
-                    Source = "BitMagic Template Engine",
-                }
-            };
-
-            filesWithErrors.Add(path);
-
-            languageServer.SendNotification<PublishDiagnosticsParams>("textDocument/publishDiagnostics", new PublishDiagnosticsParams()
-            {
-                Uri = DocumentUri.FromFileSystemPath(path),
-                Diagnostics = toSend,
-            });
+            AddSourceError(errors, e.Line.Source.SourceFile, e.Line.Source.LineNumber - 1, e.Message);
         }
         catch (CompilerSourceException e)
         {
-            if (languageServer == null)
-                throw new FileChangedHandlerNotInitialisedException();
-
-            var sourceFile = e.SourceFile.SourceFile;
-            var lineNumber = e.SourceFile.LineNumber - 1;
-            serviceManager.DebugableFileManager.AddFiles(sourceFile);
-
-            var wrapper = serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
-
-            var ul = wrapper.FindUltimateSource(lineNumber, serviceManager.DebugableFileManager);
-
-            sourceFile = ul.SourceFile ?? sourceFile; // use ultimate source if available
-
-            string path;
-            if (sourceFile.Path.EndsWith(".generated.bmasm"))
-                path = "bitmagic:generated/" + sourceFile.Path;
-            else
-                path = sourceFile != null && projectService.Project != null
-                    ? Path.Combine(projectService.Project.BasePath, sourceFile.Path)
-                    : "";
-
-            var toSend = new List<Diagnostic>();
-            toSend.Add(new Diagnostic()
-            {
-                Severity = DiagnosticSeverity.Error,
-                Message = e.Message,
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(new Position(ul.lineNumber, 0), new Position(ul.lineNumber, 1000)),
-                Source = "BitMagic Template Engine",
-            });
-
-            filesWithErrors.Add(path);
-
-            languageServer.SendNotification<PublishDiagnosticsParams>("textDocument/publishDiagnostics", new PublishDiagnosticsParams()
-            {
-                Uri = DocumentUri.FromFileSystemPath(path),
-                Diagnostics = toSend,
-            });
+            AddSourceError(errors, e.SourceFile.SourceFile, e.SourceFile.LineNumber - 1, e.Message);
         }
         catch (CompilerException e)
         {
@@ -238,28 +160,11 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
         }
         catch (TemplateCompilationException e)
         {
-            if (languageServer == null)
-                throw new FileChangedHandlerNotInitialisedException();
-
-            var toSend = new List<Diagnostic>();
+            var toSend = GetErrorList(errors, e.Filename);
             foreach (var error in e.Errors)
             {
-                toSend.Add(new Diagnostic()
-                {
-                    Severity = DiagnosticSeverity.Error,
-                    Message = error.ErrorText,
-                    Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(new Position(error.LineNumber - 1, 0), new Position(error.LineNumber - 1, 1000)),
-                    Source = "BitMagic Template Engine",
-                });
+                toSend.Add(CreateDiagnostic(error.LineNumber - 1, error.ErrorText));
             }
-
-            filesWithErrors.Add(e.Filename);
-
-            languageServer.SendNotification<PublishDiagnosticsParams>("textDocument/publishDiagnostics", new PublishDiagnosticsParams()
-            {
-                Uri = DocumentUri.FromFileSystemPath(e.Filename),
-                Diagnostics = toSend,
-            });
         }
         catch (TemplateException e)
         {
@@ -273,6 +178,67 @@ internal class FileChangeHandler(DocumentCache documentCache, ProjectBuilder pro
             // reported by the UpdateFileChanges wrapper (ReportInfrastructureFault).
             Console.WriteLine(e.Message);
         }
+
+        foreach (var i in filesWithErrors.Where(i => !errors.ContainsKey(i)))
+        {
+            PublishDiagnostics(i, []);
+        }
+
+        foreach (var (path, diagnostics) in errors)
+        {
+            PublishDiagnostics(path, diagnostics);
+        }
+
+        filesWithErrors = errors.Keys.ToHashSet();
+    }
+
+    private void AddSourceError(Dictionary<string, List<Diagnostic>> errors, ISourceFile sourceFile, int lineNumber, string message)
+    {
+        serviceManager.DebugableFileManager.AddFiles(sourceFile);
+
+        var wrapper = serviceManager.DebugableFileManager.GetWrapper(sourceFile) ?? throw new Exception("Cannot find source file!");
+
+        var ul = wrapper.FindUltimateSource(lineNumber, serviceManager.DebugableFileManager);
+
+        sourceFile = ul.SourceFile ?? sourceFile; // use ultimate source if available
+
+        string path;
+        if (sourceFile.Path.EndsWith(".generated.bmasm"))
+            path = "bitmagic:generated/" + sourceFile.Path;
+        else
+            path = sourceFile != null && projectService.Project != null
+                ? Path.Combine(projectService.Project.BasePath, sourceFile.Path)
+                : "";
+
+        GetErrorList(errors, path).Add(CreateDiagnostic(ul.lineNumber, message));
+    }
+
+    private static List<Diagnostic> GetErrorList(Dictionary<string, List<Diagnostic>> errors, string path)
+    {
+        if (!errors.TryGetValue(path, out var list))
+        {
+            list = new List<Diagnostic>();
+            errors[path] = list;
+        }
+
+        return list;
+    }
+
+    private static Diagnostic CreateDiagnostic(int lineNumber, string message) => new Diagnostic()
+    {
+        Severity = DiagnosticSeverity.Error,
+        Message = message,
+        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(new Position(lineNumber, 0), new Position(lineNumber, 1000)),
+        Source = "BitMagic Template Engine",
+    };
+
+    private void PublishDiagnostics(string path, List<Diagnostic> diagnostics)
+    {
+        languageServer!.SendNotification<PublishDiagnosticsParams>("textDocument/publishDiagnostics", new PublishDiagnosticsParams()
+        {
+            Uri = DocumentUri.FromFileSystemPath(path),
+            Diagnostics = diagnostics,
+        });
     }
 
     private sealed class GeneratedFileChangesParameters

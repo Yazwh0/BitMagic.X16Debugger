@@ -56,6 +56,10 @@ internal class ServiceManager
     public X16DirectoryTracker DirectoryTracker { get; private set; }
     public KernalFileState KernalFileState { get; private set; }
 
+    // Held for the duration of any build against this ServiceManager. In server mode the LSP and
+    // DAP share one instance, so without this a debug launch can build over the top of an LSP build.
+    public SemaphoreSlim BuildLock { get; } = new(1, 1);
+
     // Shared across connections, so an attach-only connection (eg X16M) can record a session
     // someone else owns.
     private readonly object _audioRecorderLock = new();
