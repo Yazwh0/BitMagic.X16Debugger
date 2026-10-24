@@ -198,7 +198,6 @@ internal static class CpuProfilerRequestHandler
             var x = 0;
             var currentClkPos = 0ul;
             var lastIdxStart = 0;
-            var nextOffset = 0;
             var offset = 0ul;
             Rgba32 colour = new Rgba32(0, 0, 0);
 
@@ -213,21 +212,11 @@ internal static class CpuProfilerRequestHandler
                 if (h.CpuY != thisRow)
                 {
                     //var debug = lastIdxStart > idx ? [] : history[lastIdxStart..idx];
-                    if (thisRow < 480 && (thisRow % 2) != 0)
-                    {
-                        span[640] = new Rgba32(200, 200, 200);
-                    }
-
                     thisRow = h.CpuY;
                     span = i.GetRowSpan(thisRow);
                     currentClkPos = 0;
                     lastIdxStart = idx;
-                    nextOffset = 0;
-
-                    for (x = 0; x < nextOffset; x++)
-                    {
-                        span[x] = colour;
-                    }
+                    x = 0;
                 }
 
                 colour = GetPenColour(h);
@@ -247,13 +236,17 @@ internal static class CpuProfilerRequestHandler
 
                 var thisClk = (history[nextIdx].Clock - h.Clock);
 
+                // long instructions (eg WAI, which only has one history entry) run on into the following rows
                 for (var xdraw = Math.Floor(currentClkPos * 3.125); xdraw < Math.Floor((currentClkPos + thisClk) * 3.125); xdraw++)
                 {
-                    if (x < 800)
-                        span[x] = colour;
-                    else
-                        nextOffset++;
+                    var drawRow = thisRow + x / 800;
+                    if (drawRow >= i.Height)
+                        break;
 
+                    if (x % 800 == 0)
+                        span = i.GetRowSpan(drawRow);
+
+                    span[x % 800] = colour;
                     x++;
                 }
 
@@ -267,6 +260,12 @@ internal static class CpuProfilerRequestHandler
                 //lastClock = h.Clock;
                 idx = nextIdx;
 
+            }
+
+            // visible screen marker, drawn separately as rows covered by a WAI have no history entries of their own
+            for (var j = 1; j < 480; j += 2)
+            {
+                i.GetRowSpan(j)[640] = new Rgba32(200, 200, 200);
             }
         });
 
