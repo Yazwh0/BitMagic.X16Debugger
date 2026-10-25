@@ -476,6 +476,7 @@ internal class BreakpointManager
 
         _vramReadWriteBreakpoints.Clear();
         _vsyncBreakpoints.Clear();
+        _emulator.Vera.Frame_Count_Breakpoint = 0xffffffff; // disarmed, SetVsyncBreakpoint re-arms it for any that are still set
         _beamBreakpoints.Clear();
 
         // clear out VRAM Breakpoints

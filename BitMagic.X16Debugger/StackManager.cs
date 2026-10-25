@@ -90,7 +90,11 @@ internal class StackManager
     {
         _callStack.Clear();
 
-        var frame = GenerateFrame(new StackItem("> ", _emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff, false));
+        // while waiting on a WAI the Pc has already moved past it, so show the WAI as that's where the cpu is
+        var waiting = _emulator.CpuWaiting && _emulator.Memory[(_emulator.Pc - 1) & 0xffff] == 0xcb;
+        var pc = waiting ? (_emulator.Pc - 1) & 0xffff : _emulator.Pc;
+
+        var frame = GenerateFrame(new StackItem(waiting ? "> WAI: " : "> ", pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff, false));
 
         _callStack.Add(frame);
         _callStack.AddRange(GenerateFrames().Select(i => GenerateFrame(i)));

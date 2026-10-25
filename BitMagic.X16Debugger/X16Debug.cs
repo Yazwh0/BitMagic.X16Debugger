@@ -142,6 +142,10 @@ public class X16Debug : DebugAdapterBase
         {
             HandleLayerRequestAsync(r);
         });
+        Protocol.RegisterRequestType<ScreenRequest, ScreenRequestArguments, ScreenRequestResponse>(delegate (IRequestResponder<ScreenRequestArguments, ScreenRequestResponse> r)
+        {
+            HandleScreenRequestAsync(r);
+        });
         Protocol.RegisterRequestType<MemoryUseRequest, MemoryUseRequestArguments, MemoryUseRequestResponse>(delegate (IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> r)
         {
             HandleMemoryUseRequestAsync(r);
@@ -1985,6 +1989,7 @@ public class X16Debug : DebugAdapterBase
         {
             "bm_palette" => HandlePaletteRequest(),
             "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
+            "getScreen" => ScreenRequestHandler.HandleRequest(requestArgs as ScreenRequestArguments, _emulator),
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
@@ -2007,6 +2012,11 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleLayerRequestAsync(IRequestResponder<LayerRequestArguments, LayerRequestResponse> responder)
     {
         responder.SetResponse(LayerRequestHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    internal virtual void HandleScreenRequestAsync(IRequestResponder<ScreenRequestArguments, ScreenRequestResponse> responder)
+    {
+        responder.SetResponse(ScreenRequestHandler.HandleRequest(responder.Arguments, _emulator));
     }
 
     internal virtual void HandleMemoryUseRequestAsync(IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> responder)
