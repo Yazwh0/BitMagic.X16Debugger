@@ -1101,6 +1101,7 @@ public class X16Debug : DebugAdapterBase
         Snapshot? snapshot = _emulator.Snapshot();
         while (_running)
         {
+            _serviceManager.BreakpointManager.BeamRunStarting();
             var returnCode = _emulator.Emulate();
 
             var changes = snapshot!.Compare();
@@ -1135,6 +1136,10 @@ public class X16Debug : DebugAdapterBase
                     if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Vsync) != 0)
                     {
                         HandleVsyncBreakpointHit();
+                    }
+                    if ((_emulator.BreakpointSource & Emulator.BreakpointSourceType.Beam) != 0)
+                    {
+                        HandleBeamBreakpointHit();
                     }
 
                     break;
@@ -1333,6 +1338,30 @@ public class X16Debug : DebugAdapterBase
         else
         {
             _emulator.Vera.Frame_Count_Breakpoint = 0xffffffff;
+        }
+
+        if (_emulator.Stepping)
+        {
+            this.Protocol.SendEvent(stopEvent);
+        }
+    }
+
+    private void HandleBeamBreakpointHit()
+    {
+        var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Beam Breakpoint hit", 0, null, true);
+
+        stopEvent.HitBreakpointIds = new();
+
+        // need to parse them all incase there are log points, one instruction can pass several
+        foreach (var breakpoint in _serviceManager.BreakpointManager.GetBeamBreakpointsHit())
+        {
+            if (BreakpointActive(breakpoint.BreakpointState))
+            {
+                if (breakpoint.BreakpointState.Breakpoint.Id.HasValue)
+                    stopEvent.HitBreakpointIds.Add(breakpoint.BreakpointState.Breakpoint.Id.Value);
+
+                _emulator.Stepping = true;
+            }
         }
 
         if (_emulator.Stepping)

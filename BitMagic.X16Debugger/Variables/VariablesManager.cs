@@ -487,6 +487,7 @@ internal class VariableManager
 
         scope.AddVariable(new VariableMap("Beam X", "ushort", () => $"{_emulator.Vera.Beam_X}", () => _emulator.Vera.Beam_X));
         scope.AddVariable(new VariableMap("Beam Y", "ushort", () => $"{_emulator.Vera.Beam_Y}", () => _emulator.Vera.Beam_Y));
+        scope.AddVariable(new VariableMap("Beam Breakpoint Next", "ulong", () => _emulator.Vera.Beam_Breakpoint_Next == Emulator.BeamBreakpointNone ? "None" : $"x={_emulator.Vera.Beam_Breakpoint_Next % Emulator.BeamCyclesPerLine * 25 / 8}, y={_emulator.Vera.Beam_Breakpoint_Next / Emulator.BeamCyclesPerLine % Emulator.BeamHeight} (clock {_emulator.Vera.Beam_Breakpoint_Next})", () => _emulator.Vera.Beam_Breakpoint_Next));
 
         scope = GetNewScope("I2C");
 

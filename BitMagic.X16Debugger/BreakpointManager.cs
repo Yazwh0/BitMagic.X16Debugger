@@ -29,6 +29,12 @@ internal class BreakpointManager
     // Function breakpoints
     private readonly List<VsyncBreakpoint> _vsyncBreakpoints = new();
     private readonly List<VramReadWriteBreakpoint> _vramReadWriteBreakpoints = new();
+    private readonly List<BeamBreakpoint> _beamBreakpoints = new();
+
+    // Cpu clock when the emulator was last resumed. A beam exit fires every entry the beam passed since then (several if
+    // they're closer than one instruction), and the asm's index can't tell us which as vsync may have reset it in the
+    // same instruction.
+    private ulong _beamRunStartClock = 0;
 
     public event EventHandler<BreakpointsUpdatedEventArgs>? BreakpointsUpdated;
 
@@ -53,6 +59,7 @@ internal class BreakpointManager
 
     public IEnumerable<VramReadWriteBreakpoint> VramReadWriteBreakpoints => _vramReadWriteBreakpoints;
     public IEnumerable<VsyncBreakpoint> VsyncBreakpoinst => _vsyncBreakpoints;
+    public IEnumerable<BeamBreakpoint> BeamBreakpoints => _beamBreakpoints;
 
     public void UpdateBreakpoints(IEnumerable<Breakpoint> breakpoints, BreakpointsUpdatedType updateType)
     {
@@ -469,6 +476,7 @@ internal class BreakpointManager
 
         _vramReadWriteBreakpoints.Clear();
         _vsyncBreakpoints.Clear();
+        _beamBreakpoints.Clear();
 
         // clear out VRAM Breakpoints
         for (var i = 0; i < 0x20000; i++)
@@ -488,6 +496,8 @@ internal class BreakpointManager
                     {
                         "vram" => SetVramBreakpoint(e),
                         "vsync" => SetVsyncBreakpoint(e),
+                        "beam" => SetBeamBreakpoint(e, false),
+                        "line" => SetBeamBreakpoint(e, true),
                         _ => new Breakpoint()
                         {
                             Message = $"Unknown breakpoint function '{e.Name}'.",
@@ -514,7 +524,27 @@ internal class BreakpointManager
                 toReturn.Breakpoints.Add(new Breakpoint() { Message = "Not a breakpoint function.", Verified = false });
         }
 
+        _emulator.SetBeamBreakpoints(_beamBreakpoints.Select(i => i.Offset));
+
         return toReturn;
+    }
+
+    /// <summary>
+    /// Call just before resuming the emulator.
+    /// </summary>
+    public void BeamRunStarting() => _beamRunStartClock = _emulator.Clock;
+
+    /// <summary>
+    /// The beam breakpoints the beam has passed since the emulator was resumed, usually one.
+    /// </summary>
+    public List<BeamBreakpoint> GetBeamBreakpointsHit()
+    {
+        var clock = _emulator.Clock;
+        var current = _emulator.CurrentBeamOffset;
+        var run = clock - _beamRunStartClock;
+
+        // cycles since each breakpoint's last occurrence, which may have been in the previous frame
+        return _beamBreakpoints.Where(i => (current + Emulator.BeamCyclesPerFrame - i.Offset) % Emulator.BeamCyclesPerFrame < run).ToList();
     }
 
     private Breakpoint? SetVramBreakpoint(FunctionEvaluationEventArg evaluateArgs)
@@ -622,6 +652,57 @@ internal class BreakpointManager
         return toReturn;
     }
 
+    // beam(x, y) or line(y), positions are in the full 800x525 beam space
+    private Breakpoint? SetBeamBreakpoint(FunctionEvaluationEventArg evaluateArgs, bool lineOnly)
+    {
+        var toReturn = new Breakpoint();
+        toReturn.Id = _idManager.GetId();
+
+        if (evaluateArgs.Args.Count != (lineOnly ? 1 : 2))
+        {
+            toReturn.Message = lineOnly ? "Invalid parameters, expected line(y)." : "Invalid parameters, expected beam(x, y).";
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        int x, y;
+        try
+        {
+            x = lineOnly ? 0 : evaluateArgs.EvaluateArg<int>(0);
+            y = evaluateArgs.EvaluateArg<int>(lineOnly ? 0 : 1);
+        }
+        catch (Exception e)
+        {
+            toReturn.Message = e.Message;
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        if (x < 0 || x >= Emulator.BeamWidth || y < 0 || y >= Emulator.BeamHeight)
+        {
+            toReturn.Message = $"Beam position out of range, x must be 0-{Emulator.BeamWidth - 1} and y 0-{Emulator.BeamHeight - 1}.";
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        // positions that land on the same cpu cycle share a table entry
+        var offset = Emulator.BeamOffset(x, y);
+
+        if (!_beamBreakpoints.Any(i => i.Offset == offset) && _beamBreakpoints.Select(i => i.Offset).Distinct().Count() >= Emulator.BeamBreakpointCount)
+        {
+            toReturn.Message = $"Maximum of {Emulator.BeamBreakpointCount} beam breakpoint positions.";
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        toReturn.Message = lineOnly ? $"Beam on line {y}" : $"Beam at x={x}, y={y}";
+        toReturn.Verified = true;
+
+        _beamBreakpoints.Add(new BeamBreakpoint(new BreakpointState(null, toReturn), x, y));
+
+        return toReturn;
+    }
+
     public List<MemoryBreakpointMap> MemoryBreakpoints(int sourceId)
     {
         if (_memoryExecutionBreakpoints.ContainsKey(sourceId))
@@ -657,6 +738,8 @@ internal class BreakpointManager
     {
         _memoryExecutionBreakpoints.Clear();
         _instructionBreakpoints.Clear();
+        _beamBreakpoints.Clear();
+        _emulator.SetBeamBreakpoints([]);
 
         // just to be sure
         for (var i = 0; i < _emulator.Breakpoints.Length; i++)
@@ -720,6 +803,21 @@ internal class VsyncBreakpoint
     {
         BreakpointState = breakpoint;
         FrameNumber = frameNumber;
+    }
+}
+
+internal class BeamBreakpoint
+{
+    public BreakpointState BreakpointState { get; }
+    public int X { get; }
+    public int Y { get; }
+    public uint Offset => Emulator.BeamOffset(X, Y); // cpu cycles from the start of the vsync line
+
+    public BeamBreakpoint(BreakpointState breakpoint, int x, int y)
+    {
+        BreakpointState = breakpoint;
+        X = x;
+        Y = y;
     }
 }
 
