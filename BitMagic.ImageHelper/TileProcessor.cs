@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp;
+using BitMagic.Common;
 using System.Globalization;
 using System.Diagnostics;
 
@@ -34,63 +33,54 @@ public static class TileProcessor
 {
     public static X16Image LoadImage(string filename, string? transparent)
     {
-        using (var image = Image.Load<Rgba32>(filename))
+        var image = ImageFile.Load(filename);
+        var toReturn = new X16Image();
+
+        toReturn.Height = image.Height;
+        toReturn.Width = image.Width;
+
+        toReturn.Pixels = new byte[image.Width * image.Height];
+
+        Dictionary<PixelRgba, int> palette = new();
+        var paletteIndex = 0;
+        var idx = 0;
+
+        if (transparent != null)
         {
-            var toReturn = new X16Image();
-
-            toReturn.Height = image.Height;
-            toReturn.Width = image.Width;
-
-            toReturn.Pixels = new byte[image.Width * image.Height];
-
-            Dictionary<Rgba32, int> palette = new();
-            var paletteIndex = 0;
-            var idx = 0;
-
-            if (transparent != null)
-            {
-                palette.Add(Rgba32.ParseHex(transparent), paletteIndex++);
-            }
-
-            image.ProcessPixelRows(i =>
-            {
-                for (var y = 0; y < image.Height; y++)
-                {
-                    var span = i.GetRowSpan(y);
-                    for (var x = 0; x < image.Width; x++)
-                    {
-                        var thisColour = ConvertToX16(span[x]);
-                        if (!palette.ContainsKey(thisColour))
-                            palette.Add(thisColour, paletteIndex++);
-
-                        if (paletteIndex > 255)
-                            throw new Exception("Max colours reached!");
-
-                        toReturn.Pixels[idx++] = (byte)palette[thisColour];
-                    }
-                }
-            });
-
-            toReturn.Colours = new Colour[palette.Count];
-            var index = 0;
-            foreach (var kv in palette.OrderBy(kv => kv.Value))
-            {
-                toReturn.Colours[index].R = kv.Key.R;
-                toReturn.Colours[index].G = kv.Key.G;
-                toReturn.Colours[index].B = kv.Key.B;
-                index++;
-            }
-
-            return toReturn;
+            palette.Add(PixelRgba.ParseHex(transparent), paletteIndex++);
         }
+
+        foreach (var pixel in image.Pixels)
+        {
+            var thisColour = ConvertToX16(pixel);
+            if (!palette.ContainsKey(thisColour))
+                palette.Add(thisColour, paletteIndex++);
+
+            if (paletteIndex > 255)
+                throw new Exception("Max colours reached!");
+
+            toReturn.Pixels[idx++] = (byte)palette[thisColour];
+        }
+
+        toReturn.Colours = new Colour[palette.Count];
+        var index = 0;
+        foreach (var kv in palette.OrderBy(kv => kv.Value))
+        {
+            toReturn.Colours[index].R = kv.Key.R;
+            toReturn.Colours[index].G = kv.Key.G;
+            toReturn.Colours[index].B = kv.Key.B;
+            index++;
+        }
+
+        return toReturn;
     }
 
-    public static Rgba32 ConvertToX16(Rgba32 colour)
+    public static PixelRgba ConvertToX16(PixelRgba colour)
     {
         if (colour.A == 0)
-            return new Rgba32(0, 0, 0, 0);
+            return new PixelRgba(0, 0, 0, 0);
 
-        var toReturn = new Rgba32(AdjustColour(colour.R), AdjustColour(colour.G), AdjustColour(colour.B), (byte)0xff);
+        var toReturn = new PixelRgba(AdjustColour(colour.R), AdjustColour(colour.G), AdjustColour(colour.B), (byte)0xff);
 
         return toReturn;
     }

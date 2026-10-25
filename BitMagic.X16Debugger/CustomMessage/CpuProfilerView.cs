@@ -1,8 +1,7 @@
 ﻿using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using BitMagic.Common;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using System.Drawing;
@@ -18,12 +17,12 @@ public class CpuProfilerRequest : DebugRequestWithResponse<CpuProfilerArguements
 
 internal static class CpuProfilerRequestHandler
 {
-    private static readonly Image<Rgba32> _image = new(800, 525);
+    private static readonly RgbaImage _image = new(800, 525);
     private static readonly List<CpuProfilerLineItem> _cpuProfilerLineItems = new ()
     {
         new ("true", LineType.BuiltIn, "Default", "", "", "")
     };
-    private static readonly List<Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, Rgba32?>> _pens = new();
+    private static readonly List<Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, PixelRgba?>> _pens = new();
 
     public static CpuProfilerResponse HandleRequest(CpuProfilerArguements? arguments, Emulator emulator, SourceMapManager sourceMapManager, DebugableFileManager debugableFileManager)
     {
@@ -56,13 +55,13 @@ internal static class CpuProfilerRequestHandler
                     switch (i.Definition)
                     {
                         case "PC":
-                            _pens.Add(BuildColorFunc(i.Predicate, "new Rgba32((byte)(PC & 0xff), (byte)((PC & 0xff00) >> 8), (byte)((PC > 0xc000 ? RomBank : (PC > 0xa000 ? RamBank : 0))))"));
+                            _pens.Add(BuildColorFunc(i.Predicate, "new PixelRgba((byte)(PC & 0xff), (byte)((PC & 0xff00) >> 8), (byte)((PC > 0xc000 ? RomBank : (PC > 0xa000 ? RamBank : 0))))"));
                             break;
                         case "Op Code":
-                            _pens.Add(BuildColorFunc(i.Predicate, "new Rgba32((byte)((OpCode & 0x07) << 5), (byte)((OpCode & 0x38) << 2), (byte)(OpCode & 0xc0))"));
+                            _pens.Add(BuildColorFunc(i.Predicate, "new PixelRgba((byte)((OpCode & 0x07) << 5), (byte)((OpCode & 0x38) << 2), (byte)(OpCode & 0xc0))"));
                             break;
                         default:
-                            _pens.Add(BuildColorFunc(i.Predicate, "new Rgba32(0, 0, 0)"));
+                            _pens.Add(BuildColorFunc(i.Predicate, "new PixelRgba(0, 0, 0)"));
                             break;
                     }
                     break;
@@ -82,7 +81,7 @@ internal static class CpuProfilerRequestHandler
                             i.G = col.G.ToString();
                             i.B = col.B.ToString();
 
-                            _pens.Add(BuildColorFunc(i.Predicate, $"new Rgba32((byte){col.R}, (byte){col.G}, (byte){col.B})"));
+                            _pens.Add(BuildColorFunc(i.Predicate, $"new PixelRgba((byte){col.R}, (byte){col.G}, (byte){col.B})"));
                         }
                         catch
                         {
@@ -90,7 +89,7 @@ internal static class CpuProfilerRequestHandler
                             i.R = "0";
                             i.G = "0";
                             i.B = "0";
-                            _pens.Add(BuildColorFunc(i.Predicate, "new Rgba32(0, 0, 0)"));
+                            _pens.Add(BuildColorFunc(i.Predicate, "new PixelRgba(0, 0, 0)"));
                         }
                     }
                     break;
@@ -101,10 +100,10 @@ internal static class CpuProfilerRequestHandler
                         i.G = "0";
                     if (string.IsNullOrWhiteSpace(i.B))
                         i.B = "0";
-                    _pens.Add(BuildColorFunc(i.Predicate, $"new Rgba32((byte)({i.R}), (byte)({i.G}), (byte)({i.B}))"));
+                    _pens.Add(BuildColorFunc(i.Predicate, $"new PixelRgba((byte)({i.R}), (byte)({i.G}), (byte)({i.B}))"));
                     break;
                 default:
-                    _pens.Add(BuildColorFunc("false", "new Rgba32(0, 0, 0)"));
+                    _pens.Add(BuildColorFunc("false", "new PixelRgba(0, 0, 0)"));
                     break;
             }
         }
@@ -180,26 +179,22 @@ internal static class CpuProfilerRequestHandler
 
         var startOffset = frameClock - startClock;
 
-        //var penFunc = BuildColorFunc("OpCode == 0xea", "new Rgba32(255, 255, (byte)((PC & 0xff) * 4))");
+        //var penFunc = BuildColorFunc("OpCode == 0xea", "new PixelRgba(255, 255, (byte)((PC & 0xff) * 4))");
 
         idx = screenStartIdx;
         //ulong clk = 0;
         //ulong lastClock = history[idx - 1].Clock;
-        _image.ProcessPixelRows(i =>
         {
-            for (var j = 0; j < i.Height; j++)
-            {
-                i.GetRowSpan(j).Clear();
-            }
+            var i = _image;
+            i.Pixels.AsSpan().Clear();
 
-            var history = emulator.History;
-            var span = i.GetRowSpan(0);
+            var span = i.GetRow(0);
             var thisRow = 0;
             var x = 0;
             var currentClkPos = 0ul;
             var lastIdxStart = 0;
             var offset = 0ul;
-            Rgba32 colour = new Rgba32(0, 0, 0);
+            PixelRgba colour = new PixelRgba(0, 0, 0);
 
             while (true)
             {
@@ -213,7 +208,7 @@ internal static class CpuProfilerRequestHandler
                 {
                     //var debug = lastIdxStart > idx ? [] : history[lastIdxStart..idx];
                     thisRow = h.CpuY;
-                    span = i.GetRowSpan(thisRow);
+                    span = i.GetRow(thisRow);
                     currentClkPos = 0;
                     lastIdxStart = idx;
                     x = 0;
@@ -244,7 +239,7 @@ internal static class CpuProfilerRequestHandler
                         break;
 
                     if (x % 800 == 0)
-                        span = i.GetRowSpan(drawRow);
+                        span = i.GetRow(drawRow);
 
                     span[x % 800] = colour;
                     x++;
@@ -265,44 +260,37 @@ internal static class CpuProfilerRequestHandler
             // visible screen marker, drawn separately as rows covered by a WAI have no history entries of their own
             for (var j = 1; j < 480; j += 2)
             {
-                i.GetRowSpan(j)[640] = new Rgba32(200, 200, 200);
+                i[640, j] = new PixelRgba(200, 200, 200);
             }
-        });
+        }
 
-        var memoryStream = new MemoryStream();
-        _image.SaveAsPng(memoryStream);
-
-        //var fs = new FileStream(@"c:\temp\test.png", FileMode.Create);
-        //_image.SaveAsPng(fs);
-
-        toReturn.Display = Convert.ToBase64String(memoryStream.ToArray());
+        toReturn.Display = Convert.ToBase64String(ImageFile.ToPng(_image));
 
         return toReturn;
     }
 
-    public static Rgba32 GetPenColour(EmulatorHistory item)
+    public static PixelRgba GetPenColour(EmulatorHistory item)
     {
-        return new Rgba32((byte)(item.PC & 0xff), (byte)((item.PC & 0xff00) >> 8), item.RamBank);
+        return new PixelRgba((byte)(item.PC & 0xff), (byte)((item.PC & 0xff00) >> 8), item.RamBank);
     }
 
-    public static Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, Rgba32?> BuildColorFunc(string predicate, string expression)
+    public static Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, PixelRgba?> BuildColorFunc(string predicate, string expression)
     {
         string code =
-            "new System.Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, SixLabors.ImageSharp.PixelFormats.Rgba32?>" +
+            "new System.Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, BitMagic.Common.PixelRgba?>" +
             $"((PC, OpCode, RomBank, RamBank, A, X, Y, Params, Flags, SP, CpuY, Clock) => ({predicate}) ? {expression} : null)";
 
         var scriptOptions = ScriptOptions.Default
-            .AddReferences(typeof(Rgba32).Assembly)
+            .AddReferences(typeof(PixelRgba).Assembly)
             .AddImports(
-                "SixLabors.ImageSharp.PixelFormats",
+                "BitMagic.Common",
                 "System"
             );
-        //var x = new System.Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, SixLabors.ImageSharp.PixelFormats.Rgba32?>((PC, OpCode, RomBank, RamBank, A, X, Y, Params, Flags, SP, CpuY, Clock) => (OpCode == 0xea) ? new Rgba32(255, 255, 255) : null);
         // Compile the lambda
         try
         {
             var func = CSharpScript
-                .EvaluateAsync<Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, Rgba32?>>(code, scriptOptions)
+                .EvaluateAsync<Func<ushort, byte, byte, byte, byte, byte, byte, ushort, byte, byte, ushort, ulong, PixelRgba?>>(code, scriptOptions)
                 .GetAwaiter().GetResult();
 
             return func;
@@ -311,7 +299,7 @@ internal static class CpuProfilerRequestHandler
         {
             Console.WriteLine($"Error compiling predicate: {predicate} with expression: {expression}");
             Console.WriteLine(string.Join(Environment.NewLine, e.Diagnostics));
-            return (PC, OpCode, RomBank, RamBank, A, X, Y, Params, Flags, SP, CpuY, Clock) => new Rgba32(255, 0, 0);
+            return (PC, OpCode, RomBank, RamBank, A, X, Y, Params, Flags, SP, CpuY, Clock) => new PixelRgba(255, 0, 0);
         }
     }
 }

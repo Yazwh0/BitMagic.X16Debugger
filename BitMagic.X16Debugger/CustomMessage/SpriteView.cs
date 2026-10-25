@@ -1,7 +1,5 @@
 ﻿using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp;
 using BitMagic.Common;
 
 namespace BitMagic.X16Debugger.CustomMessage;
@@ -100,51 +98,45 @@ public class SpriteDefinition
         Depth = sprite.Depth;
         Mode = (sprite.Mode & 0b1000000) == 0 ? 4u : 8u;
 
-        var image = new Image<Rgba32>(Width, Height);
+        var image = new RgbaImage(Width, Height);
+        var vram = emulator.Vera.Vram;
+        var palette = emulator.Palette;
 
         var idx = (int)Address;
         for (var y = 0; y < Height; y++)
         {
-            image.ProcessPixelRows(i =>
+            var span = image.GetRow(y);
+
+            if (Mode == 4)
             {
-                var vram = emulator.Vera.Vram;
-                var palette = emulator.Palette;
-
-                var span = i.GetRowSpan(y);
-
-                if (Mode == 4)
+                for (var x = 0; x < Width; x += 2)
                 {
-                    for (var x = 0; x < Width; x += 2)
-                    {
-                        var data = vram[idx++];
-                        var v = (data & 0x0f);
-                        if (v != 0)
-                            span[x + 1] = ToRgba(palette[v + (int)PalletteOffset * 16]);
-                        v = (data & 0xf0) >> 4;
-                        if (v != 0)
-                            span[x] = ToRgba(palette[v + (int)PalletteOffset * 16]);
-                    }
+                    var data = vram[idx++];
+                    var v = (data & 0x0f);
+                    if (v != 0)
+                        span[x + 1] = ToRgba(palette[v + (int)PalletteOffset * 16]);
+                    v = (data & 0xf0) >> 4;
+                    if (v != 0)
+                        span[x] = ToRgba(palette[v + (int)PalletteOffset * 16]);
                 }
-                else
+            }
+            else
+            {
+                for (var x = 0; x < Width; x++)
                 {
-                    for (var x = 0; x < Width; x++)
-                    {
-                        var data = vram[idx++];
-                        if (data != 0)
-                            span[x] = ToRgba(palette[data < 16 ? data + (int)PalletteOffset * 16 : data]);
-                    }
+                    var data = vram[idx++];
+                    if (data != 0)
+                        span[x] = ToRgba(palette[data < 16 ? data + (int)PalletteOffset * 16 : data]);
                 }
-            });
+            }
         }
 
-        var memoryStream = new MemoryStream();
-        image.SaveAsPng(memoryStream);
-        Display = Convert.ToBase64String(memoryStream.ToArray());
+        Display = Convert.ToBase64String(ImageFile.ToPng(image));
     }
 
-    private static Rgba32 ToRgba(PixelRgba source)
+    private static PixelRgba ToRgba(PixelRgba source)
     {
-        return new Rgba32(source.R, source.G, source.B);
+        return new PixelRgba(source.R, source.G, source.B);
     }
 }
 

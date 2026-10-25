@@ -1,8 +1,6 @@
 ﻿using BitMagic.X16Emulator;
 using Microsoft.VisualStudio.Shared.VSCodeDebugProtocol.Messages;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using System.Runtime.InteropServices;
+using BitMagic.Common;
 
 namespace BitMagic.X16Debugger.CustomMessage;
 
@@ -15,7 +13,7 @@ internal class LayerRequest : DebugRequestWithResponse<LayerRequestArguments, La
 
 internal static class LayerRequestHandler
 {
-    private static readonly Image<Rgba32> _image = new(640, 480);
+    private static readonly RgbaImage _image = new(640, 480);
 
     public unsafe static LayerRequestResponse HandleRequest(LayerRequestArguments? arguments, Emulator emulator)
     {
@@ -24,26 +22,19 @@ internal static class LayerRequestHandler
 
         for (var layer = 0; layer < 6; layer++)
         {
-            _image.ProcessPixelRows(i =>
+            for (var y = 0; y < 480; y++)
             {
-                for (var y = 0; y < 480; y++)
+                fixed (PixelRgba* ptr = _image.GetRow(y))
                 {
-                    var span = i.GetRowSpan(y);
-
-                    fixed (Rgba32* ptr = &MemoryMarshal.GetReference(span))
-                    {
-                        Buffer.MemoryCopy((void*)(emulator.DisplayPtr + idx), ptr, 640 * 4, 640 * 4);
-                    }
-
-                    idx += 800 * 4;
+                    Buffer.MemoryCopy((void*)(emulator.DisplayPtr + idx), ptr, 640 * 4, 640 * 4);
                 }
-            });
+
+                idx += 800 * 4;
+            }
 
             idx += (525 - 480) * 800 * 4;
-            var memoryStream = new MemoryStream();
-            _image.SaveAsPng(memoryStream);
 
-            toReturn.Display.Add(Convert.ToBase64String(memoryStream.ToArray()));
+            toReturn.Display.Add(Convert.ToBase64String(ImageFile.ToPng(_image)));
         }
 
         return toReturn;
