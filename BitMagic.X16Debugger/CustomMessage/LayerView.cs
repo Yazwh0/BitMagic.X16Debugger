@@ -70,12 +70,31 @@ internal static class ScreenRequestHandler
     // the six vera layers blended in compositing order, the same way X16E's window does (SrcAlpha, OneMinusSrcAlpha).
     // the debug layer (7th) is left out so this is what the hardware would show.
     // fullFrame returns the whole 800x525 beam area, with the part outside the visible screen dimmed and the beam marked.
-    public unsafe static ScreenRequestResponse HandleRequest(ScreenRequestArguments? arguments, Emulator emulator)
+    public static ScreenRequestResponse HandleRequest(ScreenRequestArguments? arguments, Emulator emulator)
+    {
+        var image = Render(emulator, arguments?.FullFrame ?? false);
+
+        return new ScreenRequestResponse
+        {
+            Display = Convert.ToBase64String(ImageFile.ToPng(image)),
+            Width = image.Width,
+            Height = image.Height,
+            Frame = emulator.Vera.Frame_Count,
+            BeamX = emulator.Vera.Beam_X,
+            BeamY = emulator.Vera.Beam_Y
+        };
+    }
+
+    // without an image to draw into, the image is shared between getScreen calls. pass one in from anywhere else,
+    // as a snapshot can be taken on the debug thread while getScreen is streaming.
+    public unsafe static RgbaImage Render(Emulator emulator, bool fullFrame, RgbaImage? into = null)
     {
         const int layerSize = FullWidth * FullHeight;
         var display = (PixelRgba*)emulator.DisplayPtr;
-        var fullFrame = arguments?.FullFrame ?? false;
-        var image = fullFrame ? _fullImage : _image;
+        var image = into ?? (fullFrame ? _fullImage : _image);
+
+        if (image.Width != (fullFrame ? FullWidth : VisibleWidth) || image.Height != (fullFrame ? FullHeight : VisibleHeight))
+            throw new ArgumentException("Image is the wrong size.", nameof(into));
 
         for (var y = 0; y < image.Height; y++)
         {
@@ -140,15 +159,7 @@ internal static class ScreenRequestHandler
             }
         }
 
-        return new ScreenRequestResponse
-        {
-            Display = Convert.ToBase64String(ImageFile.ToPng(image)),
-            Width = image.Width,
-            Height = image.Height,
-            Frame = emulator.Vera.Frame_Count,
-            BeamX = beamX,
-            BeamY = beamY
-        };
+        return image;
     }
 }
 

@@ -536,6 +536,23 @@ internal class BreakpointManager
     public void BeamRunStarting() => _beamRunStartClock = _emulator.Clock;
 
     /// <summary>
+    /// Arms the vsync breakpoint for the current frame, after the frame count has been changed by restoring a snapshot.
+    /// The beam breakpoints are re-armed by the emulator.
+    /// </summary>
+    public void RearmVsyncBreakpoint()
+    {
+        var currentFrame = _emulator.Vera.Frame_Count;
+        var next = _vsyncBreakpoints.Where(i => i.FrameNumber == 0 || i.FrameNumber > currentFrame).OrderBy(i => i.FrameNumber).FirstOrDefault();
+
+        if (next == null)
+            _emulator.Vera.Frame_Count_Breakpoint = 0xffffffff;
+        else if (next.FrameNumber == 0)
+            _emulator.Vera.Frame_Count_Breakpoint = currentFrame + 1;
+        else
+            _emulator.Vera.Frame_Count_Breakpoint = next.FrameNumber;
+    }
+
+    /// <summary>
     /// The beam breakpoints the beam has passed since the emulator was resumed, usually one.
     /// </summary>
     public List<BeamBreakpoint> GetBeamBreakpointsHit()

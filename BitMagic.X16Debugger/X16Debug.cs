@@ -49,6 +49,16 @@ public class X16Debug : DebugAdapterBase
     private readonly ManualResetEvent _runEvent = new ManualResetEvent(false);
     private readonly object SyncObject = new object();
 
+    // all under SyncObject. DebugLoop is waiting for a continue, so requests can work on the emulator directly
+    private bool _parked;
+    // run on the debug thread the next time the emulator stops, see RunPendingActions
+    private readonly List<Action> _pendingActions = new();
+    // the emulator was only stopped for the pending actions, so it carries on once they've run
+    private bool _actionStop;
+    private bool _userPause;
+    // a snapshot was restored, so the change tracker starts again from the restored machine
+    private bool _restored;
+
     internal X16DebugProject? _debugProject;
     private IMachine? _machine;
     private readonly string _defaultRomFile;
@@ -185,6 +195,26 @@ public class X16Debug : DebugAdapterBase
         Protocol.RegisterRequestType<StopAudioRecordingRequest, StopAudioRecordingRequestArguments, StopAudioRecordingRequestResponse>(delegate (IRequestResponder<StopAudioRecordingRequestArguments, StopAudioRecordingRequestResponse> r)
         {
             HandleStopAudioRecordingRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<TakeSnapshotRequest, TakeSnapshotRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<TakeSnapshotRequestArguments, SnapshotRequestResponse> r)
+        {
+            HandleTakeSnapshotRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<GetSnapshotsRequest, GetSnapshotsRequestArguments, GetSnapshotsRequestResponse>(delegate (IRequestResponder<GetSnapshotsRequestArguments, GetSnapshotsRequestResponse> r)
+        {
+            r.SetResponse(new GetSnapshotsRequestResponse { Snapshots = _serviceManager.SnapshotManager.Snapshots.Select(i => i.ToInfo()).ToList() });
+        });
+        Protocol.RegisterRequestType<RestoreSnapshotRequest, SnapshotIdRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<SnapshotIdRequestArguments, SnapshotRequestResponse> r)
+        {
+            r.SetResponse(HandleRestoreSnapshotRequest(r.Arguments));
+        });
+        Protocol.RegisterRequestType<DeleteSnapshotRequest, SnapshotIdRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<SnapshotIdRequestArguments, SnapshotRequestResponse> r)
+        {
+            r.SetResponse(new SnapshotRequestResponse { Success = _serviceManager.SnapshotManager.Delete(r.Arguments.Id) });
+        });
+        Protocol.RegisterRequestType<RenameSnapshotRequest, RenameSnapshotRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<RenameSnapshotRequestArguments, SnapshotRequestResponse> r)
+        {
+            r.SetResponse(new SnapshotRequestResponse { Success = _serviceManager.SnapshotManager.Rename(r.Arguments.Id, r.Arguments.Name) });
         });
     }
 
@@ -809,6 +839,7 @@ public class X16Debug : DebugAdapterBase
         _windowThread.Name = "Debugger Window";
         _windowThread.Start();
 
+        _serviceManager.RunWhileStopped = RunWhileStopped;
         ServiceManagerFactory.IsSessionActive = true;
         return new LaunchResponse();
     }
@@ -817,6 +848,7 @@ public class X16Debug : DebugAdapterBase
     {
         RequireNotAttachOnly("disconnect");
         ServiceManagerFactory.IsSessionActive = false;
+        _serviceManager.RunWhileStopped = null;
         // Stop the window and emulation threads, then WAIT for both to actually exit
         // before Reset(). Reset() disposes the emulator -- freeing its native memory and
         // calling zimodem_host_destroy() -- which is a use-after-free if either thread is
@@ -1055,7 +1087,11 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new PauseResponse();
 
-        _emulator.Stepping = true;
+        lock (SyncObject)
+        {
+            _userPause = true;
+            _emulator.Stepping = true;
+        }
 
         return toReturn;
     }
@@ -1107,6 +1143,9 @@ public class X16Debug : DebugAdapterBase
         {
             _serviceManager.BreakpointManager.BeamRunStarting();
             var returnCode = _emulator.Emulate();
+
+            if (RunPendingActions(returnCode == Emulator.EmulatorResult.Stepping))
+                continue;
 
             var changes = snapshot!.Compare();
 
@@ -1246,15 +1285,75 @@ public class X16Debug : DebugAdapterBase
                     }
                 }
 
+                lock (SyncObject)
+                {
+                    RunPendingActions(false); // anything that came in after the emulator stopped
+                    _parked = true;
+                }
+
                 _runEvent.WaitOne(); // wait for a signal to continue
                 lock (SyncObject)
                 {
                     _runEvent.Reset();
+                    _parked = false;
+                    _userPause = false;
+
+                    if (_restored)
+                    {
+                        snapshot!.Snap();
+                        _restored = false;
+                    }
                 }
 
                 _serviceManager.StackManager.Invalidate();
                 _window.ContinueAudio();
             }
+        }
+    }
+
+    // Runs the actions waiting for the emulator to stop. Returns true if the emulator only stopped for them, so the
+    // loop should carry on running rather than report a stop. Only a Stepping result can be ours, any other reason
+    // to stop is reported as normal.
+    private bool RunPendingActions(bool stepping)
+    {
+        lock (SyncObject)
+        {
+            if (_pendingActions.Count == 0)
+                return false;
+
+            foreach (var action in _pendingActions)
+                action();
+
+            _pendingActions.Clear();
+
+            var carryOn = stepping && _actionStop && !_userPause;
+            _actionStop = false;
+
+            if (carryOn)
+                _emulator.Stepping = false;
+
+            return carryOn;
+        }
+    }
+
+    // Runs action on the emulator while it's stopped, now if it already is, otherwise it's stopped at the next
+    // instruction and carries on afterwards without VSCode seeing a stop.
+    private void RunWhileStopped(Action action)
+    {
+        lock (SyncObject)
+        {
+            if (_parked || _debugThread == null)
+            {
+                action();
+                return;
+            }
+
+            // if something else has already asked to stop, then that's the stop and it's left alone
+            if (!_emulator.Stepping)
+                _actionStop = true;
+
+            _pendingActions.Add(action);
+            _emulator.Stepping = true;
         }
     }
 
@@ -2037,6 +2136,86 @@ public class X16Debug : DebugAdapterBase
     internal virtual void HandleMemorySearchRequestAsync(IRequestResponder<MemorySearchArguments, MemorySearchResponse> responder)
     {
         responder.SetResponse(MemorySearchHandler.HandleRequest(responder.Arguments, _emulator));
+    }
+
+    // the response is sent once the snapshot's been taken, which can be after the emulator reaches the next instruction.
+    // taking one doesn't change the program, so like reading memory an attach-only connection can do it, through the
+    // connection that launched the session as that's the one running the emulator.
+    internal virtual void HandleTakeSnapshotRequestAsync(IRequestResponder<TakeSnapshotRequestArguments, SnapshotRequestResponse> responder)
+    {
+        var runWhileStopped = _serviceManager.RunWhileStopped;
+
+        if (runWhileStopped == null || !ServiceManagerFactory.IsSessionActive)
+        {
+            responder.SetResponse(new SnapshotRequestResponse { Success = false, Error = "No program is running in BitMagic's emulator." });
+            return;
+        }
+
+        runWhileStopped(() =>
+        {
+            try
+            {
+                var entry = _serviceManager.SnapshotManager.Take();
+                responder.SetResponse(new SnapshotRequestResponse { Success = true, Snapshot = entry.ToInfo() });
+            }
+            catch (Exception e)
+            {
+                Logger.LogError($"Snapshot failed: {e.Message}");
+                responder.SetResponse(new SnapshotRequestResponse { Success = false, Error = e.Message });
+            }
+        });
+    }
+
+    private SnapshotRequestResponse HandleRestoreSnapshotRequest(SnapshotIdRequestArguments arguments)
+    {
+        if (_attachOnly)
+            return new SnapshotRequestResponse { Success = false, Error = "Snapshots can only be restored by the session that launched the program." };
+
+        var entry = _serviceManager.SnapshotManager.Get(arguments.Id);
+
+        if (entry == null)
+            return new SnapshotRequestResponse { Success = false, Error = $"Snapshot {arguments.Id} doesn't exist." };
+
+        lock (SyncObject)
+        {
+            if (!_parked)
+                return new SnapshotRequestResponse { Success = false, Running = true, Error = "The emulator needs to be paused to restore a snapshot." };
+
+            _emulator.RestoreState(entry.State);
+            _serviceManager.BreakpointManager.RearmVsyncBreakpoint();
+            _serviceManager.StackManager.Invalidate();
+            _restored = true;
+        }
+
+        Logger.LogLine($"Restored snapshot #{entry.Id} {entry.Name}");
+
+        // the restored machine is different everywhere, so refresh all of memory rather than work out the changes
+        Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
+        Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
+
+        foreach (var i in _serviceManager.IdManager.GetObjects<DecompileReturn>(ObjectType.DecompiledData))
+        {
+            Protocol.SendEvent(new LoadedSourceEvent()
+            {
+                Reason = LoadedSourceEvent.ReasonValue.Changed,
+                Source = new Source()
+                {
+                    Name = i.Name,
+                    Path = i.Path,
+                    Origin = i.Origin.ToString(),
+                    SourceReference = i.ReferenceId
+                }
+            });
+        }
+
+        Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Goto, $"Restored snapshot #{entry.Id}", 0, null, true));
+
+        return new SnapshotRequestResponse
+        {
+            Success = true,
+            Snapshot = entry.ToInfo(),
+            ModemActive = _emulator.EnableWifi && _emulator.Uart.ZiModem.Connected
+        };
     }
 
     internal virtual void HandlCpuProfilerRequestAsync(IRequestResponder<CpuProfilerArguements, CpuProfilerResponse> responder)

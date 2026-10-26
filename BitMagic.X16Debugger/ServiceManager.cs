@@ -38,6 +38,7 @@ internal class ServiceManager
     public SourceMapManager SourceMapManager { get; private set; }
     public VariableManager VariableManager { get; private set; }
     public StackManager StackManager { get; private set; }
+    public SnapshotManager SnapshotManager { get; private set; }
     public SpriteManager SpriteManager { get; private set; }
     public PaletteManager PaletteManager { get; private set; }
     public PsgManager PsgManager { get; private set; }
@@ -64,6 +65,10 @@ internal class ServiceManager
     // someone else owns.
     private readonly object _audioRecorderLock = new();
     public AudioRecorder? AudioRecorder { get; private set; }
+
+    // Set by the connection that launched the session while it's running the emulator, so an attach-only
+    // connection can have something done while the emulator's stopped (eg take a snapshot).
+    public Action<Action>? RunWhileStopped { get; set; }
 
 #pragma warning disable CS8618
     public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, IEmulatorLogger logger)
@@ -99,6 +104,7 @@ internal class ServiceManager
         DebugableFileManager.SetBreakpointManager(BreakpointManager);
         DisassemblerManager.SetBreakpointManager(BreakpointManager);
         StackManager = new(Emulator, IdManager, SourceMapManager, DisassemblerManager, DebugableFileManager);
+        SnapshotManager = new(Emulator, StackManager);
         SpriteManager = new(Emulator);
         PaletteManager = new(Emulator);
         PsgManager = new(Emulator);
