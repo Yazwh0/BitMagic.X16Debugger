@@ -115,8 +115,12 @@ internal static class CpuProfilerRequestHandler
 
         var history = emulator.History;
 
-        // search backwards looking for a cpu_y switch to 525 -> 0. Capture the index
-        var idx = (int)emulator.HistoryPosition - 1;
+        // the history is a ring buffer whose size is a power of two, so indexes wrap with this
+        var mask = history.Length - 1;
+
+        // search backwards looking for a cpu_y switch to 525 -> 0. Capture the index. The latest entry is just before the
+        // write position, which wraps to the end of the buffer when the position is 0.
+        var idx = (int)((emulator.HistoryPosition - 1) & (ulong)mask);
 
         var screenEndIdx = -1;
         var screenStartIdx = -1;
@@ -137,8 +141,16 @@ internal static class CpuProfilerRequestHandler
 
         var h = history[idx];
         var lastY = h.CpuY;
-        while (true)
+        for (var searched = 0; ; searched++)
         {
+            // the history doesn't hold a whole frame yet, eg just after starting, so there's nothing to draw
+            if (searched > mask)
+            {
+                _image.Pixels.AsSpan().Clear();
+                toReturn.Display = Convert.ToBase64String(ImageFile.ToPng(_image));
+                return toReturn;
+            }
+
             h = history[idx];
             if (h.CpuY > lastY)
             {
@@ -153,21 +165,18 @@ internal static class CpuProfilerRequestHandler
 
                 if (screenEndIdx == -1)
                 {
-                    screenEndIdx = idx + 1;
+                    screenEndIdx = (idx + 1) & mask;
                 }
                 else
                 {
-                    screenStartIdx = idx + 1;
+                    screenStartIdx = (idx + 1) & mask;
                     break;
                 }
             }
 
             lastY = h.CpuY;
 
-            if (idx <= 0)
-                idx = emulator.Options.HistorySize - 1;
-
-            idx--;
+            idx = (idx - 1) & mask;
         }
 
         var frameClock = history[screenStartIdx].Clock;
@@ -225,9 +234,7 @@ internal static class CpuProfilerRequestHandler
                     }
                 }
 
-                var nextIdx = idx + 1;
-                if (nextIdx >= emulator.Options.HistorySize)
-                    nextIdx = 0;
+                var nextIdx = (idx + 1) & mask;
 
                 var thisClk = (history[nextIdx].Clock - h.Clock);
 
