@@ -70,9 +70,32 @@ internal static class ScreenRequestHandler
     // the six vera layers blended in compositing order, the same way X16E's window does (SrcAlpha, OneMinusSrcAlpha).
     // the debug layer (7th) is left out so this is what the hardware would show.
     // fullFrame returns the whole 800x525 beam area, with the part outside the visible screen dimmed and the beam marked.
-    public static ScreenRequestResponse HandleRequest(ScreenRequestArguments? arguments, Emulator emulator)
+    // a render mode other than Beam only applies while the emulator is stopped, otherwise it's the display as it is.
+    // RenderToX and RenderToY are a preview: the display only drawn on from where it's stopped to that point, wrapping
+    // into the next frame if it's behind the beam. They take the place of the render mode.
+    public static ScreenRequestResponse HandleRequest(ScreenRequestArguments? arguments, Emulator emulator, Func<Action, bool>? runIfStopped)
     {
-        var image = Render(emulator, arguments?.FullFrame ?? false);
+        var fullFrame = arguments?.FullFrame ?? false;
+        var mode = ParseRenderMode(arguments?.RenderMode);
+        (int X, int Y)? renderTo = arguments?.RenderToX != null && arguments.RenderToY != null
+            ? (Math.Clamp(arguments.RenderToX.Value, 0, FullWidth - 1), Math.Clamp(arguments.RenderToY.Value, 0, FullHeight - 1))
+            : null;
+        var rendered = RenderModeName(Emulator.DisplayRenderMode.Beam);
+        var (beamX, beamY) = (emulator.Vera.Beam_X, emulator.Vera.Beam_Y); // rendering ahead moves the beam on
+        RgbaImage? image = null;
+
+        if ((renderTo != null || mode != Emulator.DisplayRenderMode.Beam) && runIfStopped != null)
+        {
+            runIfStopped(() =>
+            {
+                var cycles = renderTo != null ? emulator.CyclesToBeam(renderTo.Value.X, renderTo.Value.Y) : emulator.RenderAheadCycles(mode);
+
+                emulator.RenderAhead(cycles, () => image = Render(emulator, fullFrame, beam: (beamX, beamY)));
+                rendered = renderTo != null ? Preview : RenderModeName(mode);
+            });
+        }
+
+        image ??= Render(emulator, fullFrame);
 
         return new ScreenRequestResponse
         {
@@ -80,14 +103,33 @@ internal static class ScreenRequestHandler
             Width = image.Width,
             Height = image.Height,
             Frame = emulator.Vera.Frame_Count,
-            BeamX = emulator.Vera.Beam_X,
-            BeamY = emulator.Vera.Beam_Y
+            BeamX = beamX,
+            BeamY = beamY,
+            RenderMode = rendered
         };
     }
 
+    public const string Preview = "preview"; // the RenderMode in the response when it's rendered to RenderToX, RenderToY
+
+    public static Emulator.DisplayRenderMode ParseRenderMode(string? mode) => mode switch
+    {
+        null or "" or "beam" => Emulator.DisplayRenderMode.Beam,
+        "finishFrame" => Emulator.DisplayRenderMode.FinishFrame,
+        "fromState" => Emulator.DisplayRenderMode.FromState,
+        _ => throw new ArgumentException($"Unknown render mode '{mode}'.", nameof(mode))
+    };
+
+    public static string RenderModeName(Emulator.DisplayRenderMode mode) => mode switch
+    {
+        Emulator.DisplayRenderMode.FinishFrame => "finishFrame",
+        Emulator.DisplayRenderMode.FromState => "fromState",
+        _ => "beam"
+    };
+
     // without an image to draw into, the image is shared between getScreen calls. pass one in from anywhere else,
-    // as a snapshot can be taken on the debug thread while getScreen is streaming.
-    public unsafe static RgbaImage Render(Emulator emulator, bool fullFrame, RgbaImage? into = null)
+    // as a snapshot can be taken on the debug thread while getScreen is streaming. beam is where to mark the beam, if
+    // it's not where vera has it.
+    public unsafe static RgbaImage Render(Emulator emulator, bool fullFrame, RgbaImage? into = null, (int X, int Y)? beam = null)
     {
         const int layerSize = FullWidth * FullHeight;
         var display = (PixelRgba*)emulator.DisplayPtr;
@@ -135,8 +177,8 @@ internal static class ScreenRequestHandler
             }
         }
 
-        var beamX = emulator.Vera.Beam_X;
-        var beamY = emulator.Vera.Beam_Y;
+        var beamX = beam?.X ?? emulator.Vera.Beam_X;
+        var beamY = beam?.Y ?? emulator.Vera.Beam_Y;
 
         if (fullFrame)
         {
@@ -148,14 +190,14 @@ internal static class ScreenRequestHandler
                 image[x, VisibleHeight] = new PixelRgba(200, 200, 200);
 
             // beam position, how far the display has been drawn
-            var beam = new PixelRgba(255, 0, 0);
+            var beamColour = new PixelRgba(255, 0, 0);
             for (var i = -4; i <= 4; i++)
             {
                 if (beamX + i >= 0 && beamX + i < FullWidth)
-                    image[beamX + i, beamY] = beam;
+                    image[beamX + i, beamY] = beamColour;
 
                 if (beamY + i >= 0 && beamY + i < FullHeight)
-                    image[beamX, beamY + i] = beam;
+                    image[beamX, beamY + i] = beamColour;
             }
         }
 
@@ -166,6 +208,9 @@ internal static class ScreenRequestHandler
 public class ScreenRequestArguments : DebugRequestArguments
 {
     public bool FullFrame { get; set; }
+    public string? RenderMode { get; set; } // beam, finishFrame or fromState
+    public int? RenderToX { get; set; } // preview to this beam position while stopped, see ScreenRequestHandler
+    public int? RenderToY { get; set; }
 }
 
 public class ScreenRequestResponse : ResponseBody
@@ -176,4 +221,5 @@ public class ScreenRequestResponse : ResponseBody
     public uint Frame { get; set; }
     public int BeamX { get; set; }
     public int BeamY { get; set; }
+    public string RenderMode { get; set; } = "beam"; // what was used, beam while running, preview for RenderToX, RenderToY
 }

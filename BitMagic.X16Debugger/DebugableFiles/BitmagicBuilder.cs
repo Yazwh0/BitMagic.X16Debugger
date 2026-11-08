@@ -30,12 +30,14 @@ internal class BitmagicBuilder
     /// <param name="debugProject"></param>
     /// <param name="outputFilename">File the main segment is written to, eg 'GAME.PRG' or 'BIN/GAME.PRG'. If blank it is
     /// the source name with a .prg extension.</param>
+    /// <param name="names">Shared by every file the project builds, so files with the same name, or that write the
+    /// same output file, are an error. Null only checks this file and its imports.</param>
     /// <returns>Binary file for the main segment</returns>
-    public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions, string? outputFilename = null)
+    public async Task<(DebugWrapper?, CompileState)> Build(string source, string basePath, CompileOptions? compileOptions, string? outputFilename = null, BuildNames? names = null)
     {
         try
         {
-            return await BuildCore(source, basePath, compileOptions, outputFilename);
+            return await BuildCore(source, basePath, compileOptions, outputFilename, names ?? new BuildNames(basePath));
         }
         catch (Exception e) when (e is not CompilerException and not TemplateException)
         {
@@ -44,7 +46,7 @@ internal class BitmagicBuilder
         }
     }
 
-    private async Task<(DebugWrapper?, CompileState)> BuildCore(string source, string basePath, CompileOptions? compileOptions, string? outputFilename)
+    private async Task<(DebugWrapper?, CompileState)> BuildCore(string source, string basePath, CompileOptions? compileOptions, string? outputFilename, BuildNames names)
     {
         var project = new Project();
         _logger.LogLine($"Compiling {source} ");
@@ -76,6 +78,7 @@ internal class BitmagicBuilder
         if (content.Any()) // ??
         {
             var templateOptions = project.CompileOptions!.AsTemplateOptions(basePath);
+            templateOptions.Names = names;
             var templateResult = await engine.ProcessFile(project.Code, source, templateOptions, _logger); ;
 
             templateResult.ReferenceId = _codeGeneratorManager.Register(source, templateResult);
@@ -105,6 +108,14 @@ internal class BitmagicBuilder
         var compiler = new Compiler.Compiler(project, _debugActionManager, _logger);
 
         var compileResult = await compiler.Compile();
+
+        // before the files are added, as one with the same path would replace the other's
+        foreach (var output in compileResult.Data.Values)
+        {
+            var clash = names.RegisterOutput(output.FileName, source);
+            if (clash != null)
+                throw new CompilerGeneralException(clash);
+        }
 
         compileResult.CreateBinarySourceFiles();
         project.Code.MapChildren();

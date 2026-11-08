@@ -36,6 +36,10 @@ internal class BreakpointManager
     // same instruction.
     private ulong _beamRunStartClock = 0;
 
+    // a one shot beam position from clicking the Frame Control image, see BeamScrub.cs. It isn't one of VSCode's
+    // breakpoints, so there's nothing to wait for before running, and it's cleared whenever the emulator stops.
+    private uint? _scrubOffset;
+
     public event EventHandler<BreakpointsUpdatedEventArgs>? BreakpointsUpdated;
 
     private readonly HashSet<int> _debuggerBreakpoints = new(); // breakpoints which the debugger rely on.
@@ -525,7 +529,7 @@ internal class BreakpointManager
                 toReturn.Breakpoints.Add(new Breakpoint() { Message = "Not a breakpoint function.", Verified = false });
         }
 
-        _emulator.SetBeamBreakpoints(_beamBreakpoints.Select(i => i.Offset));
+        ApplyBeamBreakpoints();
 
         return toReturn;
     }
@@ -534,6 +538,33 @@ internal class BreakpointManager
     /// Call just before resuming the emulator.
     /// </summary>
     public void BeamRunStarting() => _beamRunStartClock = _emulator.Clock;
+
+    public void SetScrubTarget(int x, int y)
+    {
+        _scrubOffset = Emulator.BeamOffset(x, y);
+        ApplyBeamBreakpoints();
+    }
+
+    public void ClearScrubTarget()
+    {
+        if (_scrubOffset == null)
+            return;
+
+        _scrubOffset = null;
+        ApplyBeamBreakpoints();
+    }
+
+    /// <summary>
+    /// The beam has passed the scrub target since the emulator was resumed.
+    /// </summary>
+    public bool ScrubTargetHit() => _scrubOffset is uint offset && Passed(offset);
+
+    private void ApplyBeamBreakpoints() =>
+        _emulator.SetBeamBreakpoints(_beamBreakpoints.Select(i => i.Offset).Concat(_scrubOffset is uint offset ? [offset] : []));
+
+    // cycles since the offset's last occurrence, which may have been in the previous frame
+    private bool Passed(uint offset) =>
+        (_emulator.CurrentBeamOffset + Emulator.BeamCyclesPerFrame - offset) % Emulator.BeamCyclesPerFrame < _emulator.Clock - _beamRunStartClock;
 
     /// <summary>
     /// Arms the vsync breakpoint for the current frame, after the frame count has been changed by restoring a snapshot.
@@ -557,12 +588,7 @@ internal class BreakpointManager
     /// </summary>
     public List<BeamBreakpoint> GetBeamBreakpointsHit()
     {
-        var clock = _emulator.Clock;
-        var current = _emulator.CurrentBeamOffset;
-        var run = clock - _beamRunStartClock;
-
-        // cycles since each breakpoint's last occurrence, which may have been in the previous frame
-        return _beamBreakpoints.Where(i => (current + Emulator.BeamCyclesPerFrame - i.Offset) % Emulator.BeamCyclesPerFrame < run).ToList();
+        return _beamBreakpoints.Where(i => Passed(i.Offset)).ToList();
     }
 
     private Breakpoint? SetVramBreakpoint(FunctionEvaluationEventArg evaluateArgs)
@@ -757,6 +783,7 @@ internal class BreakpointManager
         _memoryExecutionBreakpoints.Clear();
         _instructionBreakpoints.Clear();
         _beamBreakpoints.Clear();
+        _scrubOffset = null;
         _emulator.SetBeamBreakpoints([]);
 
         // just to be sure

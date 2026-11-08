@@ -70,6 +70,10 @@ internal class ServiceManager
     // connection can have something done while the emulator's stopped (eg take a snapshot).
     public Action<Action>? RunWhileStopped { get; set; }
 
+    // The same, but only runs the action if the emulator is stopped now, returning false otherwise. The emulator can't
+    // carry on until it's done.
+    public Func<Action, bool>? RunIfStopped { get; set; }
+
 #pragma warning disable CS8618
     public ServiceManager(Func<EmulatorOptions?, Emulator> GetNewEmulatorInstance, IEmulatorLogger logger)
 #pragma warning restore CS8618

@@ -58,6 +58,11 @@ public class X16Debug : DebugAdapterBase
     private bool _userPause;
     // a snapshot was restored, so the change tracker starts again from the restored machine
     private bool _restored;
+    // where clicking the Frame Control image runs from, see BeamScrub.cs
+    private SavedState? _scrubAnchor;
+    // the anchor was put back, so the client is told everything's changed when the run stops rather than before it,
+    // otherwise it refreshes at the anchor and again at the stop
+    private bool _scrubRestored;
 
     internal X16DebugProject? _debugProject;
     private IMachine? _machine;
@@ -207,6 +212,15 @@ public class X16Debug : DebugAdapterBase
         Protocol.RegisterRequestType<RestoreSnapshotRequest, SnapshotIdRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<SnapshotIdRequestArguments, SnapshotRequestResponse> r)
         {
             r.SetResponse(HandleRestoreSnapshotRequest(r.Arguments));
+        });
+        Protocol.RegisterRequestType<BeamScrubRequest, BeamScrubRequestArguments, BeamScrubRequestResponse>(delegate (IRequestResponder<BeamScrubRequestArguments, BeamScrubRequestResponse> r)
+        {
+            HandleBeamScrubRequestAsync(r);
+        });
+        Protocol.RegisterRequestType<SetMuteRequest, SetMuteRequestArguments, SetMuteRequestResponse>(delegate (IRequestResponder<SetMuteRequestArguments, SetMuteRequestResponse> r)
+        {
+            _emulator.DebuggerMute = r.Arguments.Muted;
+            r.SetResponse(new SetMuteRequestResponse { Muted = _emulator.DebuggerMute });
         });
         Protocol.RegisterRequestType<DeleteSnapshotRequest, SnapshotIdRequestArguments, SnapshotRequestResponse>(delegate (IRequestResponder<SnapshotIdRequestArguments, SnapshotRequestResponse> r)
         {
@@ -840,6 +854,7 @@ public class X16Debug : DebugAdapterBase
         _windowThread.Start();
 
         _serviceManager.RunWhileStopped = RunWhileStopped;
+        _serviceManager.RunIfStopped = RunIfStopped;
         ServiceManagerFactory.IsSessionActive = true;
         return new LaunchResponse();
     }
@@ -849,6 +864,8 @@ public class X16Debug : DebugAdapterBase
         RequireNotAttachOnly("disconnect");
         ServiceManagerFactory.IsSessionActive = false;
         _serviceManager.RunWhileStopped = null;
+        _serviceManager.RunIfStopped = null;
+        _scrubAnchor = null;
         // Stop the window and emulation threads, then WAIT for both to actually exit
         // before Reset(). Reset() disposes the emulator -- freeing its native memory and
         // calling zimodem_host_destroy() -- which is a use-after-free if either thread is
@@ -1147,6 +1164,12 @@ public class X16Debug : DebugAdapterBase
             if (RunPendingActions(returnCode == Emulator.EmulatorResult.Stepping))
                 continue;
 
+            if (_scrubRestored)
+            {
+                _scrubRestored = false;
+                SendRestoredEvents();
+            }
+
             var changes = snapshot!.Compare();
 
             if (changes != null)
@@ -1287,6 +1310,7 @@ public class X16Debug : DebugAdapterBase
 
                 lock (SyncObject)
                 {
+                    _serviceManager.BreakpointManager.ClearScrubTarget(); // one shot, whatever stopped the emulator. Before the actions, as a beamScrub can be one of them
                     RunPendingActions(false); // anything that came in after the emulator stopped
                     _parked = true;
                 }
@@ -1354,6 +1378,19 @@ public class X16Debug : DebugAdapterBase
 
             _pendingActions.Add(action);
             _emulator.Stepping = true;
+        }
+    }
+
+    // Runs action if the emulator is stopped. The debug loop takes the lock before it carries on, so it waits for this.
+    private bool RunIfStopped(Action action)
+    {
+        lock (SyncObject)
+        {
+            if (!_parked)
+                return false;
+
+            action();
+            return true;
         }
     }
 
@@ -1454,6 +1491,10 @@ public class X16Debug : DebugAdapterBase
         var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "Beam Breakpoint hit", 0, null, true);
 
         stopEvent.HitBreakpointIds = new();
+
+        // where the Frame Control image was clicked, it isn't one of VSCode's so it has no id
+        if (_serviceManager.BreakpointManager.ScrubTargetHit())
+            _emulator.Stepping = true;
 
         // need to parse them all incase there are log points, one instruction can pass several
         foreach (var breakpoint in _serviceManager.BreakpointManager.GetBeamBreakpointsHit())
@@ -2088,7 +2129,7 @@ public class X16Debug : DebugAdapterBase
         {
             "bm_palette" => HandlePaletteRequest(),
             "getLayers" => LayerRequestHandler.HandleRequest(requestArgs as LayerRequestArguments, _emulator),
-            "getScreen" => ScreenRequestHandler.HandleRequest(requestArgs as ScreenRequestArguments, _emulator),
+            "getScreen" => ScreenRequestHandler.HandleRequest(requestArgs as ScreenRequestArguments, _emulator, _serviceManager.RunIfStopped),
             "getMemoryUse" => MemoryUseHandler.HandleRequest(requestArgs as MemoryUseRequestArguments, _emulator),
             "getMemoryValueLocations" => MemoryValueTrackerHandler.HandleRequest(requestArgs as MemoryValueTrackerArguments, _emulator),
             "getHistory" => HistoryRequestHandler.HandleRequest(requestArgs as HistoryRequestArguments, _emulator, _serviceManager.SourceMapManager, _serviceManager.DebugableFileManager),
@@ -2115,7 +2156,7 @@ public class X16Debug : DebugAdapterBase
 
     internal virtual void HandleScreenRequestAsync(IRequestResponder<ScreenRequestArguments, ScreenRequestResponse> responder)
     {
-        responder.SetResponse(ScreenRequestHandler.HandleRequest(responder.Arguments, _emulator));
+        responder.SetResponse(ScreenRequestHandler.HandleRequest(responder.Arguments, _emulator, _serviceManager.RunIfStopped));
     }
 
     internal virtual void HandleMemoryUseRequestAsync(IRequestResponder<MemoryUseRequestArguments, MemoryUseRequestResponse> responder)
@@ -2181,15 +2222,35 @@ public class X16Debug : DebugAdapterBase
             if (!_parked)
                 return new SnapshotRequestResponse { Success = false, Running = true, Error = "The emulator needs to be paused to restore a snapshot." };
 
-            _emulator.RestoreState(entry.State);
-            _serviceManager.BreakpointManager.RearmVsyncBreakpoint();
-            _serviceManager.StackManager.Invalidate();
-            _restored = true;
+            RestoreState(entry.State);
+            _scrubAnchor = null; // clicking the frame starts again from here
         }
 
         Logger.LogLine($"Restored snapshot #{entry.Id} {entry.Name}");
 
-        // the restored machine is different everywhere, so refresh all of memory rather than work out the changes
+        SendRestoredEvents();
+        Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Goto, $"Restored snapshot #{entry.Id}", 0, null, true));
+
+        return new SnapshotRequestResponse
+        {
+            Success = true,
+            Snapshot = entry.ToInfo(),
+            ModemActive = _emulator.EnableWifi && _emulator.Uart.ZiModem.Connected
+        };
+    }
+
+    // only call while parked, under the lock
+    private void RestoreState(SavedState state)
+    {
+        _emulator.RestoreState(state);
+        _serviceManager.BreakpointManager.RearmVsyncBreakpoint();
+        _serviceManager.StackManager.Invalidate();
+        _restored = true;
+    }
+
+    // the restored machine is different everywhere, so refresh all of memory rather than work out the changes
+    private void SendRestoredEvents()
+    {
         Protocol.SendEvent(new MemoryEvent() { MemoryReference = "main", Offset = 0, Count = 0xffff });
         Protocol.SendEvent(new MemoryEvent() { MemoryReference = "vram", Offset = 0, Count = 0x20000 });
 
@@ -2207,15 +2268,47 @@ public class X16Debug : DebugAdapterBase
                 }
             });
         }
+    }
 
-        Protocol.SendEvent(new StoppedEvent(StoppedEvent.ReasonValue.Goto, $"Restored snapshot #{entry.Id}", 0, null, true));
+    // see BeamScrub.cs. Puts back the anchor, or takes a new one, ready for the client to run to its beam breakpoint.
+    // the client sends this as soon as it sees a stop, which can be before the debug loop has parked, so it's run once
+    // the emulator is parked rather than refused
+    internal virtual void HandleBeamScrubRequestAsync(IRequestResponder<BeamScrubRequestArguments, BeamScrubRequestResponse> responder)
+    {
+        var arguments = responder.Arguments;
 
-        return new SnapshotRequestResponse
+        if (_attachOnly)
         {
-            Success = true,
-            Snapshot = entry.ToInfo(),
-            ModemActive = _emulator.EnableWifi && _emulator.Uart.ZiModem.Connected
-        };
+            responder.SetResponse(new BeamScrubRequestResponse { Success = false, Error = "Only the session that launched the program can do this." });
+            return;
+        }
+
+        if (arguments.X is < 0 or >= Emulator.BeamWidth || arguments.Y is < 0 or >= Emulator.BeamHeight)
+        {
+            responder.SetResponse(new BeamScrubRequestResponse { Success = false, Error = $"Beam position out of range, x must be 0-{Emulator.BeamWidth - 1} and y 0-{Emulator.BeamHeight - 1}." });
+            return;
+        }
+
+        RunWhileStopped(() =>
+        {
+            var restored = !arguments.Reset && _scrubAnchor != null;
+
+            if (restored)
+            {
+                RestoreState(_scrubAnchor!);
+                _emulator.RenderReady = false; // the window would show the anchor before the run, it's redrawn at the stop
+                _scrubRestored = true;
+            }
+            else
+                _scrubAnchor = _emulator.SaveState();
+
+            if (arguments.X != null && arguments.Y != null)
+                _serviceManager.BreakpointManager.SetScrubTarget(arguments.X.Value, arguments.Y.Value);
+
+            Logger.LogLine($"Frame Control: running from {(restored ? "the anchor" : "a new anchor")} at frame {_emulator.Vera.Frame_Count}, beam {_emulator.Vera.Beam_X}, {_emulator.Vera.Beam_Y} to {arguments.X}, {arguments.Y}");
+
+            responder.SetResponse(new BeamScrubRequestResponse { Success = true, Restored = restored });
+        });
     }
 
     internal virtual void HandlCpuProfilerRequestAsync(IRequestResponder<CpuProfilerArguements, CpuProfilerResponse> responder)

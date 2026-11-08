@@ -4,6 +4,7 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Hovers;
 using BitMagic.X16Debugger.LSP;
 using BitMagic.X16Emulator;
+using BitMagic.TemplateEngine.Compiler;
 
 namespace BitMagic.X16Debugger.Builder;
 
@@ -33,13 +34,16 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
         var hoverUnits = new List<HoverUnit>();
 
+        // every file built, so two with the same name or output file are caught
+        var names = new BuildNames(project.BasePath);
+
         if (project.Files != null)
         {
             foreach (var i in project.Files)
             {
                 if (i is BitmagicInputFile bitmagicFile)
                 {
-                    var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions, bitmagicFile.OutputFilename);
+                    var (result, state) = await serviceManager.BitmagicBuilder.Build(bitmagicFile.Filename, project.BasePath, project.CompileOptions, bitmagicFile.OutputFilename, names);
                     hoverUnits.Add(HoverUnitFor(bitmagicFile.Filename, project.BasePath, state));
 
                     if (result != null)
@@ -67,7 +71,7 @@ internal class ProjectBuilder(ProjectService projectService, ServiceManager serv
 
         if (!string.IsNullOrWhiteSpace(project.Source))
         {
-            var (result, state) = await serviceManager.BitmagicBuilder.Build(project.Source, project.BasePath, project.CompileOptions);
+            var (result, state) = await serviceManager.BitmagicBuilder.Build(project.Source, project.BasePath, project.CompileOptions, names: names);
             hoverUnits.Add(HoverUnitFor(project.Source, project.BasePath, state));
 
             if (result != null)
