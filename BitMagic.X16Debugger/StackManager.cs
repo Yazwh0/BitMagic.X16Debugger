@@ -85,19 +85,49 @@ internal class StackManager
 
     public IEnumerable<StackFrameState> CallStack => _callStack;
 
+    /// <summary>
+    /// Why the emulator last stopped, so the call stack can show the STP or BRK that stopped it.
+    /// </summary>
+    public Emulator.EmulatorResult? StopReason { get; set; }
+
+    private const string BrkPrefix = "BRK: ";
+
     // data stored in the stack info has the ram\rom bank switched to how the debugger address.
     public void GenerateCallStack()
     {
         _callStack.Clear();
 
-        // while waiting on a WAI the Pc has already moved past it, so show the WAI as that's where the cpu is
-        var waiting = _emulator.CpuWaiting && _emulator.Memory[(_emulator.Pc - 1) & 0xffff] == 0xcb;
-        var pc = waiting ? (_emulator.Pc - 1) & 0xffff : _emulator.Pc;
+        var frames = GenerateFrames().ToList();
+        var previousPc = (_emulator.Pc - 1) & 0xffff;
+        var ramBank = _emulator.Memory[0x00];
+        var romBank = _emulator.Memory[0x01];
+        var stackPointer = (_emulator.StackPointer + 1) & 0xff;
 
-        var frame = GenerateFrame(new StackItem(waiting ? "> WAI: " : "> ", pc, _emulator.Memory[0x00], _emulator.Memory[0x01], (_emulator.StackPointer + 1) & 0xff, false));
+        StackItem top;
 
-        _callStack.Add(frame);
-        _callStack.AddRange(GenerateFrames().Select(i => GenerateFrame(i)));
+        if (_emulator.CpuWaiting && _emulator.Memory[previousPc] == 0xcb)
+        {
+            // while waiting on a WAI the Pc has already moved past it, so show the WAI as that's where the cpu is
+            top = new StackItem("> WAI: ", previousPc, ramBank, romBank, stackPointer, false);
+        }
+        else if (StopReason == Emulator.EmulatorResult.DebugOpCode && _emulator.Memory[previousPc] == 0xdb)
+        {
+            // the Pc has moved past the STP, show the STP itself
+            top = new StackItem("> STP: ", previousPc, ramBank, romBank, stackPointer, false);
+        }
+        else if (StopReason == Emulator.EmulatorResult.BrkHit && frames.Count != 0 && frames[0].Prefix == BrkPrefix)
+        {
+            // the Pc is already in the IRQ handler, show the BRK, which is the latest frame on the stack
+            top = frames[0] with { Prefix = "> " + BrkPrefix, CheckReturnAddress = false };
+            frames.RemoveAt(0);
+        }
+        else
+        {
+            top = new StackItem("> ", _emulator.Pc, ramBank, romBank, stackPointer, false);
+        }
+
+        _callStack.Add(GenerateFrame(top));
+        _callStack.AddRange(frames.Select(GenerateFrame));
     }
 
     private IEnumerable<StackItem> GenerateFrames()
@@ -132,7 +162,7 @@ internal class StackManager
             if (opCode != 0x20 && opCode != 0x00)
                 continue;
 
-            yield return new StackItem("", address, ramBank, romBank, sp - 1, true);
+            yield return new StackItem(opCode == 0x00 ? BrkPrefix : "", address, ramBank, romBank, sp - 1, true);
         }
     }
 
@@ -362,7 +392,7 @@ internal class StackManager
         if (rawAddress >= 0xa000)
         {
             var ramBank = (int)((stackInfo & 0xff0000) >> 16);
-            return (_emulator.RomBank[ramBank * 0x2000 + (int)rawAddress - 0xa000], (int)rawAddress, ramBank, 0);
+            return (_emulator.RamBank[ramBank * 0x2000 + (int)rawAddress - 0xa000], (int)rawAddress, ramBank, 0);
 
         }
 
