@@ -39,4 +39,19 @@ internal static class MemorySpaceResolver
                 return Span<byte>.Empty;
         }
     }
+
+    /// <summary>
+    /// Writes as much of the data as fits at the offset, eg writing past the end of the SD card used to throw.
+    /// Returns the number of bytes written.
+    /// </summary>
+    public static int Write(Span<byte> memory, int offset, ReadOnlySpan<byte> toWrite)
+    {
+        if (offset < 0 || offset >= memory.Length)
+            return 0;
+
+        var count = Math.Min(toWrite.Length, memory.Length - offset);
+        toWrite[..count].CopyTo(memory[offset..]);
+
+        return count;
+    }
 }

@@ -1909,7 +1909,7 @@ public class X16Debug : DebugAdapterBase
 
         toReturn.UnreadableBytes = unreadCount;
 
-        if (arguments.Offset <= data.Length)
+        if (arguments.Offset >= 0 && arguments.Offset <= data.Length)
         {
             toReturn.Data = Convert.ToBase64String(data.Slice(arguments.Offset ?? 0, requestEnd - arguments.Offset ?? 0));
         }
@@ -1935,12 +1935,7 @@ public class X16Debug : DebugAdapterBase
             return toReturn;
         }
 
-        var toWrite = Convert.FromBase64String(arguments.Data);
-        var idx = arguments.Offset ?? 0;
-        for (var i = 0; i < toWrite.Length; i++)
-            data[idx++] = toWrite[i];
-
-        toReturn.BytesWritten = toWrite.Length;
+        toReturn.BytesWritten = MemorySpaceResolver.Write(data, arguments.Offset ?? 0, Convert.FromBase64String(arguments.Data));
         toReturn.Offset = arguments.Offset;
 
         return toReturn;
