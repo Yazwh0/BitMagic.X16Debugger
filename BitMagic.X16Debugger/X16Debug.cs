@@ -1160,6 +1160,7 @@ public class X16Debug : DebugAdapterBase
         {
             _serviceManager.BreakpointManager.BeamRunStarting();
             var returnCode = _emulator.Emulate();
+            _serviceManager.StackManager.StopReason = returnCode;
 
             if (RunPendingActions(returnCode == Emulator.EmulatorResult.Stepping))
                 continue;
@@ -2245,6 +2246,7 @@ public class X16Debug : DebugAdapterBase
         _emulator.RestoreState(state);
         _serviceManager.BreakpointManager.RearmVsyncBreakpoint();
         _serviceManager.StackManager.Invalidate();
+        _serviceManager.StackManager.StopReason = null;  // the restored state didn't stop on an STP or BRK
         _restored = true;
     }
 
