@@ -47,7 +47,7 @@ public static class TileProcessor
 
         if (transparent != null)
         {
-            palette.Add(PixelRgba.ParseHex(transparent), paletteIndex++);
+            palette.Add(ConvertToX16(PixelRgba.ParseHex(transparent)), paletteIndex++);
         }
 
         foreach (var pixel in image.Pixels)
@@ -87,12 +87,10 @@ public static class TileProcessor
 
     private static byte AdjustColour(byte input)
     {
-        byte toReturn = (byte)(input & 0xf0);
+        // round to the nearest of the 16 levels (0x00, 0x11, ... 0xff)
+        var level = (input + 8) / 17;
 
-        if ((byte)(input & 0x0f) > 8)
-            toReturn += 0x10;
-
-        return (byte)(toReturn + (toReturn >> 4));
+        return (byte)(level * 17);
     }
 
     public static TilesDefinition CreateTiles(X16Image image, Depth depth, TileSize width, TileSize height, bool includeBlank = false, TileExcessHandling excessHandling = TileExcessHandling.Error, IEnumerable<Tile>? existing = null)
