@@ -184,7 +184,6 @@ public static class TileProcessor
                 {
                     curX = 0;
                     curY += stepY;
-                    continue;
                 }
 
                 if (curY >= image.Height)
@@ -220,8 +219,11 @@ public static class TileProcessor
 
 
     // For converting an image into a tilemap
-    public static TileMapDefinition CreateTileMap(X16Image image, Depth depth, TileSize width, TileSize height, bool checkFlips = true, bool includeBlank = false, TileExcessHandling excessHandling = TileExcessHandling.Error, IEnumerable<Tile>? existing = null)
+    public static TileMapDefinition CreateTileMap(X16Image image, Depth depth, TileSize width, TileSize height, bool checkFlips = true, bool includeBlank = false, TileExcessHandling excessHandling = TileExcessHandling.Error, IEnumerable<Tile>? existing = null, int paletteOffset = 0)
     {
+        if (paletteOffset < 0 || paletteOffset > 15)
+            throw new ArgumentOutOfRangeException(nameof(paletteOffset), "Palette offset must be 0-15.");
+
         var toReturn = new TileMapDefinition() { Depth = depth };
         var sourceIndex = 0;
 
@@ -349,17 +351,17 @@ public static class TileProcessor
 
                 if (index == -1)
                 {
-                    toReturn.Map.Add(new TileIndex(toReturn.Tiles.Count, flipData, 0));
+                    toReturn.Map.Add(new TileIndex(toReturn.Tiles.Count, flipData, paletteOffset));
                     toReturn.Tiles.Add(tile);
                 }
                 else
                 {
-                    toReturn.Map.Add(new TileIndex(index, flipData, 0));
+                    toReturn.Map.Add(new TileIndex(index, flipData, paletteOffset));
                 }
             }
             else
             {
-                toReturn.Map.Add(new TileIndex(index, 0, 0));
+                toReturn.Map.Add(new TileIndex(index, 0, paletteOffset));
             }
 
             curX += stepX;
@@ -371,7 +373,6 @@ public static class TileProcessor
                 {
                     curX = 0;
                     curY += stepY;
-                    continue;
                 }
 
                 if (curY >= image.Height)
@@ -840,6 +841,36 @@ public class TileMapDefinition : TilesDefinition
         {
             yield return (byte)i.Index;     // low 8 bits; bits 8-9 are in FlipData
             yield return i.FlipData;
+        }
+    }
+
+    /// <summary>
+    /// Map data with each row padded out to a VERA map width (32, 64, 128 or 256 tiles).
+    /// Padding entries are tile 0, no flips, palette offset 0.
+    /// </summary>
+    public IEnumerable<byte> PaddedMap(int veraWidth)
+    {
+        if (veraWidth != 32 && veraWidth != 64 && veraWidth != 128 && veraWidth != 256)
+            throw new ArgumentException($"VERA map width must be 32, 64, 128 or 256. Got {veraWidth}", nameof(veraWidth));
+
+        if (MapWidth > veraWidth)
+            throw new ArgumentException($"Map width {MapWidth} is greater than VERA map width {veraWidth}", nameof(veraWidth));
+
+        var idx = 0;
+        for (var y = 0; y < MapHeight; y++)
+        {
+            for (var x = 0; x < MapWidth; x++)
+            {
+                var i = Map[idx++];
+                yield return (byte)i.Index;
+                yield return i.FlipData;
+            }
+
+            for (var x = MapWidth; x < veraWidth; x++)
+            {
+                yield return 0;
+                yield return 0;
+            }
         }
     }
 }
