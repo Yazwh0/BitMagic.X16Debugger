@@ -333,33 +333,33 @@ public static class TileProcessor
 
                             if (index != -1)
                             {
-                                flipData = 0xc; // 1100
+                                flipData = 0x3; // H + V flip (TileIndex shifts this into bits 2-3)
                             }
                         }
                         else
                         {
-                            flipData = 0x4; // 100
+                            flipData = 0x2; // V flip
                         }
                     }
                     else
                     {
-                        flipData = 0x8; // 1000
+                        flipData = 0x1; // H flip
                     }
                 }
 
                 if (index == -1)
                 {
-                    toReturn.Map.Add(new TileIndex((byte)toReturn.Tiles.Count, flipData, 0));
+                    toReturn.Map.Add(new TileIndex(toReturn.Tiles.Count, flipData, 0));
                     toReturn.Tiles.Add(tile);
                 }
                 else
                 {
-                    toReturn.Map.Add(new TileIndex((byte)index, flipData, 0));
+                    toReturn.Map.Add(new TileIndex(index, flipData, 0));
                 }
             }
             else
             {
-                toReturn.Map.Add(new TileIndex((byte)index, (byte)0, 0));
+                toReturn.Map.Add(new TileIndex(index, 0, 0));
             }
 
             curX += stepX;
@@ -396,8 +396,8 @@ public static class TileProcessor
         }
 
         toReturn.Colours = new List<List<Colour>>() { new List<Colour>(image.Colours) };
-        toReturn.MapWidth = (int)Math.Ceiling(image.Width / stepX * 1.0);
-        toReturn.MapHeight = (int)Math.Ceiling(image.Height / stepY * 1.0);
+        toReturn.MapWidth = (int)Math.Ceiling(image.Width / (stepX * 1.0));
+        toReturn.MapHeight = (int)Math.Ceiling(image.Height / (stepY * 1.0));
 
         for (var i = 0; i < toReturn.Tiles.Count; i++)
         {
@@ -838,7 +838,7 @@ public class TileMapDefinition : TilesDefinition
     {
         foreach (var i in Map)
         {
-            yield return (byte)i.Index;     // todo: add indexing greater than 256.
+            yield return (byte)i.Index;     // low 8 bits; bits 8-9 are in FlipData
             yield return i.FlipData;
         }
     }
