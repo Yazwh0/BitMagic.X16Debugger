@@ -693,17 +693,15 @@ internal class BreakpointManager
             var secondParam = evaluateArgs.EvaluateArg(1);
 
             if (secondParam is string sparam)
-            {
-                breakpointType = (VeraBreakpointType)(
-                                 (sparam.Contains('R') ? (int)VeraBreakpointType.Read : 0) +
-                                 (sparam.Contains('W') ? (int)VeraBreakpointType.Write : 0));
-            }
+                breakpointType = ParseVramBreakpointType(sparam);
 
+            // a range, the end is exclusive
             if (secondParam is int iparam)
             {
-                address = Math.Min(address, iparam);
+                var first = Math.Min(address, iparam);
                 var second = Math.Max(address, iparam);
-                length = second - address;
+                address = first;
+                length = Math.Max(1, second - first);
             }
         }
 
@@ -712,11 +710,21 @@ internal class BreakpointManager
             var thirdParam = evaluateArgs.EvaluateArg(2);
 
             if (thirdParam is string sparam)
-            {
-                breakpointType = (VeraBreakpointType)(
-                                 (sparam.Contains('R') ? (int)VeraBreakpointType.Read : 0) +
-                                 (sparam.Contains('W') ? (int)VeraBreakpointType.Write : 0));
-            }
+                breakpointType = ParseVramBreakpointType(sparam);
+        }
+
+        if (breakpointType == 0)
+        {
+            toReturn.Message = "Needs \"R\", \"W\" or \"RW\" for read, write or both.";
+            toReturn.Verified = false;
+            return toReturn;
+        }
+
+        if (address < 0 || address >= 0x20000)
+        {
+            toReturn.Message = $"VRAM address 0x{address:X} is outside 0x00000 to 0x1FFFF.";
+            toReturn.Verified = false;
+            return toReturn;
         }
 
         length = Math.Min(length, 0x20000 - address);
@@ -735,6 +743,11 @@ internal class BreakpointManager
 
         return toReturn;
     }
+
+    private static VeraBreakpointType ParseVramBreakpointType(string value) =>
+        (VeraBreakpointType)(
+            (value.Contains('R', StringComparison.OrdinalIgnoreCase) ? (int)VeraBreakpointType.Read : 0) +
+            (value.Contains('W', StringComparison.OrdinalIgnoreCase) ? (int)VeraBreakpointType.Write : 0));
 
     private Breakpoint? SetVsyncBreakpoint(FunctionEvaluationEventArg evaluateArgs)
     {

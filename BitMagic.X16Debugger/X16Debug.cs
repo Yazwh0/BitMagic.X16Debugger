@@ -1421,9 +1421,31 @@ public class X16Debug : DebugAdapterBase
         if (!isData0 && !isData1)
             return;
 
+        var port = isData0 ? 0x9f23 : 0x9f24;
         var address = isData0 ? _emulator.Vera.Data0_Address : _emulator.Vera.Data1_Address;
 
-        var breakpoints = _serviceManager.BreakpointManager.VramReadWriteBreakpoints.Where(i => address >= i.Address && address <= i.Address + i.Length);
+        // A read-modify-write (eg inc) steps the port before it writes, so the core checked an address a step or two
+        // on. Find it from the breakpoint table, the same way the core did.
+        if (_emulator.State.MemoryRead == port && _emulator.State.MemoryWrite == port)
+        {
+            var step = isData0 ? _emulator.Vera.Data0_Step : _emulator.Vera.Data1_Step;
+            var written = address;
+
+            for (var i = 1; i <= 3; i++)
+            {
+                var candidate = (address + step * i) & 0x1ffff;
+                if ((_emulator.VramBreakpoints[candidate] & (byte)Emulator.VeraState.VeraBreakpointType.Write) != 0)
+                {
+                    written = candidate;
+                    break;
+                }
+            }
+
+            address = written;
+        }
+
+        // the end of a range is exclusive
+        var breakpoints = _serviceManager.BreakpointManager.VramReadWriteBreakpoints.Where(i => address >= i.Address && address < i.Address + i.Length);
 
         var stopEvent = new StoppedEvent(StoppedEvent.ReasonValue.Breakpoint, "VRAM Breakpoint hit", 0, null, true);
 
