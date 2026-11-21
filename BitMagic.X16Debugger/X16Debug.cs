@@ -1311,6 +1311,7 @@ public class X16Debug : DebugAdapterBase
 
                 lock (SyncObject)
                 {
+                    _serviceManager.BreakpointManager.RefreshAddressBreakpoints(); // if a load kept any, check them against the new code
                     _serviceManager.BreakpointManager.ClearScrubTarget(); // one shot, whatever stopped the emulator. Before the actions, as a beamScrub can be one of them
                     RunPendingActions(false); // anything that came in after the emulator stopped
                     _parked = true;

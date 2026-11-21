@@ -89,11 +89,36 @@ internal class BreakpointManager
         }
     }
 
+    // Instruction breakpoints, and breakpoints on lines of the disassembly views, are set by address: "stop when the CPU
+    // executes $0812", whatever is loaded there. So unlike the breakpoints that belong to a loaded file's source, a LOAD
+    // over them doesn't remove them. Set when a load keeps one, so the next stop re-checks them against the new code.
+    private bool _addressBreakpointsNeedRefresh;
+
+    private IEnumerable<(int SourceId, MemoryBreakpointMap Map)> AddressBreakpoints() =>
+        _instructionBreakpoints.SelectMany(kv => kv.Value.Select(m => (kv.Key, m)))
+            .Concat(_memoryExecutionBreakpoints.SelectMany(kv => kv.Value.Select(m => (kv.Key, m))));
+
+    private static string NoInstructionMessage(int address) =>
+        $"No instruction starts at ${address:X4}. It's kept, and will be checked again when code is loaded here.";
+
+    // Called when a file is loaded over a range of memory (see DebugWrapper.FileLoaded and X16Debug's LOAD handling).
+    // Address breakpoints in the range are kept, see _addressBreakpointsNeedRefresh.
     public List<Breakpoint> ClearBreakpoints(int debuggerAddress, int length)
     {
         var toReturn = new List<Breakpoint>();
+        var keep = AddressBreakpoints()
+            .Select(b => AddressFunctions.GetDebuggerAddress(b.Map.Address, b.Map.RamBank, b.Map.RomBank))
+            .ToHashSet();
+
         for (var i = 0; i < length; i++)
         {
+            if (keep.Contains(debuggerAddress))
+            {
+                _addressBreakpointsNeedRefresh = true;
+                debuggerAddress = AddressFunctions.IncrementDebuggerAddress(debuggerAddress);
+                continue;
+            }
+
             if (_breakpoints.ContainsKey(debuggerAddress))
             {
                 var bp = _breakpoints[debuggerAddress].Breakpoint;
@@ -136,6 +161,53 @@ internal class BreakpointManager
             if (_breakpoints.ContainsKey(thisAddress))
                 _breakpoints.Remove(thisAddress);
         }
+    }
+
+    // Called when the emulator stops. After a load has kept address breakpoints (see ClearBreakpoints), re-check them
+    // against the code now in memory: whether an instruction starts at the address, and which line of its disassembly
+    // view that is now, as the view is regenerated and lines move. Clients are sent a 'changed' event for each that moved
+    // or changed state.
+    public void RefreshAddressBreakpoints()
+    {
+        if (!_addressBreakpointsNeedRefresh)
+            return;
+
+        _addressBreakpointsNeedRefresh = false;
+
+        var changed = new List<Breakpoint>();
+        var updated = new HashSet<int>();
+
+        foreach (var (sourceId, map) in AddressBreakpoints().ToList())
+        {
+            var decompiledFile = _idManager.GetObject<DecompileReturn>(sourceId);
+            if (decompiledFile == null)
+                continue;
+
+            if (updated.Add(sourceId))
+                decompiledFile.UpdateContent().GetAwaiter().GetResult();
+
+            var line = decompiledFile.Items
+                .Where(i => i.Value.Address == map.Address && i.Value.HasInstruction)
+                .Select(i => (int?)i.Key)
+                .FirstOrDefault();
+
+            var breakpoint = map.Breakpoint;
+            var wasVerified = breakpoint.Verified;
+            var oldLine = breakpoint.Line;
+
+            breakpoint.Verified = line != null;
+            breakpoint.Message = line != null ? null : NoInstructionMessage(map.Address);
+
+            // only the disassembly view's breakpoints have a line, instruction breakpoints are just an address
+            if (line != null && breakpoint.Line != null)
+                breakpoint.Line = line;
+
+            if (breakpoint.Verified != wasVerified || breakpoint.Line != oldLine)
+                changed.Add(breakpoint);
+        }
+
+        if (changed.Count > 0)
+            UpdateBreakpoints(changed, BreakpointsUpdatedType.Changed);
     }
 
     // Called when a file is loaded, this is used by the wrapper to construct its Breakpoint list.
@@ -391,6 +463,7 @@ internal class BreakpointManager
             {
                 var breakpoint = new Breakpoint()
                 {
+                    Id = _idManager.GetId(),
                     Verified = false,
                     Message = "Cannot locate decompiled data.",
                     InstructionReference = b.InstructionReference,
@@ -407,6 +480,7 @@ internal class BreakpointManager
             {
                 var breakpoint = new Breakpoint()
                 {
+                    Id = _idManager.GetId(),
                     Verified = false,
                     Message = "Decompiled file has no reference ID.",
                     InstructionReference = b.InstructionReference,
@@ -426,53 +500,43 @@ internal class BreakpointManager
             if (decompiledFile.RequireUpdate || decompiledFile.Items.Count == 0)
                 decompiledFile.UpdateContent().GetAwaiter().GetResult();
 
-            bool found = false;
-            foreach (var i in decompiledFile.Items.Values.Where(i => i.Address == address))
+            // Armed even when no instruction starts here yet: it's set by address, so the code it's for may well not be
+            // loaded yet (eg set at the entry stop, before a program has loaded). RefreshAddressBreakpoints verifies it
+            // once something is loaded over it.
+            var found = decompiledFile.Items.Values.Any(i => i.Address == address && i.HasInstruction);
+
+            // Needs an id: clients match a 'changed' breakpoint event to the breakpoint by it (see RefreshAddressBreakpoints)
+            var instructionBreakpoint = new Breakpoint()
             {
-                var breakpoint = new Breakpoint()
-                {
-                    Verified = true,
-                    InstructionReference = b.InstructionReference,
-                    Offset = b.Offset,
-                    Source = decompiledFile.AsSource()
-                };
-
-                toReturn.Breakpoints.Add(breakpoint);
-
-                var toAdd = new MemoryBreakpointMap(address, decompiledFile.RamBank, decompiledFile.RomBank, breakpoint);
-                _instructionBreakpoints[sourceId].Add(toAdd);
-
-                var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
-
-                var bank = address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
-                var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
-                var (lowAddress, secondAddress) = AddressFunctions.GetMemoryLocations(bank, address);
-
-                // only set local breakpoint if we're in the right bank
-                if (lowAddress < 0xa000 || bank == currentBank)
-                    _emulator.Breakpoints[address] = breakpointValue;
-
-                if (secondAddress != 0)
-                    _emulator.Breakpoints[secondAddress] = breakpointValue;
-
-                var thisAddress = secondAddress == 0 ? address : secondAddress;
-                if (!_breakpoints.ContainsKey(thisAddress))
-                    _breakpoints.Add(thisAddress, new BreakpointState(null, breakpoint));
-
-                found = true;
-                break;
-            }
-
-            if (found)
-                continue;
-
-            toReturn.Breakpoints.Add(new Breakpoint()
-            {
-                Verified = false,
-                Message = $"No instruction at {address}",
+                Id = _idManager.GetId(),
+                Verified = found,
+                Message = found ? null : NoInstructionMessage(address),
                 InstructionReference = b.InstructionReference,
-                Offset = b.Offset
-            });
+                Offset = b.Offset,
+                Source = decompiledFile.AsSource()
+            };
+
+            toReturn.Breakpoints.Add(instructionBreakpoint);
+
+            var toAdd = new MemoryBreakpointMap(address, decompiledFile.RamBank, decompiledFile.RomBank, instructionBreakpoint);
+            _instructionBreakpoints[sourceId].Add(toAdd);
+
+            var breakpointValue = _debuggerBreakpoints.Contains(debuggerAddress) ? DebugConstants.SystemBreakpoint + DebugConstants.Breakpoint : DebugConstants.Breakpoint;
+
+            var bank = address >= 0xc000 ? decompiledFile.RomBank : decompiledFile.RamBank;
+            var currentBank = address >= 0xc000 ? _emulator.Memory[0x01] : _emulator.Memory[0x00];
+            var (lowAddress, secondAddress) = AddressFunctions.GetMemoryLocations(bank, address);
+
+            // only set local breakpoint if we're in the right bank
+            if (lowAddress < 0xa000 || bank == currentBank)
+                _emulator.Breakpoints[address] = breakpointValue;
+
+            if (secondAddress != 0)
+                _emulator.Breakpoints[secondAddress] = breakpointValue;
+
+            var thisAddress = secondAddress == 0 ? address : secondAddress;
+            if (!_breakpoints.ContainsKey(thisAddress))
+                _breakpoints.Add(thisAddress, new BreakpointState(null, instructionBreakpoint));
         }
 
         return toReturn;
@@ -510,6 +574,7 @@ internal class BreakpointManager
                         "line" => SetBeamBreakpoint(e, true),
                         _ => new Breakpoint()
                         {
+                            Id = _idManager.GetId(),
                             Message = $"Unknown breakpoint function '{e.Name}'.",
                             Verified = false
                         }
@@ -527,11 +592,11 @@ internal class BreakpointManager
             catch (Exception e)
             {
                 added = true;
-                toReturn.Breakpoints.Add(new Breakpoint() { Message = e.Message, Verified = false });
+                toReturn.Breakpoints.Add(new Breakpoint() { Id = _idManager.GetId(), Message = e.Message, Verified = false });
             }
 
             if (!added)
-                toReturn.Breakpoints.Add(new Breakpoint() { Message = "Not a breakpoint function.", Verified = false });
+                toReturn.Breakpoints.Add(new Breakpoint() { Id = _idManager.GetId(), Message = "Not a breakpoint function.", Verified = false });
         }
 
         ApplyBeamBreakpoints();

@@ -253,6 +253,10 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
 
         if (string.IsNullOrWhiteSpace(debugProject.BasePath))
             debugProject.BasePath = workspaceFolder;
+        else if (!Path.IsPathRooted(debugProject.BasePath) && !string.IsNullOrWhiteSpace(workspaceFolder))
+            // Relative to the workspace folder, not X16D's own working directory (its install
+            // folder, or dotnet's), which would make a relative basePath meaningless.
+            debugProject.BasePath = Path.GetFullPath(debugProject.BasePath, workspaceFolder);
 
         return debugProject;
     }
