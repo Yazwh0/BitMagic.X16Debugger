@@ -77,8 +77,6 @@ static class Program
 
     static int Main(string[] args)
     {
-        Console.WriteLine("BitMagic - X16D");
-
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             Console.Error.WriteLine($"[X16D] FATAL unhandled exception: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) =>
@@ -94,11 +92,18 @@ static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error processing arguments:");
-            Console.WriteLine(ex.Message);
+            Console.Error.WriteLine("Error processing arguments:");
+            Console.Error.WriteLine(ex.Message);
         }
 
         var options = argumentsResult?.Value ?? new Options() { DapServerPort = 2563 };
+
+        // Run over stdin/stdout, stdout carries the DAP messages, so anything else written to the console (logging,
+        // the window closing) goes to stderr rather than in among them. X16Debug writes to the raw stdout stream.
+        if (!options.BuildOnly && options.DapServerPort == 0)
+            Console.SetOut(Console.Error);
+
+        Console.WriteLine("BitMagic - X16D");
 
         var rom = "rom.bin";
 
@@ -111,7 +116,7 @@ static class Program
 
                 if (!File.Exists(rom))
                 {
-                    rom = @$"{env}\rom.bin";
+                    rom = Path.Combine(env, "rom.bin");
                 }
             }
         }
