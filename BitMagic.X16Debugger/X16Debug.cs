@@ -775,11 +775,7 @@ public class X16Debug : DebugAdapterBase
                 _serviceManager.SourceMapManager.LoadSymbols(symbols);                                                            // cache
                 _serviceManager.SourceMapManager.LoadJumpTable(symbols.RangeDefinitions, 0xc000, symbols.RomBank ?? 0, bankData); // dont cache
 
-                if (_debugProject.CompileOptions.DisplaySymbols)
-                    Logger.Log("Decompiling... ");
-
-                _serviceManager.DisassemblerManager.DecompileRomBank(bankData, symbols.RomBank ?? 0);                             // cache
-
+                // the bank is disassembled when it's first used, see DisassemblerManager.GetRomBank
                 if (_debugProject.CompileOptions.DisplaySymbols)
                     Logger.LogLine("Done.");
             }
@@ -796,23 +792,13 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
-        // disassemble rom banks if the symbols weren't set
-        for (var i = 0; i < 256; i++)
+        // ROM banks are disassembled when they're first used (a stack frame, the disassembly view, a breakpoint or opening
+        // the source), not here. Tell the client about any created after it's been sent the list.
+        _serviceManager.DisassemblerManager.RomBankCreated = bank => Protocol.SendEvent(new LoadedSourceEvent()
         {
-            if (_debugProject.RomBankNames.Length > i && string.IsNullOrWhiteSpace(_debugProject.RomBankNames[i]))
-                continue;
-
-            if (_serviceManager.DisassemblerManager.IsRomDecompiled(i))
-                continue;
-
-            var bankData = _emulator.RomBank.Slice(i * 0x4000, 0x4000).ToArray();
-
-            //            Logger.Log($"Decompiling Rom Bank {i}... ");
-
-            _serviceManager.DisassemblerManager.DecompileRomBank(bankData, i);
-
-            //            Logger.LogLine("Done.");
-        }
+            Reason = LoadedSourceEvent.ReasonValue.New,
+            Source = bank.AsSource()
+        });
 
 
         if (_runInOfficialEmulator)

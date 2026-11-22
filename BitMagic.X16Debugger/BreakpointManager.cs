@@ -337,10 +337,11 @@ internal class BreakpointManager
         if (decompiledFile != null && decompiledFile.Path != arguments.Source.Path)
             decompiledFile = null;
 
-        // if the id doesn't match, then check the dissasembly cache
-        if (decompiledFile == null && _disassemblerManager.DecompiledData.ContainsKey(arguments.Source.Path))
+        // if the id doesn't match, find it by its path, eg a breakpoint VS Code restores from an earlier session. An
+        // unnamed ROM bank that hasn't been used yet is created.
+        if (decompiledFile == null && _disassemblerManager.GetByPath(arguments.Source.Path) is DecompileReturn byPath)
         {
-            decompiledFile = _disassemblerManager.DecompiledData[arguments.Source.Path];
+            decompiledFile = byPath;
             sourceId = decompiledFile.ReferenceId ?? 0;
         }
 
@@ -374,7 +375,8 @@ internal class BreakpointManager
         {
             foreach (var sourceBreakpoint in arguments.Breakpoints)
             {
-                if (decompiledFile.RequireUpdate)
+                // ROM banks are disassembled the first time they're used
+                if (decompiledFile.RequireUpdate || decompiledFile.Items.Count == 0)
                     decompiledFile.UpdateContent().GetAwaiter().GetResult();
 
                 if (!decompiledFile.Items.ContainsKey(sourceBreakpoint.Line))
@@ -459,7 +461,8 @@ internal class BreakpointManager
             var (address, ramBank, romBank) = AddressFunctions.GetMachineAddress(debuggerAddress);
 
             var name = _disassemblerManager.GetName(address, ramBank, romBank);
-            if (!_disassemblerManager.DecompiledData.ContainsKey(name))
+            var decompiledFile = _disassemblerManager.GetByPath(name);
+            if (decompiledFile == null)
             {
                 var breakpoint = new Breakpoint()
                 {
@@ -473,8 +476,6 @@ internal class BreakpointManager
                 toReturn.Breakpoints.Add(breakpoint);
                 continue;
             }
-
-            var decompiledFile = _disassemblerManager.DecompiledData[name];
 
             if (decompiledFile.ReferenceId == null)
             {
