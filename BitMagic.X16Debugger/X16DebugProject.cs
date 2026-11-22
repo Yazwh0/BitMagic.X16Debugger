@@ -248,6 +248,14 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     /// <summary>
     /// Make VERA FX behave like the official emulator where it differs from the hardware (the VERA Verilog).
     /// </summary>
+    /// <summary>
+    /// What the RTC starts at: "host" (the host's local date and time), "stopped" (stopped at 2000-01-01, as the chip
+    /// is at power on) or a date and time, eg "2026-01-01T12:00:00". Changing it from the X16 never changes the host.
+    /// </summary>
+    [JsonProperty("rtc")]
+    [Description("What the RTC starts at: \"host\" (the host's local date and time, the default), \"stopped\" (stopped at 2000-01-01, as the chip is at power on) or a date and time, eg \"2026-01-01T12:00:00\". Setting the time from the X16 never changes the host's.")]
+    public string Rtc { get; set; } = "host";
+
     [JsonProperty("fxFixed")]
     [Description("Make VERA FX behave like the official emulator where it differs from the hardware: steep 4bpp lines with the line helper draw properly, accumulating with the multiplier off adds the product, and polygon DATA0 reads with one-byte cycling always move the cache on a byte. Leave this off to see what a real X16 does.")]
     public bool FxFixed { get; set; } = false;
