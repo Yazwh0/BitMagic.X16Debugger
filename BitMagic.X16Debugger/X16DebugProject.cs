@@ -245,6 +245,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [Description("Enable the wifi card at $9fe0")]
     public bool Wifi { get; set; } = false;
 
+    /// <summary>
+    /// Draw steep 4bpp lines with the VERA FX line helper properly, as the official emulator does. The hardware doesn't.
+    /// </summary>
+    [JsonProperty("fixedFxLineDraw")]
+    [Description("Draw steep 4bpp lines with the VERA FX line helper properly, as the official emulator does. The hardware doesn't, so leave this off to see what a real X16 draws.")]
+    public bool FixedFxLineDraw { get; set; } = false;
+
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {
         var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));

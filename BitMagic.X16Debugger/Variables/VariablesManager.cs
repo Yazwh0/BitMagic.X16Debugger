@@ -264,7 +264,9 @@ internal class VariableManager
                 new VariableChildren("Data 0", () => $"0x{_emulator.Memory[0x9F23]:X2}", "int",
                 new[] {
                     new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data0_Address:X5}", () => (uint)_emulator.Vera.Data0_Address, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Address = unchecked((int)p))),
-                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Step = unchecked((int)p)))
+                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data0_Step}", () => _emulator.Vera.Data0_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Step = unchecked((int)p))),
+                    new VariableMap("Nibble", "byte", () => $"{_emulator.Vera.Data0_Nibble}", () => _emulator.Vera.Data0_Nibble, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_Nibble = unchecked((int)p))),
+                    new VariableMap("Nibble Step", "int", () => $"{_emulator.Vera.Data0_NibbleIncrement}", () => _emulator.Vera.Data0_NibbleIncrement, setValue: value => SetRegister(value, p => _emulator.Vera.Data0_NibbleIncrement = unchecked((int)p)))
                 }
             )));
 
@@ -273,7 +275,9 @@ internal class VariableManager
                 new VariableChildren("Data 1", () => $"0x{_emulator.Memory[0x9F24]:X2}", "int",
                 new[] {
                     new VariableMap("Address", "uint", () => $"0x{_emulator.Vera.Data1_Address:X5}", () => (uint)_emulator.Vera.Data1_Address, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Address = unchecked((int)p))),
-                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Step = unchecked((int)p)))
+                    new VariableMap("Step", "byte", () => $"{_emulator.Vera.Data1_Step}", () => _emulator.Vera.Data1_Step, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Step = unchecked((int)p))),
+                    new VariableMap("Nibble", "byte", () => $"{_emulator.Vera.Data1_Nibble}", () => _emulator.Vera.Data1_Nibble, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_Nibble = unchecked((int)p))),
+                    new VariableMap("Nibble Step", "int", () => $"{_emulator.Vera.Data1_NibbleIncrement}", () => _emulator.Vera.Data1_NibbleIncrement, setValue: value => SetRegister(value, p => _emulator.Vera.Data1_NibbleIncrement = unchecked((int)p)))
                 }
             )));
 
@@ -431,6 +435,8 @@ internal class VariableManager
             3 => "Affine",
             _ => $"?? {_emulator.VeraFx.AddrMode}"
         }));
+        // set from the project's fixedFxLineDraw at launch, read only here
+        scope.AddVariable(new VariableMap("Fixed Line Draw", "bool", () => _emulator.FixedFxLineDraw, () => _emulator.FixedFxLineDraw));
         scope.AddVariable(new VariableMap("Cache", "uint", () => $"0x{_emulator.VeraFx.Cache:X8}", () => _emulator.VeraFx.Cache));
         scope.AddVariable(new VariableMap("Cache Index", "uint", () => _emulator.VeraFx.CacheIndex, () => _emulator.VeraFx.CacheIndex));
         scope.AddVariable(new VariableMap("Cache Shift", "int", () => _emulator.VeraFx.CacheShift, () => _emulator.VeraFx.CacheShift));
