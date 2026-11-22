@@ -39,10 +39,14 @@ internal class DisassemblerManager
             return $"Ram/z_Bank_0x{ramBank:X2}.bmasm";
         }
 
-        if (_project != null && _project.RomBankNames.Length > RomBank)
-            return $"Rom/{_project.RomBankNames[RomBank]}.bmasm";
+        return $"Rom/{RomBankName(RomBank)}";
+    }
 
-        return $"Rom/RomBank_{RomBank}.bmasm";
+    // The ROM bank's file name, from the project's RomBankNames, or RomBank_n.bmasm if it isn't named.
+    private string RomBankName(int bank)
+    {
+        var name = _project?.RomBankNames.Length > bank ? _project.RomBankNames[bank] : "";
+        return string.IsNullOrWhiteSpace(name) ? $"RomBank_{bank}.bmasm" : $"{name}.bmasm";
     }
 
     public void SetBreakpointManager(BreakpointManager breakpointManager)
@@ -60,6 +64,110 @@ internal class DisassemblerManager
             var name = $"{_project.RamBankNames[i]}.bmasm";
             data.SetName(name, $"Ram/{name}");
         }
+
+        // The named ROM banks get their entries now, so they're in Loaded Sources and breakpoints VS Code restores by
+        // path find them, but they're only disassembled when they're first used. Unnamed banks are created on request.
+        for (var i = 0; i < _project.RomBankNames.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(_project.RomBankNames[i]))
+                GetOrCreateRomBank(i, announce: false);
+        }
+    }
+
+    /// <summary>
+    /// Called when a ROM bank's entry is created on request, so the client can be told about the new source.
+    /// </summary>
+    public Action<DecompileReturn>? RomBankCreated { get; set; }
+
+    private readonly object _romLock = new();
+    private readonly HashSet<DecompileReturn> _romBanksToDisassemble = new();
+
+    // The ROM bank's entry, creating it without disassembling it if it doesn't have one.
+    private DecompileReturn GetOrCreateRomBank(int bank, bool announce = true)
+    {
+        lock (_romLock)
+        {
+            if (BankToId.TryGetValue((NotSet, bank), out var id) && _idManager.GetObject<DecompileReturn>(id) is DecompileReturn existing)
+                return existing;
+
+            var result = new DecompileReturn();
+            result.ReferenceId = _idManager.AddObject(result, ObjectType.DecompiledData);
+            result.RomBank = bank;
+            var name = RomBankName(bank);
+            result.SetName(name, $"Rom/{name}");
+
+            // anything that updates its content (UpdateContent, GetContent, Generate) disassembles it, once
+            result.SetGenerate(() => EnsureDisassembled(result));
+            _romBanksToDisassemble.Add(result);
+
+            BankToId[(NotSet, bank)] = result.ReferenceId ?? 0;
+            DecompiledData[result.Path] = result;
+
+            if (announce)
+                RomBankCreated?.Invoke(result);
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// The ROM bank's disassembly, disassembling it now if it hasn't been yet. It uses the bank's bytes and the symbols
+    /// loaded at the time.
+    /// </summary>
+    public DecompileReturn GetRomBank(int bank)
+    {
+        var result = GetOrCreateRomBank(bank);
+        EnsureDisassembled(result);
+        return result;
+    }
+
+    // Disassembles a ROM bank entry the first time, after that it does nothing. Other entries are left alone.
+    private void EnsureDisassembled(DecompileReturn decompileReturn)
+    {
+        lock (_romLock)
+        {
+            if (!_romBanksToDisassemble.Remove(decompileReturn))
+                return;
+
+            var bank = decompileReturn.RomBank;
+            var data = _emulator.RomBank.Slice(bank * 0x4000, 0x4000).ToArray();
+            var result = new Decompiler.Decompiler().Decompile(data, 0xc000, 0xffff, bank, _sourceMapManager.Symbols);
+
+            decompileReturn.Items = result.Items;
+            decompileReturn.LastAddress = result.LastAddress;
+        }
+    }
+
+    /// <summary>
+    /// A disassembly view by its path, eg "Rom/Kernal.bmasm". An unnamed ROM bank ("Rom/RomBank_40.bmasm") is created
+    /// if it hasn't been used yet, eg for a breakpoint VS Code restores from an earlier session.
+    /// </summary>
+    public DecompileReturn? GetByPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        lock (_romLock)
+        {
+            if (DecompiledData.TryGetValue(path, out var existing))
+                return existing;
+        }
+
+        const string prefix = "Rom/RomBank_";
+        const string suffix = ".bmasm";
+        if (path.StartsWith(prefix) && path.EndsWith(suffix) &&
+            int.TryParse(path.AsSpan(prefix.Length, path.Length - prefix.Length - suffix.Length), out var bank) && bank >= 0 && bank < 256)
+            return GetOrCreateRomBank(bank);
+
+        return null;
+    }
+
+    public bool IsRomBankDisassembled(int bank)
+    {
+        lock (_romLock)
+            return BankToId.TryGetValue((NotSet, bank), out var id) &&
+                _idManager.GetObject<DecompileReturn>(id) is DecompileReturn existing &&
+                !_romBanksToDisassemble.Contains(existing);
     }
 
     // Consider the request to be delimited by main memory, or banked memeory.
@@ -76,10 +184,10 @@ internal class DisassemblerManager
 
         Console.WriteLine($"Disassemble request: 0x{address:X4} A:{ramBank} O:{romBank} {arguments.InstructionCount} {arguments.InstructionOffset}");
 
-        if (address > 0xc000)
+        if (address >= 0xc000)
             return DisassembleRequestFromRom(arguments, address, romBank);
 
-        if (address > 0xa000)
+        if (address >= 0xa000)
             return DisassembleRequestFromRam(arguments, address, ramBank);
 
         return DisassembleRequestFromMainMemory(arguments, address, _emulator.Pc);
@@ -99,11 +207,10 @@ internal class DisassemblerManager
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, result, 0, 0);
     }
 
-    // We've been asked to dissemble ROM, which we've already done.
-    // As ROM cannot be changed, we can happily use these symbols.
+    // ROM is disassembled the first time it's asked for.
     private DisassembleResponse DisassembleRequestFromRom(DisassembleArguments arguments, int address, int romBank)
     {
-        DecompileReturn decompileReturn = GetDecompileReturn(NotSet, romBank);
+        DecompileReturn decompileReturn = GetRomBank(romBank);
 
         return ConvertDisassemblyToReponse(arguments.InstructionOffset ?? 0, arguments.InstructionCount, address, decompileReturn, 0, romBank);
     }
@@ -306,7 +413,7 @@ internal class DisassemblerManager
             return BankToId[(NotSet, NotSet)];
 
         if (address >= 0xc000)
-            return BankToId[(NotSet, romBank)];
+            return GetOrCreateRomBank(romBank).ReferenceId ?? 0;    // disassembled when its content is used
 
         if (address >= 0xa000)
             return BankToId[(ramBank, NotSet)];
@@ -321,34 +428,6 @@ internal class DisassemblerManager
         return GetDisassemblyId(address, ramBank, romBank);
     }
 
-    public void DecompileRomBank(byte[] data, int bank)
-    {
-        if (IsRomDecompiled(bank))
-            return;
-
-        var decompiler = new Decompiler.Decompiler();
-
-        var result = decompiler.Decompile(data, 0xc000, 0xffff, bank, _sourceMapManager.Symbols);
-
-        var id = _idManager.AddObject(result, ObjectType.DecompiledData);
-        BankToId.Add((NotSet, bank), id);
-
-        var name = _project?.RomBankNames.Length > bank ? _project.RomBankNames[bank] : "";
-
-        if (string.IsNullOrWhiteSpace(name))
-            name = $"RomBank_{bank}.bmasm";
-        else
-            name += ".bmasm";
-
-        result.SetName(name, $"Rom/{name}");
-
-        result.ReferenceId = id;
-        result.RomBank = bank;
-
-        DecompiledData.Add(result.Path, result);
-    }
-
-    public bool IsRomDecompiled(int bank) => BankToId.ContainsKey((NotSet, bank));
 }
 
 internal class DissasemblyReturn
