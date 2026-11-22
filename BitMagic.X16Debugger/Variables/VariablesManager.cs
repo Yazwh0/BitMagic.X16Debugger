@@ -1,4 +1,4 @@
-﻿using BitMagic.Common;
+using BitMagic.Common;
 using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Scopes;
 using BitMagic.X16Emulator;
@@ -435,8 +435,8 @@ internal class VariableManager
             3 => "Affine",
             _ => $"?? {_emulator.VeraFx.AddrMode}"
         }));
-        // set from the project's fixedFxLineDraw at launch, read only here
-        scope.AddVariable(new VariableMap("Fixed Line Draw", "bool", () => _emulator.FixedFxLineDraw, () => _emulator.FixedFxLineDraw));
+        // set from the project's fxFixed at launch, read only here
+        scope.AddVariable(new VariableMap("FX Fixed", "bool", () => _emulator.FxFixed, () => _emulator.FxFixed));
         scope.AddVariable(new VariableMap("Cache", "uint", () => $"0x{_emulator.VeraFx.Cache:X8}", () => _emulator.VeraFx.Cache));
         scope.AddVariable(new VariableMap("Cache Index", "uint", () => _emulator.VeraFx.CacheIndex, () => _emulator.VeraFx.CacheIndex));
         scope.AddVariable(new VariableMap("Cache Shift", "int", () => _emulator.VeraFx.CacheShift, () => _emulator.VeraFx.CacheShift));
@@ -449,6 +449,17 @@ internal class VariableManager
         scope.AddVariable(new VariableMap("Multiplier", "bool", () => _emulator.VeraFx.MultiplierEnable, () => _emulator.VeraFx.MultiplierEnable));
         scope.AddVariable(new VariableMap("Accumulator", "int", () => _emulator.VeraFx.Accumulator, () => _emulator.VeraFx.Accumulator));
         scope.AddVariable(new VariableMap("Accumulate Direction", "", () => _emulator.VeraFx.AccumulateDirection == 0 ? "Add" : "Subtract", () => _emulator.VeraFx.AccumulateDirection == 0 ? "Add" : "Subtract"));
+        // positions and increments are 16.16 in the emulator, shown as pixels
+        scope.AddVariable(new VariableMap("X Position", "", () => $"{(int)(_emulator.VeraFx.PositionX << 5) / (double)(1 << 21):0.###}", () => _emulator.VeraFx.PositionX));
+        scope.AddVariable(new VariableMap("Y/X2 Position", "", () => $"{(int)(_emulator.VeraFx.PositionY << 5) / (double)(1 << 21):0.###}", () => _emulator.VeraFx.PositionY));
+        scope.AddVariable(new VariableMap("X Increment", "", () => $"{(int)_emulator.VeraFx.IncrementX / 65536.0:0.###}", () => _emulator.VeraFx.IncrementX));
+        scope.AddVariable(new VariableMap("Y/X2 Increment", "", () => $"{(int)_emulator.VeraFx.IncrementY / 65536.0:0.###}", () => _emulator.VeraFx.IncrementY));
+        scope.AddVariable(new VariableMap("Tile Base", "uint", () => $"0x{_emulator.VeraFx.TileBase:X5}", () => _emulator.VeraFx.TileBase));
+        scope.AddVariable(new VariableMap("Map Base", "uint", () => $"0x{_emulator.VeraFx.MapBase:X5}", () => _emulator.VeraFx.MapBase));
+        scope.AddVariable(new VariableMap("Map Size", "int", () => $"{_emulator.VeraFx.MapSize}x{_emulator.VeraFx.MapSize}", () => _emulator.VeraFx.MapSize));
+        scope.AddVariable(new VariableMap("Affine Clip", "bool", () => _emulator.VeraFx.AffineClip, () => _emulator.VeraFx.AffineClip));
+        scope.AddVariable(new VariableMap("2-Bit Polygon", "bool", () => _emulator.VeraFx.TwoBitPolygon, () => _emulator.VeraFx.TwoBitPolygon));
+        scope.AddVariable(new VariableMap("16-Bit Hop", "bool", () => _emulator.VeraFx.SixteenBitHop, () => _emulator.VeraFx.SixteenBitHop));
 
         scope = GetNewScope("Kernal");
 
