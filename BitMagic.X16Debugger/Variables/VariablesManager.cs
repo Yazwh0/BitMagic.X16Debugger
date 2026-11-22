@@ -572,6 +572,9 @@ internal class VariableManager
 
         scope = GetNewScope("RTC");
 
+        // worked out from the cpu clock, so it's the time the X16 would read now
+        scope.AddVariable(new VariableMap("Date Time", "", () => $"{_emulator.RtcDateTime:yyyy-MM-dd HH:mm:ss}", () => _emulator.RtcDateTime));
+        scope.AddVariable(new VariableMap("Running", "bool", () => _emulator.RtcRunning, () => _emulator.RtcRunning));
         scope.AddVariable(Register(new VariableIndex("NVRam", GetRtcnvRam)));
 
         scope = GetNewScope("VIA");

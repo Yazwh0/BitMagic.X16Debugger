@@ -386,6 +386,7 @@ public class X16Debug : DebugAdapterBase
         _emulator.SetOptions(emulatiorOptions);
         _emulator.EnableWifi = _debugProject.Wifi;
         _emulator.FxFixed = _debugProject.FxFixed;
+        _emulator.StartRtc(_debugProject.Rtc);
 
         // Clear Ram
         if (_debugProject.MemoryFillValue != 0)
