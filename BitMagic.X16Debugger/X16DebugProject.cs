@@ -1,4 +1,4 @@
-﻿using BitMagic.Common;
+using BitMagic.Common;
 using BitMagic.Compiler;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -244,6 +244,13 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [JsonProperty("wifi")]
     [Description("Enable the wifi card at $9fe0")]
     public bool Wifi { get; set; } = false;
+
+    /// <summary>
+    /// Make VERA FX behave like the official emulator where it differs from the hardware (the VERA Verilog).
+    /// </summary>
+    [JsonProperty("fxFixed")]
+    [Description("Make VERA FX behave like the official emulator where it differs from the hardware: steep 4bpp lines with the line helper draw properly, accumulating with the multiplier off adds the product, and polygon DATA0 reads with one-byte cycling always move the cache on a byte. Leave this off to see what a real X16 does.")]
+    public bool FxFixed { get; set; } = false;
 
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {

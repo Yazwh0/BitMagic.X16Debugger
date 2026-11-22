@@ -1,4 +1,4 @@
-﻿//#define SHOWDAP
+//#define SHOWDAP
 
 using BitMagic.Common;
 using BitMagic.Common.Address;
@@ -385,6 +385,7 @@ public class X16Debug : DebugAdapterBase
         _emulator.Reset();
         _emulator.SetOptions(emulatiorOptions);
         _emulator.EnableWifi = _debugProject.Wifi;
+        _emulator.FxFixed = _debugProject.FxFixed;
 
         // Clear Ram
         if (_debugProject.MemoryFillValue != 0)
