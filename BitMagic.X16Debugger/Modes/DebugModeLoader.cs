@@ -1,12 +1,33 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using BitMagic.Common;
 
 namespace BitMagic.X16Debugger.Modes;
 
 internal static class DebugModeLoader
 {
+    private static bool _resolving;
+
+    /// <summary>
+    /// A mode references the BitMagic assemblies it was built against, at their version then. X16D's own can have
+    /// a lower number (a develop build is newer code than the last release, but numbered before it), which .NET
+    /// won't accept. So when a mode asks for an assembly X16D already has, it gets X16D's, whatever the version:
+    /// that's the one it has to use anyway, and <see cref="IX16DebugMode.ApiVersion"/> is the check that matters.
+    /// </summary>
+    private static void ShareLoadedAssemblies()
+    {
+        if (_resolving)
+            return;
+
+        _resolving = true;
+        AssemblyLoadContext.Default.Resolving += (_, wanted) =>
+            AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => string.Equals(a.GetName().Name, wanted.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
     public static IX16DebugMode Load(DebugModeSettings settings, string basePath, IEmulatorLogger logger)
     {
+        ShareLoadedAssemblies();
         var path = FindAssembly(settings, basePath, logger);
 
         // LoadFrom so the mode's own dependencies are found next to it, while it shares X16D's copy of this assembly
