@@ -50,6 +50,9 @@ static class Program
         [Option("officialEmulatorParameters", Default = "", Required = false)]
         public string OfficialEmulatorParameters { get; set; } = "";
 
+        [Option("headless", Default = false, Required = false, HelpText = "Run without the emulator window, eg for tests. The emulator still runs and renders, it just isn't shown.")]
+        public bool Headless { get; set; }
+
         [Option("buildOnly", Default = false, Required = false)]
         public bool BuildOnly { get; set; }
 
@@ -216,6 +219,8 @@ static class Program
 
             return emulator;
         };
+
+        X16Debug.Headless = options.Headless;
 
         try
         {

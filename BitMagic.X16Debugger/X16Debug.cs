@@ -106,6 +106,9 @@ public partial class X16Debug : DebugAdapterBase
 
     private EmulatorWindow? _window = null;
 
+    /// <summary>Run without the emulator window (X16D's --headless), for every session in this process.</summary>
+    public static bool Headless { get; set; }
+
 
     // True on --queryport: view/amend only, never owns the session. See RequireNotAttachOnly().
     private readonly bool _attachOnly;
@@ -846,6 +849,17 @@ public partial class X16Debug : DebugAdapterBase
         _debugThread.Priority = ThreadPriority.Highest;
         _debugThread.Start();
 
+        // no window, eg for tests or CI: the emulator still renders, it just isn't shown, so nothing else changes
+        if (Headless)
+        {
+            Logger.LogLine("Running without a window.");
+            _emulator.Control = Control.Run; // the window does this once it's open
+            _serviceManager.RunWhileStopped = RunWhileStopped;
+            _serviceManager.RunIfStopped = RunIfStopped;
+            ServiceManagerFactory.IsSessionActive = true;
+            return new LaunchResponse();
+        }
+
         _window = new EmulatorWindow() { SettingsKey = "x16d" };
 
         _windowThread = new SysThread(() =>
@@ -1267,7 +1281,7 @@ public partial class X16Debug : DebugAdapterBase
 
             if (_emulator.Stepping)
             {
-                _window.PauseAudio();
+                _window?.PauseAudio(); // no window when headless
 
                 if (changes != null)
                 {
@@ -1361,7 +1375,7 @@ public partial class X16Debug : DebugAdapterBase
                 }
 
                 _serviceManager.StackManager.Invalidate();
-                _window.ContinueAudio();
+                _window?.ContinueAudio();
             }
         }
     }
