@@ -260,6 +260,10 @@ Symbols for the ROM banks will also be loaded from here, using the names from Ro
     [Description("Make VERA FX behave like the official emulator where it differs from the hardware: steep 4bpp lines with the line helper draw properly, accumulating with the multiplier off adds the product, and polygon DATA0 reads with one-byte cycling always move the cache on a byte. Leave this off to see what a real X16 does.")]
     public bool FxFixed { get; set; } = false;
 
+    [JsonProperty("debugMode")]
+    [Description("Debug something other than the 6502 code, eg BASIC: the assembly holding the debug mode, and its settings.")]
+    public Modes.DebugModeSettings? DebugMode { get; set; }
+
     public static X16DebugProject Load(string filename, string workspaceFolder)
     {
         var debugProject = JsonConvert.DeserializeObject<X16DebugProject>(File.ReadAllText(filename));

@@ -14,6 +14,7 @@ using BitMagic.X16Debugger.DebugableFiles;
 using BitMagic.X16Debugger.Exceptions;
 using BitMagic.X16Debugger.Extensions;
 using BitMagic.X16Debugger.LSP;
+using BitMagic.X16Debugger.Modes;
 using BitMagic.X16Debugger.Variables;
 using BitMagic.X16Emulator;
 using BitMagic.X16Emulator.Display;
@@ -29,7 +30,7 @@ using SysThread = System.Threading.Thread;
 
 namespace BitMagic.X16Debugger;
 
-public class X16Debug : DebugAdapterBase
+public partial class X16Debug : DebugAdapterBase
 {
     private Emulator _emulator;
 
@@ -230,6 +231,10 @@ public class X16Debug : DebugAdapterBase
         {
             r.SetResponse(new SnapshotRequestResponse { Success = _serviceManager.SnapshotManager.Rename(r.Arguments.Id, r.Arguments.Name) });
         });
+        Protocol.RegisterRequestType<ModeRequest, ModeRequestArguments, ModeRequestResponse>(delegate (IRequestResponder<ModeRequestArguments, ModeRequestResponse> r)
+        {
+            r.SetResponse(HandleModeRequest(r.Arguments));
+        });
     }
 
 #if SHOWDAP
@@ -342,6 +347,22 @@ public class X16Debug : DebugAdapterBase
     {
         RequireNotAttachOnly("launch");
 
+        // breakpoints that arrive during the launch may belong to the debug mode, so they wait for it
+        if (LaunchHasDebugMode(arguments))
+            _modeReady.Reset();
+
+        try
+        {
+            return Launch(arguments);
+        }
+        finally
+        {
+            _modeReady.Set();
+        }
+    }
+
+    private LaunchResponse Launch(LaunchArguments arguments)
+    {
         var toCompile = arguments.ConfigurationProperties.GetValueAsString("program");
         var workspaceFolder = arguments.ConfigurationProperties.GetValueAsString("cwd");
         // launch.json's stopOnEntry is ignored, stepping comes from the project file. This is set by tools (eg X16M)
@@ -801,6 +822,9 @@ public class X16Debug : DebugAdapterBase
         });
 
 
+        // a debug mode, eg BASIC, now everything it might look at is loaded
+        LoadDebugMode(arguments);
+
         if (_runInOfficialEmulator)
         {
             _externalThread = new SysThread(() => { ExternalEmulatorRunner.Run(this); });
@@ -893,6 +917,7 @@ public class X16Debug : DebugAdapterBase
             }
         }
 
+        UnloadDebugMode();
         _emulator = _serviceManager.Reset();
 
         if (_machine != null)
@@ -910,7 +935,8 @@ public class X16Debug : DebugAdapterBase
     protected override SetBreakpointsResponse HandleSetBreakpointsRequest(SetBreakpointsArguments arguments)
     {
         RequireNotAttachOnly("setBreakpoints");
-        return _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
+        WaitForDebugMode();
+        return _mode?.SetBreakpoints(arguments) ?? _serviceManager.BreakpointManager.HandleSetBreakpointsRequest(arguments);
     }
 
     protected override SetInstructionBreakpointsResponse HandleSetInstructionBreakpointsRequest(SetInstructionBreakpointsArguments arguments)
@@ -955,6 +981,7 @@ public class X16Debug : DebugAdapterBase
     protected override ContinueResponse HandleContinueRequest(ContinueArguments arguments)
     {
         RequireNotAttachOnly("continue");
+        _mode?.Continue();
         _emulator.Stepping = false;
         lock (SyncObject)
         {
@@ -967,6 +994,8 @@ public class X16Debug : DebugAdapterBase
     protected override StepInResponse HandleStepInRequest(StepInArguments arguments)
     {
         RequireNotAttachOnly("stepIn");
+        if (ModeStep(DebugModeStep.Into))
+            return new StepInResponse();
         _emulator.Stepping = true;
         lock (SyncObject)
         {
@@ -979,6 +1008,8 @@ public class X16Debug : DebugAdapterBase
     protected override StepOutResponse HandleStepOutRequest(StepOutArguments arguments)
     {
         RequireNotAttachOnly("stepOut");
+        if (ModeStep(DebugModeStep.Out))
+            return new StepOutResponse();
         _emulator.Stepping = false;
         _serviceManager.StackManager.SetBreakpointOnCaller();
 
@@ -993,6 +1024,8 @@ public class X16Debug : DebugAdapterBase
     protected override NextResponse HandleNextRequest(NextArguments arguments)
     {
         RequireNotAttachOnly("next");
+        if (ModeStep(DebugModeStep.Over))
+            return new NextResponse();
         if (_emulator.Memory[_emulator.Pc] == 0x20)
         {
             _emulator.StackBreakpoints[_emulator.StackPointer - 0x100] = 0x01;
@@ -1092,6 +1125,10 @@ public class X16Debug : DebugAdapterBase
     {
         var toReturn = new PauseResponse();
 
+        // the mode stops by itself, eg at the next BASIC statement
+        if (_mode != null && _mode.Step(DebugModeStep.Pause))
+            return toReturn;
+
         lock (SyncObject)
         {
             _userPause = true;
@@ -1151,6 +1188,10 @@ public class X16Debug : DebugAdapterBase
             _serviceManager.StackManager.StopReason = returnCode;
 
             if (RunPendingActions(returnCode == Emulator.EmulatorResult.Stepping))
+                continue;
+
+            // a debug mode's breakpoint it doesn't want to stop at, so straight back in
+            if (ModeCarriesOn(returnCode))
                 continue;
 
             if (_scrubRestored)
@@ -1565,6 +1606,10 @@ public class X16Debug : DebugAdapterBase
     // Should this be moved to the breakpoint manager??
     private void HandleSourceBreakpointHit()
     {
+        // one of the debug mode's, and nothing of the user's at the same place
+        if (HandleModeBreakpoint() && (_emulator.Breakpoints[_emulator.Pc] & DebugConstants.Breakpoint) == 0)
+            return;
+
         var (breakpointState, breakpointType) = _serviceManager.BreakpointManager.GetCurrentBreakpoint(_emulator.Pc, _emulator.Memory[0x00], _emulator.Memory[0x01]);
 
         if ((breakpointType & DebugConstants.SystemBreakpoint) != 0 ||
@@ -1958,6 +2003,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override StackTraceResponse HandleStackTraceRequest(StackTraceArguments arguments)
     {
+        var fromMode = _mode?.StackTrace(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         var toReturn = new StackTraceResponse();
 
         _serviceManager.StackManager.GenerateCallStack();
@@ -1967,6 +2016,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override ScopesResponse HandleScopesRequest(ScopesArguments arguments)
     {
+        var fromMode = _mode?.Scopes(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         var toReturn = new ScopesResponse();
 
         var current = _serviceManager.StackManager.CallStack.FirstOrDefault(i => i.StackFrame.Id == arguments.FrameId);
@@ -1982,6 +2035,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override VariablesResponse HandleVariablesRequest(VariablesArguments arguments)
     {
+        var fromMode = _mode?.Variables(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         var toReturn = new VariablesResponse();
 
         var scope = _serviceManager.ScopeManager.GetScope(arguments.VariablesReference);
@@ -2019,6 +2076,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override SetVariableResponse HandleSetVariableRequest(SetVariableArguments arguments)
     {
+        var fromMode = _mode?.SetVariable(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         static SetVariableResponse ToResponse(Variable v) => new()
         {
             Value = v.Value,
@@ -2064,6 +2125,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override EvaluateResponse HandleEvaluateRequest(EvaluateArguments arguments)
     {
+        var fromMode = _mode?.Evaluate(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         if (arguments.Context == EvaluateArguments.ContextValue.Hover)
         {
             var hover = _debugHover.Evaluate(arguments);
@@ -2107,6 +2172,10 @@ public class X16Debug : DebugAdapterBase
 
     protected override SourceResponse HandleSourceRequest(SourceArguments arguments)
     {
+        var fromMode = _mode?.Source(arguments);
+        if (fromMode != null)
+            return fromMode;
+
         var toReturn = new SourceResponse();
 
         var data = _serviceManager.IdManager.GetObject<ISourceFile>(arguments.SourceReference);

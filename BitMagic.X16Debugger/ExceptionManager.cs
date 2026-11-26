@@ -93,6 +93,7 @@ internal class ExceptionManager
             "BRK" => new ExceptionInfoResponse() { Description = "BRK has been hit.", ExceptionId = "BRK" },
             "EXP" => new ExceptionInfoResponse() { Description = "Exception raised within code.", ExceptionId = "EXP" },
             "FIO" => new ExceptionInfoResponse() { Description = string.IsNullOrWhiteSpace(LastExceptionMessage) ? "File IO Exception." : LastExceptionMessage, ExceptionId = "FIO" },
+            "MODE" => new ExceptionInfoResponse() { Description = LastExceptionMessage, ExceptionId = "MODE", BreakMode = ExceptionBreakMode.Always },
             _ => new ExceptionInfoResponse() { Description = "Unknown exception", ExceptionId = "UNK" }
         };
 
